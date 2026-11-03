@@ -13,7 +13,7 @@ tags: [m1, build, ci]
 ## Done
 - `CMakeLists.txt`, `CMakePresets.json` (`windows`: Visual Studio 18 2026, multi-config; `linux`: Ninja, Debug) and modules in `Source/CMake/`: compiler flags per the spec, toml++ (commit `3c71044e`) and Catch2 v3.16.1 by `FetchContent` with SHA-256, and the `LoomCore` link check.
 - Targets: `LoomCore`, `loom`, `LoomAppLib` + `LoomApp`, `LoomCoreTests` (Catch2), `LoomAppTests` (Qt Test).
-- Tests under `ctest`: the version (Catch2), the window's title and that it opens (Qt Test), `loom --version` and `--version --json` and the usage exit code, and seven cases of the link check, configured as a small project with stand-in Qt targets.
+- Tests under `ctest`: the version (Catch2), that the window opens (Qt Test), `loom --version` and `--version --json` and the usage exit code, and seven cases of the link check, configured as a small project with stand-in Qt targets.
 - CI `build` job: Qt 6.11.1 by install-qt-action, configure with warnings as errors, build, `ctest`. Green on both runners: 12 of 12 tests on each, MSVC 19.51 and GCC 13, no compiler warnings.
 - Wiki: [how to build on Windows](../../how-to/build-on-windows.md); decisions [001 Qt 6](../../decisions/001-qt-6.md), [002 toml++](../../decisions/002-tomlplusplus.md), [003 Catch2](../../decisions/003-catch2.md); a [gotcha](../../gotchas/ci/aqtinstall-qt-6-11-windows.md).
 
