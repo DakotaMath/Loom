@@ -3,6 +3,12 @@
 Traps, dead ends and their fixes, in one folder per area (`qt`, `build`, `git`, `latex`, `windows`, …) so no folder grows without bound. Before adding one, check the area's list below for an existing page to extend. Template: [`_TEMPLATE.md`](_TEMPLATE.md).
 
 <!-- BEGIN GENERATED: do not edit below; run python Tools/update_indexes.py -->
+### ci
+
+| Page | Summary |
+| --- | --- |
+| [aqtinstall 3.3.0 can't install Qt 6.11 on Windows](ci/aqtinstall-qt-6-11-windows.md) | `jurplel/install-qt-action@v4` uses aqtinstall 3.3.0 by default, which fails on every Qt 6.11 release for Windows because Qt changed its repository layout. Install aqtinstall from a pinned commit of its main branch with the action's `aqtsource` input until a fixed release is out. |
+
 ### toml
 
 | Page | Summary |
