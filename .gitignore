@@ -1,0 +1,22 @@
+# Build output
+build/
+out/
+Build/
+CMakeUserPresets.json
+*.user
+
+# Editors and OS
+.vs/
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# Python
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# Local scratch work
+Scratch/
+local-paths.json
