@@ -20,7 +20,7 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 
 ## Next up
 Milestones M0–M12 are on GitHub; M1's issues are #2–#9, linked by "blocked by".
-- **Once PR #11 is merged, in order:** #3 CMake and CI → #4 `loom new-project` → #5 statements, proofs, IDs → #6 checks → #7 status; #8 papers after #5; #9 `loom validate` last.
+- **Once PR #11 is merged, in order:** #3 CMake and CI → #4 `loom new-project` → #5 statements, proofs, IDs → #6 checks; #8 papers after #5; #7 status after #6 and #8; #9 `loom validate` last. The issues were updated to match the approved spec on 2026-11-03.
 
 ## Waiting on Dakota
 - Merge PR #11 (the M1 spec, approved, open questions answered).
