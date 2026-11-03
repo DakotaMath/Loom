@@ -18,6 +18,21 @@ Agents run as Claude Code jobs. Everything an agent changes lands on its own bra
 
 **Design phase.** There is no code yet. The design is [`Specs/loom.md`](Specs/loom.md); the current state of work is [`STATUS.md`](STATUS.md).
 
+## Get the code
+
+On Windows:
+
+1. **Install Git** from [git-scm.com](https://git-scm.com/download/win), keeping the installer's defaults. Git Credential Manager and Git LFS come with it.
+2. **Open PowerShell** and go to the folder you want the repo in, e.g. `cd $HOME\Documents`.
+3. **Clone:**
+   ```powershell
+   git clone https://github.com/DakotaMath/Loom.git
+   cd Loom
+   ```
+4. **Check it worked:** `git log --oneline -1` shows the latest commit on `main`.
+
+To get later changes, run `git pull` inside the `Loom` folder. Building the app comes with milestone M1; its how-to will be in [`Wiki/how-to/`](Wiki/how-to/README.md).
+
 ## Repository layout
 
 | Path | What |
