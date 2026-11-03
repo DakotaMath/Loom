@@ -19,3 +19,42 @@ jobs:
         run: python Tools/update_indexes.py --check
       - name: Tool tests
         run: python -m pytest Tools/tests
+
+  # Build and test on both platforms (Specs/m1-core.md, "Toolchain"). Runner images are named
+  # exactly, not -latest, so the toolchain changes only when we change it.
+  build:
+    name: build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2025-vs2026
+            preset: windows
+            qt-arch: win64_msvc2022_64
+          - os: ubuntu-24.04
+            preset: linux
+            qt-arch: linux_gcc_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Linux packages Qt needs, and headless UI tests
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl-dev libegl-dev libxkbcommon0 libfontconfig1
+          echo "QT_QPA_PLATFORM=offscreen" >> "$GITHUB_ENV"
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: 6.11.1
+          arch: ${{ matrix.qt-arch }}
+          cache: true
+          # aqtinstall 3.3.0, the action's default, can't install Qt 6.11 on Windows; the fix is
+          # on its main branch but not released. Wiki/gotchas/ci/aqtinstall-qt-6-11-windows.md
+          aqtsource: git+https://github.com/miurahr/aqtinstall.git@076e1659807d0b362a3ed684d54c2e9c775eb9c7
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }} -DCMAKE_PREFIX_PATH="${{ env.QT_ROOT_DIR }}" -DLOOM_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }} --config Debug
+      - name: Test
+        run: ctest --preset ${{ matrix.preset }} -C Debug
