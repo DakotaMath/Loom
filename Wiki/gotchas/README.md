@@ -3,7 +3,11 @@
 Traps, dead ends and their fixes, in one folder per area (`qt`, `build`, `git`, `latex`, `windows`, …) so no folder grows without bound. Before adding one, check the area's list below for an existing page to extend. Template: [`_TEMPLATE.md`](_TEMPLATE.md).
 
 <!-- BEGIN GENERATED: do not edit below; run python Tools/update_indexes.py -->
-No pages yet.
+### toml
+
+| Page | Summary |
+| --- | --- |
+| [toml++ writes table keys in alphabetical order](toml/tomlplusplus-sorts-keys.md) | A `toml::table` in toml++ is a `std::map`, so it forgets the order keys were read or inserted in and writes them alphabetically. Never write Loom's files with toml++'s formatter; use Loom's own writer, which puts fields in the order the spec lists. |
 <!-- END GENERATED -->
 
 Up: [Wiki index](../INDEX.md)
