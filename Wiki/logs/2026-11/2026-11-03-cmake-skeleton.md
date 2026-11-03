@@ -27,6 +27,7 @@ tags: [m1, build, ci]
 ## Next
 - Dakota reviews PR #13 and does the Windows check.
 - Then #4 (`loom new-project`).
+- In #5: the Catch2 version test is a placeholder for "one Catch2 test"; Dakota keeps it until #5 brings real `LoomCore` tests, then decides. The window-title Qt Test was dropped at his request.
 
 ## Waiting on Dakota
 - PR #13: review and the Windows check.

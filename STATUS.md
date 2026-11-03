@@ -21,6 +21,7 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 ## Next up
 Milestones M0–M12 are on GitHub; M1's issues are #2–#9, linked by "blocked by".
 - **In order:** #4 `loom new-project` → #5 statements, proofs, IDs → #6 checks; #8 papers after #5; #7 status after #6 and #8; #9 `loom validate` last. The issues were updated to match the approved spec on 2026-11-03.
+- **In #5:** once real `LoomCore` tests exist, ask Dakota whether to keep the placeholder Catch2 test `The version is 0.1.0` (`Tests/LoomCoreTests/VersionTests.cpp`); he chose to keep it until then.
 
 ## Waiting on Dakota
 - PR #13 (#3): review, and follow [`Wiki/how-to/build-on-windows.md`](Wiki/how-to/build-on-windows.md) on a clean checkout: `ctest` passes, `LoomApp` opens.
