@@ -17,10 +17,12 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 - None.
 
 ## Next up
-- **The M1 spec** (`Specs/m1-core.md`): the exact project formats, validation, the status and check rules, fingerprints, IDs, and the `loom` commands `LoomCore` needs; the CMake and Qt setup.
+Milestones M0–M12 are on GitHub; M1's issues are #2–#9, linked by "blocked by".
+- **#2, the M1 spec** (`Specs/m1-core.md`): the exact formats, validation, status and check rules, fingerprints, IDs, the `loom` commands, the toolchain. Starts once PR #1 is merged.
+- **Then in order:** #3 CMake and CI → #4 `loom new-project` → #5 statements, proofs, IDs → #6 checks → #7 status; #8 papers after #5; #9 `loom validate` last.
 
 ## Waiting on Dakota
-- Approve [`Specs/loom.md`](Specs/loom.md) (status: draft, no open questions).
+- Approve [`Specs/loom.md`](Specs/loom.md) (status: draft, no open questions) by merging PR #1.
 
 ## Watch out for
 - **Public repo:** never commit details of private research projects; examples use made-up papers.
