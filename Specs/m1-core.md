@@ -6,10 +6,10 @@ tags: [m1, formats, validation, status, checks, ids, papers, cli, toolchain]
 
 # Spec: M1, the core formats, rules and toolchain
 
-> **Summary:** Everything `LoomCore` and the `loom` command do in M1, precisely enough to build without guessing: the folder `loom new-project` creates, `loom.toml`, the `+++` TOML front matter, statements, proofs, IDs, check histories and their fingerprints, the status rules with a worked example, paper entries, stubs, the key rule and the BibTeX it produces, every check `loom validate` makes with its message, every `loom` subcommand, and the toolchain (MSVC, CMake, Qt 6, toml++, Catch2) with the CI matrix. Departures from `Specs/loom.md` are listed in one place; four open questions wait on Dakota.
+> **Summary:** Everything `LoomCore` and the `loom` command do in M1, precisely enough to build without guessing: the folder `loom new-project` creates, `loom.toml`, the `+++` TOML front matter, statements, proofs, IDs, check histories and their fingerprints, the status rules with a worked example, paper entries, stubs, the key rule and the BibTeX it produces, every check `loom validate` makes with its message, every `loom` subcommand, and the toolchain (MSVC, CMake, Qt 6, toml++, Catch2) with the CI matrix. Departures from `Specs/loom.md` are listed in one place.
 
 **Last verified:** 2026-11-03 · commit e5b68aa
-**Status:** Draft, with open questions for Dakota
+**Status:** Approved by Dakota on 2026-11-03
 **Milestone:** M1
 
 ## Scope
@@ -17,13 +17,13 @@ tags: [m1, formats, validation, status, checks, ids, papers, cli, toolchain]
 - **Does not cover:** tasks, threads, numerics, figures, records, reviews, meetings, spec sessions, notes and reading sessions (their formats come with their milestones); building LaTeX and `\paperref` expansion (M2); merging job branches and retagging (M4); fetching paper data and the verification window (M6); any UI.
 
 ## Departures from `Specs/loom.md`
-The design is approved; these are the places this spec makes it more precise in a way the design didn't say, or changes it. Each needs Dakota's eye when he approves this spec.
+The design is approved; these are the places this spec makes it more precise in a way the design didn't say, or changes it. Dakota approved all of them on 2026-11-03.
 
 | # | Design says | This spec says | Why |
 | --- | --- | --- | --- |
 | D1 | A check's `date` is a date (`2026-11-04`) | It is a date and time with offset (`2026-11-04T15:32:10-06:00`) | "Newer" must be exact: Dakota's pass counts only if it is newer than the agent's, and two checks on the same day are common |
 | D2 | The fingerprint is a short hash (example: 6 characters) | 12 hex characters of SHA-256 | 6 characters is 1 in 16 million per edit; 12 costs nothing and removes the doubt |
-| D3 | The fingerprint covers the proof, "its premises" and the statement it proves | It covers the proof's body, the proved statement's body and **each premise's statement body** (see open question Q1) | If a premise is weakened after the check, the old check shouldn't still count |
+| D3 | The fingerprint covers the proof, "its premises" and the statement it proves | It covers the proof's body, the proved statement's body and **each premise's statement body** | If a premise is weakened after the check, the old check shouldn't still count |
 | D4 | `refuted_by` is "set and accepted" | `refuted_by` plus `refuted_on` (the date of Dakota's click); both or neither | The file needs to record the acceptance, or "accepted" can't be computed |
 | D5 | Proofs prove statements | Only lemmas, propositions, theorems, corollaries and conjectures have proofs or appear as premises; paper stubs have no proof files in M1 | The other kinds have no status, so a proof of one, or a premise on one, means nothing |
 | D6 | Top-level folders listed | Folders are created when their first file is written; `new-project` creates none of the empty ones | Git doesn't keep empty folders, so a clone would differ from the original |
@@ -328,7 +328,7 @@ as a separate lemma or start the induction at k = 1 and treat k = 0 by hand.
    A premise that is a paper stub is written `premise <tag>\n0\n\n`: its content is the paper, which doesn't change under us, and its `gist` is our wording, free to improve.
 3. **Hash** the bytes with SHA-256 and keep the first 12 lowercase hex characters.
 
-What isn't in it: titles, kinds, tags, `stated_using`, `level`, dates, the order of `premises`, the verbose version, and the bodies of `stated_using` statements (see Q1). Changing which premises a proof has changes it (a section appears or goes).
+What isn't in it: titles, kinds, tags, `stated_using`, `level`, dates, the order of `premises`, the verbose version, and the bodies of `stated_using` statements (definitions change rarely, and the cascade of re-checks would be large). Changing which premises a proof has changes it (a section appears or goes).
 
 **Adding a check** (`loom add-check`) computes nothing on the caller's word: Loom computes the current fingerprint itself. An agent passes the fingerprint of the version it read (`--fingerprint`, from `loom fingerprint` before reading); if the proof has changed since, the check is refused: *"4KX7.a changed after you read it (you read 3c8e1f0a92d4, it is now 77b2e9c0d415). Read it again before checking it."* The date is the current local time.
 
@@ -339,13 +339,13 @@ What isn't in it: titles, kinds, tags, `stated_using`, `level`, dates, the order
 4. Write the result in canonical form into the "ours" file and exit 0.
 
 ### How status is computed
-Statuses: `proved`, `conditional`, `unchecked`, `heuristic`, `sketch`, `open`, `cited`, `extracted`, `false`, and no status.
+Statuses: `proved`, `conditional`, `unchecked`, `sketch`, `heuristic`, `open`, `cited`, `extracted`, `false`, and no status.
 
 **What a proof gives.** Every proof P of statement S gives one of:
 - **nothing**, if `level = "failed"` or P's counting agent check is `fail` (P doesn't support S);
 - **complete-checked**, if `level = "complete"` and P is checked;
 - **complete-unchecked**, if `level = "complete"` and P isn't checked;
-- **heuristic** or **sketch**, from its level (checks on these levels change nothing except a `fail`).
+- **sketch** or **heuristic**, from its level (checks on these levels change nothing except a `fail`).
 
 **The proved set** is the smallest set of statements such that S is in it when S is a provable kind, not refuted, and some proof of S gives complete-checked with every premise in the proved set or **cited**. Loom computes it by starting from the empty set and adding statements until nothing changes. Because it is the *smallest* such set, a statement can never help prove itself: in a cycle of premises, nobody is proved unless some proof enters the cycle from outside.
 
@@ -360,9 +360,11 @@ Statuses: `proved`, `conditional`, `unchecked`, `heuristic`, `sketch`, `open`, `
 | 5 | In the proved set | **proved** |
 | 6 | Some proof gives complete-checked | **conditional** |
 | 7 | Some proof gives complete-unchecked | **unchecked** |
-| 8 | Some proof gives heuristic | **heuristic** (rules 8 and 9 swap if Q2 goes the other way) |
-| 9 | Some proof gives sketch | **sketch** |
+| 8 | Some proof gives sketch | **sketch** |
+| 9 | Some proof gives heuristic | **heuristic** |
 | 10 | Otherwise | **open** |
+
+**Why sketch outranks heuristic:** a sketch is a proof with routine gaps, meant to become complete; a heuristic is a non-rigorous argument that suggests the statement is true. The levels rank `complete` > `sketch` > `heuristic` everywhere Loom compares them.
 
 **Tie-breaks and explanations.** The **deciding proof** is the proof the matching rule rests on; when several qualify, the one with the fewest premises that are not proved or cited, then the lowest letter (`a` before `b`, `z` before `aa`).
 - A **conditional** statement **rests on** the premises of its deciding proof that are neither proved nor cited, in tag order. Loom names them, with their statuses.
@@ -371,7 +373,7 @@ Statuses: `proved`, `conditional`, `unchecked`, `heuristic`, `sketch`, `open`, `
 
 **Superseded statements** keep the status their proofs give them (a superseded result is usually still true). Using one as a premise is a warning.
 
-**Cycles.** A cycle of premises (S has a proof with premise T, T has a proof with premise S, possibly through more statements) is reported as an error naming the statements in order, as the design says (but see Q3). The status rules don't need the cycle to be removed: the proved set handles it.
+**Cycles.** A cycle of premises (S has a proof with premise T, T has a proof with premise S, possibly through more statements) is reported as an error naming the statements in order, as the design says. The status rules don't need the cycle to be removed: the proved set handles it.
 
 **Recomputing.** Status is a pure function of the files: `LoomCore` reads the project, builds the graph and computes every status from scratch. At M1's sizes (thousands of statements) this takes milliseconds, so "recompute everything downstream" is "recompute everything"; an incremental version waits until it's needed.
 
@@ -404,6 +406,7 @@ Paper `SmithJones24` has two stubs: **7RT2** (theorem, locator for `extracted_fr
 | B7MP | lemma | a: complete, [], pass, pass, then Dakota's needs-changes with `changes` | **unchecked** |
 | C5RE | lemma | a: complete, [], Dakota's pass, then an agent's pass | **unchecked** (Dakota's pass is older) |
 | CQ2R | lemma | a: heuristic, [] | **heuristic** |
+| W5HC | lemma | a: heuristic, []; b: sketch, [] | **sketch** (sketch outranks heuristic) |
 | D4VS | lemma | a: sketch, [5HN8] | **sketch** |
 | D9XF | conjecture | a: failed, []; b: complete, [], pass, then fail | **open** (nothing supports it) |
 | E4GV | theorem | a: complete, [8CJA], pass, pass; b: sketch, [] | **conditional**, rests on 8CJA |
@@ -418,7 +421,7 @@ Paper `SmithJones24` has two stubs: **7RT2** (theorem, locator for `extracted_fr
 | N7ZE | lemma, `superseded_by = "4KX7"` | a: complete, [], pass, pass | **proved** |
 | P3QA | lemma | a: complete, [N7ZE], pass, pass | **proved** |
 
-**Expected validation problems** (and no others): `premise-cycle` H8KD → J3RW → H8KD; `premise-cycle` K6YM → M1PQ → K6YM; `refuted-but-proved` F2NS; `premise-false` T9GB.a; `premise-superseded` P3QA.a. (If Q3 makes cycles warnings, the two cycle problems become warnings.)
+**Expected validation problems** (and no others): `premise-cycle` H8KD → J3RW → H8KD; `premise-cycle` K6YM → M1PQ → K6YM; `refuted-but-proved` F2NS; `premise-false` T9GB.a; `premise-superseded` P3QA.a.
 
 ### Papers
 `Papers/<Key>/` holds `paper.toml`, `Statements/<tag>.toml` (stubs), and three things M1 doesn't read: `notes.md` and `Sessions/` (M6) and `local/` (gitignored).
@@ -726,7 +729,7 @@ Other types, cited version `published`:
    "deciding_proof": "6BWT.a", "rests_on": ["3WQ6"], "superseded_by": null,
    "explanation": "6BWT conditional: 6BWT.a is complete and checked, but rests on 3WQ6, …"}
  ],
- "counts": {"proved": 8, "conditional": 6, "unchecked": 4, "heuristic": 1, "sketch": 1, "open": 2, "cited": 1, "extracted": 1, "false": 1, "none": 2}}
+ "counts": {"proved": 8, "conditional": 6, "unchecked": 4, "sketch": 2, "heuristic": 1, "open": 2, "cited": 1, "extracted": 1, "false": 1, "none": 2}}
 ```
 `counts` here are the worked example's. `loom status <id> --json` is one element of `statements`. `status` is `null` for kinds without one; `paper` is the key for stubs.
 
@@ -742,7 +745,7 @@ Other types, cited version `published`:
  "paper_premises": [{"from": "7RT2", "to": "3WQ6"}],
  "cycles": [["H8KD", "J3RW"]]}
 ```
-`counting_*_check` is the index of that entry in the checks file, or `null`. `gives` is `nothing`, `complete-checked`, `complete-unchecked`, `heuristic` or `sketch`.
+`counting_*_check` is the index of that entry in the checks file, or `null`. `gives` is `nothing`, `complete-checked`, `complete-unchecked`, `sketch` or `heuristic`.
 
 `loom validate --json`:
 ```json
@@ -794,10 +797,11 @@ Each linked or compiled-in dependency gets its decision page in `Wiki/decisions/
 - **A proof whose premise is a stub of an uncited paper result:** the stub is extracted, so the proof is at best conditional, resting on the stub.
 - **A refuted statement with a checked proof:** false, plus `refuted-but-proved`.
 - **A premise that is false:** the proof can't prove anything (false isn't proved or cited); `premise-false`.
+- **An equivalence (A ⇔ B, or a TFAE theorem):** a proof of A from B and a proof of B from A form a cycle, which is an error. Record the equivalence as one statement whose proof covers every direction, or prove one side without the other.
 - **Two agents' checks with the same fingerprint at the same second:** the later in the file is newer.
 - **A check list where one branch's entry predates the other's:** merge sorts by date, so the result may interleave; validation then checks the committed entries are still all there, which they are.
 - **A check whose `record` doesn't exist yet** (before M4): a warning, not an error.
-- **Editing a definition used in `stated_using` of a checked statement:** doesn't outdate any check (see Q1).
+- **Editing a definition used in `stated_using` of a checked statement:** doesn't outdate any check: `stated_using` bodies aren't in fingerprints.
 - **A retag at merge (M4)** changes the bodies that mention the tag, so checks of those proofs on the branch stop counting; the merge view lists them.
 - **A paper whose surname has no Latin letters** (`last = "张"`): no key; the message asks for the surname as the paper prints it in Latin letters.
 - **A book with editors and no authors:** the key and `author` field use the editors (`editor` in BibTeX).
@@ -830,10 +834,11 @@ Each linked or compiled-in dependency gets its decision page in `Wiki/decisions/
 | Commit guard on Windows | manual on Windows | Break a statement's front matter; `git commit` is refused with the message; fix it and the commit goes through |
 
 ## Open questions
-- **Q1. What does a check's fingerprint cover?** The design says the proof, its premises and the statement it proves. *Recommended (written above):* the bodies of the proof, the proved statement **and each premise statement**, so weakening a lemma outdates the checks of the proofs that use it. *Alternative:* only the premise **tags**, as the design's wording may mean; fewer re-checks, but a changed lemma leaves old checks counting. Either way, should the bodies of `stated_using` statements (the definitions) count too? *Recommended:* no for M1: definitions change rarely and the cascade would be large; the importer and M4 can revisit.
-- **Q2. Which ranks higher, `heuristic` or `sketch`?** It decides a statement's status when its best proofs are one of each, and how the graph colours them. *Written above:* the design's order, `complete` > `heuristic` > `sketch`. *Alternative:* `sketch` above `heuristic`, if a sketch means "a proof with routine gaps" and a heuristic "a non-rigorous argument".
-- **Q3. Should a cycle of premises be an error or a warning?** The design and issue #7 say error. But equivalences ("A ⇔ B", TFAE theorems) need a proof of A from B and one of B from A, which is a cycle; as an error, it blocks every commit until one is removed. The status rules are sound either way (the proved set never lets a statement prove itself). *Recommended:* a warning.
-- **Q4. Are D1–D9 approved?** (D10 is Dakota's own decision, from the PR.) In particular D1 (check dates become date-times) and D9 (renaming a paper's key doesn't rewrite `\cite` in bodies).
+- None. Dakota answered them on 2026-11-03, and the spec above follows his answers:
+  - **Q1, what a fingerprint covers:** the recommendation. It covers the bodies of the proof, the proved statement and each premise statement, but not the bodies of `stated_using` statements.
+  - **Q2, heuristic or sketch:** `sketch` ranks above `heuristic`.
+  - **Q3, cycles of premises:** an error, as the design says.
+  - **Q4, the departures:** D1–D9 approved; D10 is his own decision.
 
 ## See also
 - Up: [Specs](README.md)
