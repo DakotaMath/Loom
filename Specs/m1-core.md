@@ -21,7 +21,7 @@ The design is approved; these are the places this spec makes it more precise in 
 
 | # | Design says | This spec says | Why |
 | --- | --- | --- | --- |
-| D1 | A check's `date` is a date (`2026-11-04`) | It is a date and time with offset (`2026-11-04T15:32:10-06:00`) | "Newer" must be exact: an accept counts only if it is newer than the agent's pass, and two checks on the same day are common |
+| D1 | A check's `date` is a date (`2026-11-04`) | It is a date and time with offset (`2026-11-04T15:32:10-06:00`) | "Newer" must be exact: Dakota's pass counts only if it is newer than the agent's, and two checks on the same day are common |
 | D2 | The fingerprint is a short hash (example: 6 characters) | 12 hex characters of SHA-256 | 6 characters is 1 in 16 million per edit; 12 costs nothing and removes the doubt |
 | D3 | The fingerprint covers the proof, "its premises" and the statement it proves | It covers the proof's body, the proved statement's body and **each premise's statement body** (see open question Q1) | If a premise is weakened after the check, the old check shouldn't still count |
 | D4 | `refuted_by` is "set and accepted" | `refuted_by` plus `refuted_on` (the date of Dakota's click); both or neither | The file needs to record the acceptance, or "accepted" can't be computed |
@@ -30,6 +30,7 @@ The design is approved; these are the places this spec makes it more precise in 
 | D7 | (silent) | `loom.toml` has `format = 1`; Loom refuses a newer format and migrates older ones | Formats will change across milestones |
 | D8 | (silent) | Verbose proofs have front matter (`proof`, `fingerprint`, `created`) | So Loom can tell when the verbose version is older than the proof |
 | D9 | Issue #8: renaming a key "updates every reference" | Renaming a key rewrites the paper's own files and keeps the old key as an alias; it does **not** rewrite `\cite{Old}` in statement and proof bodies, which keep working through the alias | Rewriting a body changes its fingerprint and would quietly outdate every check of every proof that cites the paper |
+| D10 | Agents give `pass`, `needs-changes`, `fail`; Dakota gives `accept`, `reject` | Both give `pass`, `needs-changes`, `fail`. Dakota's `needs-changes` carries a `changes` message, which becomes a task (from M4) | Dakota's decision on the PR: one set of verdicts, and the changes he asks for go straight onto the task list |
 
 ## Decisions this spec makes
 | Decision | Choice | Why |
@@ -259,7 +260,11 @@ record = "Records/2026-11/job-0142.md"
 by = "dakota"
 date = 2026-11-04T16:03:09-06:00
 fingerprint = "3c8e1f0a92d4"
-verdict = "accept"
+verdict = "needs-changes"
+changes = """
+Step 3 uses Lemma 7RT2 with k = 0, but 7RT2 needs k ≥ 1. Either prove the k = 0 case
+as a separate lemma or start the induction at k = 1 and treat k = 0 by hand.
+"""
 ```
 
 | Field | Required | Type and rule |
@@ -267,36 +272,49 @@ verdict = "accept"
 | `by` | yes | `dakota`, or `agent:<model>` with `<model>` matching `[a-z0-9][a-z0-9.-]*` |
 | `date` | yes | Offset date-time to the second |
 | `fingerprint` | yes | 12 lowercase hex characters |
-| `verdict` | yes | Agents: `pass`, `needs-changes`, `fail`. Dakota: `accept`, `reject` |
+| `verdict` | yes | `pass`, `needs-changes` or `fail`: the same three for agents and Dakota |
+| `changes` | Dakota's `needs-changes`: yes. An agent's `needs-changes`: optional. Any other verdict: not allowed | Non-empty text saying exactly what needs to change. Loom writes it as a multi-line string when it has line breaks |
 | `record` | agents: yes | Project-relative path to the job record or review that holds the reasoning (`Records/…` or `Reviews/…`). A missing file is a warning until M4 writes records |
-| `note` | no | Project-relative path to a note (Dakota's checks) |
+| `note` | no | Project-relative path to a note, for anything Dakota wants to say beyond a verdict |
+
+**Verdicts.** Agents and Dakota give the same three:
+
+| Verdict | Means | Effect |
+| --- | --- | --- |
+| `pass` | The proof is right as it stands | Counts toward checked: a proof needs a counting `pass` from an agent and a newer counting `pass` from Dakota |
+| `needs-changes` | Probably fixable; `changes` (Dakota) or the record (agents) says what to fix | The proof isn't checked. **Dakota's `needs-changes` becomes a task:** from M4, the same click creates a task in `Tasks/` with `changes` as its brief, linking the proof and the check, ready to start a job. M1 has no task list yet, so the message waits in the check and `loom status` shows it. An agent's `needs-changes` is flagged on Home with an offer to make a task, as the design says |
+| `fail` | The argument is wrong | The proof stops supporting its statement. Loom doesn't set `level = "failed"` itself; that's Dakota's click, since he may repair the proof instead |
 
 **Rules.**
 1. **Append-only.** No entry is ever edited, removed or reordered. Validation compares the file with its version in `HEAD`: every committed entry must still be there, unchanged.
 2. **Date order.** Entries are in non-decreasing `date` order. Ties are allowed; then the later entry in the file is the newer.
-3. **Who.** An agent's verdict is `pass`, `needs-changes` or `fail`; Dakota's is `accept` or `reject`. Every agent check has a `record`.
+3. **Who.** Every agent check has a `record`. Every `needs-changes` by Dakota has `changes`.
 4. **Matching.** A check *matches* when its `fingerprint` equals the proof's current fingerprint. Checks that don't match stay in the history and count for nothing.
 5. **The counting checks.** The **counting agent check** is the newest matching check by an agent (any model). The **counting Dakota check** is the newest matching check by Dakota.
-6. **Checked.** A proof is **checked** when the counting agent check is `pass`, the counting Dakota check is `accept`, and that accept is newer than that pass.
-7. **Fail.** When the counting agent check is `fail`, the proof **doesn't support** its statement: for status it is treated like a `failed` proof. Loom doesn't change `level` itself; that's Dakota's click.
+6. **Checked.** A proof is **checked** when the counting agent check is `pass`, the counting Dakota check is `pass`, and Dakota's pass is newer than the agent's. (Dakota's pass confirms the agent's; if an agent checks again afterwards, Dakota passes it again.)
+7. **Fail.** When either counting check is `fail`, the proof **doesn't support** its statement: for status it is treated like a `failed` proof.
 
-**Verdict table** (every row is a Catch2 test; "now" means the fingerprint matches, "old" that it doesn't; entries oldest first):
+**Verdict table** (every row is a Catch2 test; `A:` is an agent's check, `D:` is Dakota's; "now" means the fingerprint matches, "old" that it doesn't; entries oldest first):
 
 | Checks | Checked? | Supports? | Why |
 | --- | --- | --- | --- |
 | (none) | no | yes | No checks yet |
-| pass now | no | yes | Waits for Dakota's accept |
-| pass now, accept now | **yes** | yes | |
-| accept now, pass now | no | yes | The accept is older than the counting pass |
-| pass now, accept now, pass now | no | yes | A re-check by an agent needs a new accept |
-| pass now, accept now, needs-changes now | no | yes | The counting agent check is needs-changes |
-| pass now, accept now, fail now | no | **no** | The counting agent check is fail |
-| pass now, accept now, reject now | no | yes | The counting Dakota check is reject |
-| pass old, accept old | no | yes | Neither matches: the proof was edited since |
-| pass old, accept old, pass now | no | yes | Waits for an accept of the new version |
-| fail old, pass now, accept now | **yes** | yes | The old fail doesn't match |
-| pass now (agent A), needs-changes now (agent B), pass now (agent A) | no | yes | Counting is the newest agent check: A's second pass, which no accept follows |
-| pass now, needs-changes now, accept now | no | yes | The counting agent check is needs-changes |
+| A:pass now | no | yes | Waits for Dakota's pass |
+| A:pass now, D:pass now | **yes** | yes | |
+| D:pass now, A:pass now | no | yes | Dakota's pass is older than the agent's |
+| A:pass now, D:pass now, A:pass now | no | yes | A re-check by an agent needs Dakota's pass again |
+| A:pass now, D:pass now, A:needs-changes now | no | yes | The counting agent check is needs-changes |
+| A:pass now, D:pass now, A:fail now | no | **no** | The counting agent check is fail |
+| A:pass now, D:needs-changes now | no | yes | The counting Dakota check is needs-changes (and it becomes a task) |
+| A:pass now, D:pass now, D:needs-changes now | no | yes | Dakota's newest check is needs-changes |
+| A:pass now, D:fail now | no | **no** | The counting Dakota check is fail |
+| A:pass now, D:fail now, D:pass now | **yes** | yes | Dakota's newest check, a pass, is the one that counts |
+| A:pass old, D:pass old | no | yes | Neither matches: the proof was edited since |
+| A:pass old, D:pass old, A:pass now | no | yes | Waits for Dakota's pass of the new version |
+| A:fail old, A:pass now, D:pass now | **yes** | yes | The old fail doesn't match |
+| A:pass now (agent X), A:needs-changes now (agent Y), A:pass now (agent X) | no | yes | Counting is the newest agent check: X's second pass, which no pass from Dakota follows |
+| A:pass now, A:needs-changes now, D:pass now | no | yes | The counting agent check is needs-changes |
+| D:needs-changes now, without `changes` | | | Invalid: `check-changes-missing` |
 
 **The fingerprint** of a proof is computed as follows.
 1. **Normalise each text** (a body): CRLF becomes LF; spaces and tabs at the end of every line are removed; newlines at the very end are removed. Nothing else changes. So an editor trimming whitespace doesn't outdate a check, and any other edit does.
@@ -348,7 +366,7 @@ Statuses: `proved`, `conditional`, `unchecked`, `heuristic`, `sketch`, `open`, `
 
 **Tie-breaks and explanations.** The **deciding proof** is the proof the matching rule rests on; when several qualify, the one with the fewest premises that are not proved or cited, then the lowest letter (`a` before `b`, `z` before `aa`).
 - A **conditional** statement **rests on** the premises of its deciding proof that are neither proved nor cited, in tag order. Loom names them, with their statuses.
-- An **unchecked** statement says what its deciding proof lacks: an agent pass, Dakota's accept, an accept newer than the pass, or a fix (the counting check is `needs-changes` or `reject`).
+- An **unchecked** statement says what its deciding proof lacks: an agent pass, Dakota's pass, a pass from Dakota newer than the agent's, or a fix (a counting check is `needs-changes`; Dakota's `changes` text is quoted).
 - An **open** statement says whether it has no proofs or only proofs that don't support it.
 
 **Superseded statements** keep the status their proofs give them (a superseded result is usually still true). Using one as a premise is a warning.
@@ -360,13 +378,13 @@ Statuses: `proved`, `conditional`, `unchecked`, `heuristic`, `sketch`, `open`, `
 **`loom status <id>` explains in one sentence:**
 - `4KX7 proved: 4KX7.a is complete and checked, and its premises 5HN8, 9D3F are proved.`
 - `6BWT conditional: 6BWT.a is complete and checked, but rests on 3WQ6, which is extracted (not yet checked against the paper's PDF).`
-- `8CJA unchecked: 8CJA.a is complete and has an agent pass, but no accept from Dakota.`
-- `B7MP unchecked: the newest agent check of B7MP.a asks for changes (Records/2026-11/job-0150.md).`
+- `8CJA unchecked: 8CJA.a is complete and has an agent pass, but no pass from Dakota.`
+- `B7MP unchecked: Dakota asked for changes to B7MP.a: "Step 3 uses Lemma 7RT2 with k = 0, but …"`
 - `D9XF open: no proof supports it (D9XF.a failed; an agent check says D9XF.b is wrong).`
 - `F2NS false: refuted by G5TZ.a, accepted 2026-11-06.`
 
 ### The worked example
-This graph is a test project in `Tests/` (with the record files its agent checks link, and a complete paper entry, so nothing else warns): the test computes every status and compares with the table, and runs validation and compares with the expected problems. "pass, accept" means an agent pass then a newer accept from Dakota, both matching the current fingerprint, unless said otherwise.
+This graph is a test project in `Tests/` (with the record files its agent checks link, and a complete paper entry, so nothing else warns): the test computes every status and compares with the table, and runs validation and compares with the expected problems. "pass, pass" means an agent pass then a newer pass from Dakota, both matching the current fingerprint, unless said otherwise.
 
 Paper `SmithJones24` has two stubs: **7RT2** (theorem, locator for `extracted_from` checked against the PDF) and **3WQ6** (lemma, not checked).
 
@@ -377,28 +395,28 @@ Paper `SmithJones24` has two stubs: **7RT2** (theorem, locator for `extracted_fr
 | 2M9Q | definition | none | no status |
 | R2HW | question | none | no status |
 | S6KT | theorem | none | **open** (no proofs) |
-| 5HN8 | lemma | a: complete, [], pass, accept | **proved** |
-| 9D3F | lemma | a: complete, [7RT2], pass, accept | **proved** (a cited premise counts) |
-| 4KX7 | theorem, `stated_using = ["2M9Q"]` | a: complete, [5HN8, 9D3F], pass, accept | **proved** |
-| 6BWT | lemma | a: complete, [3WQ6], pass, accept | **conditional**, rests on 3WQ6 |
-| 8CJA | proposition | a: complete, [5HN8], pass only | **unchecked** (no accept) |
-| AH3K | lemma | a: complete, [], pass, accept, both at an old fingerprint (body edited since) | **unchecked** |
-| B7MP | lemma | a: complete, [], pass, accept, needs-changes | **unchecked** |
-| C5RE | lemma | a: complete, [], accept, then pass | **unchecked** (accept older than pass) |
+| 5HN8 | lemma | a: complete, [], pass, pass | **proved** |
+| 9D3F | lemma | a: complete, [7RT2], pass, pass | **proved** (a cited premise counts) |
+| 4KX7 | theorem, `stated_using = ["2M9Q"]` | a: complete, [5HN8, 9D3F], pass, pass | **proved** |
+| 6BWT | lemma | a: complete, [3WQ6], pass, pass | **conditional**, rests on 3WQ6 |
+| 8CJA | proposition | a: complete, [5HN8], pass only | **unchecked** (no pass from Dakota) |
+| AH3K | lemma | a: complete, [], pass, pass, both at an old fingerprint (body edited since) | **unchecked** |
+| B7MP | lemma | a: complete, [], pass, pass, then Dakota's needs-changes with `changes` | **unchecked** |
+| C5RE | lemma | a: complete, [], Dakota's pass, then an agent's pass | **unchecked** (Dakota's pass is older) |
 | CQ2R | lemma | a: heuristic, [] | **heuristic** |
 | D4VS | lemma | a: sketch, [5HN8] | **sketch** |
 | D9XF | conjecture | a: failed, []; b: complete, [], pass, then fail | **open** (nothing supports it) |
-| E4GV | theorem | a: complete, [8CJA], pass, accept; b: sketch, [] | **conditional**, rests on 8CJA |
-| E8TB | theorem | a: complete, [5HN8, 3WQ6, 8CJA], pass, accept; b: complete, [8CJA], pass, accept | **conditional**, rests on 8CJA (deciding proof b: fewer unmet premises) |
-| G5TZ | proposition | a: complete, [], pass, accept | **proved** |
-| F2NS | lemma, `refuted_by = "G5TZ.a"`, `refuted_on` set | a: complete, [], pass, accept | **false** |
-| T9GB | lemma | a: complete, [F2NS], pass, accept | **conditional**, rests on F2NS |
-| H8KD | lemma | a: complete, [J3RW], pass, accept | **proved** (via J3RW.b) |
-| J3RW | lemma | a: complete, [H8KD], pass, accept; b: complete, [], pass, accept | **proved** |
-| K6YM | lemma | a: complete, [M1PQ], pass, accept | **conditional**, rests on M1PQ |
-| M1PQ | lemma | a: complete, [K6YM], pass, accept | **conditional**, rests on K6YM |
-| N7ZE | lemma, `superseded_by = "4KX7"` | a: complete, [], pass, accept | **proved** |
-| P3QA | lemma | a: complete, [N7ZE], pass, accept | **proved** |
+| E4GV | theorem | a: complete, [8CJA], pass, pass; b: sketch, [] | **conditional**, rests on 8CJA |
+| E8TB | theorem | a: complete, [5HN8, 3WQ6, 8CJA], pass, pass; b: complete, [8CJA], pass, pass | **conditional**, rests on 8CJA (deciding proof b: fewer unmet premises) |
+| G5TZ | proposition | a: complete, [], pass, pass | **proved** |
+| F2NS | lemma, `refuted_by = "G5TZ.a"`, `refuted_on` set | a: complete, [], pass, pass | **false** |
+| T9GB | lemma | a: complete, [F2NS], pass, pass | **conditional**, rests on F2NS |
+| H8KD | lemma | a: complete, [J3RW], pass, pass | **proved** (via J3RW.b) |
+| J3RW | lemma | a: complete, [H8KD], pass, pass; b: complete, [], pass, pass | **proved** |
+| K6YM | lemma | a: complete, [M1PQ], pass, pass | **conditional**, rests on M1PQ |
+| M1PQ | lemma | a: complete, [K6YM], pass, pass | **conditional**, rests on K6YM |
+| N7ZE | lemma, `superseded_by = "4KX7"` | a: complete, [], pass, pass | **proved** |
+| P3QA | lemma | a: complete, [N7ZE], pass, pass | **proved** |
 
 **Expected validation problems** (and no others): `premise-cycle` H8KD → J3RW → H8KD; `premise-cycle` K6YM → M1PQ → K6YM; `refuted-but-proved` F2NS; `premise-false` T9GB.a; `premise-superseded` P3QA.a. (If Q3 makes cycles warnings, the two cycle problems become warnings.)
 
@@ -628,7 +646,9 @@ Other types, cited version `published`:
 | Code | Sev. | Message |
 | --- | --- | --- |
 | `check-by` | error | Check {n}: `by` must be `dakota` or `agent:<model>`, not `{value}`. |
-| `check-verdict` | error | Check {n}: `{verdict}` is {Dakota's / an agent's} verdict; {an agent gives pass, needs-changes or fail / Dakota gives accept or reject}. |
+| `check-verdict` | error | Check {n}: `{verdict}` isn't a verdict. Use pass, needs-changes or fail. |
+| `check-changes-missing` | error | Check {n} is Dakota's needs-changes but doesn't say what to change. Add `changes`. |
+| `check-changes-unexpected` | error | Check {n} has `changes`, but only a needs-changes check says what to change. |
 | `check-fingerprint` | error | Check {n}: the fingerprint must be 12 characters from 0–9 and a–f. |
 | `check-record-missing` | error | Check {n} is by an agent and has no `record`: every agent check links its reasoning. |
 | `check-record-not-found` | warning | Check {n} links `{path}`, which doesn't exist. |
@@ -686,7 +706,7 @@ Other types, cited version `published`:
 | `new-proof` | `<statement-id> --level <level> (--body <text> \| --body-file <path>) [--premise <id>]…` | Creates the next proof of the statement | The new proof ID; `{"id", "path"}` |
 | `edit-proof` | `<proof-id> [--level …] [--body-file <path>] [--add-premise …] [--remove-premise …] [--verified]` | Changes the proof. Changing the body or premises of a checked proof is refused unless `--outdate-checks` *(Dakota)* | The changed fields |
 | `fingerprint` | `<proof-id>` | | The current fingerprint; `{"proof", "fingerprint"}` |
-| `add-check` | `<proof-id> --by <dakota\|agent:model> --verdict <verdict> [--fingerprint <fp>] [--record <path>] [--note <path>]` | Appends a check with the current fingerprint and time. Agents must give `--fingerprint` (refused if the proof has changed) and `--record`. `--by dakota` is *(Dakota)* | The entry and whether the proof is now checked |
+| `add-check` | `<proof-id> --by <dakota\|agent:model> --verdict <pass\|needs-changes\|fail> [--changes <text> \| --changes-file <path>] [--fingerprint <fp>] [--record <path>] [--note <path>]` | Appends a check with the current fingerprint and time. Agents must give `--fingerprint` (refused if the proof has changed) and `--record`. `--by dakota` is *(Dakota)*; with `needs-changes` and no `--changes`, it asks for the message at the terminal | The entry and whether the proof is now checked |
 | `refute` | `<id> --by <proof-id>` *(Dakota)* | Sets `refuted_by` and `refuted_on` (today) | The new status |
 | `status` | `[<id>]` | Computes status | One line per statement (`ID  status  title`) and the counts by status; with an ID, the explanation sentence. JSON below |
 | `graph` | `--json` | | The graph (below) |
@@ -813,7 +833,7 @@ Each linked or compiled-in dependency gets its decision page in `Wiki/decisions/
 - **Q1. What does a check's fingerprint cover?** The design says the proof, its premises and the statement it proves. *Recommended (written above):* the bodies of the proof, the proved statement **and each premise statement**, so weakening a lemma outdates the checks of the proofs that use it. *Alternative:* only the premise **tags**, as the design's wording may mean; fewer re-checks, but a changed lemma leaves old checks counting. Either way, should the bodies of `stated_using` statements (the definitions) count too? *Recommended:* no for M1: definitions change rarely and the cascade would be large; the importer and M4 can revisit.
 - **Q2. Which ranks higher, `heuristic` or `sketch`?** It decides a statement's status when its best proofs are one of each, and how the graph colours them. *Written above:* the design's order, `complete` > `heuristic` > `sketch`. *Alternative:* `sketch` above `heuristic`, if a sketch means "a proof with routine gaps" and a heuristic "a non-rigorous argument".
 - **Q3. Should a cycle of premises be an error or a warning?** The design and issue #7 say error. But equivalences ("A ⇔ B", TFAE theorems) need a proof of A from B and one of B from A, which is a cycle; as an error, it blocks every commit until one is removed. The status rules are sound either way (the proved set never lets a statement prove itself). *Recommended:* a warning.
-- **Q4. Are D1–D9 approved?** In particular D1 (check dates become date-times) and D9 (renaming a paper's key doesn't rewrite `\cite` in bodies).
+- **Q4. Are D1–D9 approved?** (D10 is Dakota's own decision, from the PR.) In particular D1 (check dates become date-times) and D9 (renaming a paper's key doesn't rewrite `\cite` in bodies).
 
 ## See also
 - Up: [Specs](README.md)

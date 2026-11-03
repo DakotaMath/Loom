@@ -23,7 +23,7 @@ Milestones M0–M12 are on GitHub; M1's issues are #2–#9, linked by "blocked b
 - **Once the M1 spec is approved, in order:** #3 CMake and CI → #4 `loom new-project` → #5 statements, proofs, IDs → #6 checks → #7 status; #8 papers after #5; #9 `loom validate` last.
 
 ## Waiting on Dakota
-- The M1 spec's open questions Q1–Q4 and departures D1–D9 ([`Specs/m1-core.md`](Specs/m1-core.md)), on the #2 PR.
+- The M1 spec's open questions Q1–Q4 and departures D1–D10 ([`Specs/m1-core.md`](Specs/m1-core.md)), on the #2 PR.
 
 ## Watch out for
 - **Public repo:** never commit details of private research projects; examples use made-up papers.
