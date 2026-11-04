@@ -21,6 +21,7 @@ Traps, dead ends and their fixes, in one folder per area (`qt`, `build`, `git`, 
 | Page | Summary |
 | --- | --- |
 | [QFileInfo::canonicalFilePath() doesn't resolve junctions on Windows](qt/canonical-path-ignores-junctions.md) | On Windows, Qt 6's `QFileInfo::canonicalFilePath()` leaves NTFS junctions unresolved, both the junction itself and any path through it, so a path check built on it lets `Link/secret.tex` escape the project. Use `std::filesystem::canonical()`, which asks Windows for the final path, as `LoomCore`'s `ProjectFiles.cpp` does. |
+| [QRegularExpression's `$` also matches before a final line break](qt/regex-dollar-before-final-newline.md) | In Qt 6, `QRegularExpression` (PCRE2) lets `$` match at the very end *or* just before a final `\n`, so `^[a-z0-9-]+$` accepts `"energy\n"`. A rule meant to check a whole value must be anchored with `QRegularExpression::anchoredPattern()` (which wraps the pattern in `\A(?:…)\z`), never with `^…$`. |
 
 ### toml
 
