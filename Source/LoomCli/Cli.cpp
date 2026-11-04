@@ -7,6 +7,18 @@
 #include <QFile>
 #include <QFileInfo>
 
+#ifdef Q_OS_WIN
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+
+#include <iterator>
+#else
+#include <iostream>
+#include <string>
+#include <unistd.h>
+#endif
+
 namespace cli {
 
 void write(std::FILE* stream, const QString& text)
@@ -60,11 +72,17 @@ QString usageText()
         "  loom edit-statement <id> [--title <title>] [--kind <kind>] [--body-file <path>]\n"
         "                     [--add-tag <tag>]... [--remove-tag <tag>]...\n"
         "                     [--add-stated-using <id>]... [--remove-stated-using <id>]...\n"
-        "                     [--superseded-by <id>] [--verified]\n"
+        "                     [--superseded-by <id>] [--verified] [--outdate-checks]\n"
         "  loom new-proof <statement-id> --level sketch|heuristic|complete|failed\n"
         "                     (--body <text> | --body-file <path>) [--premise <id>]...\n"
         "  loom edit-proof <proof-id> [--level <level>] [--body-file <path>]\n"
         "                     [--add-premise <id>]... [--remove-premise <id>]... [--verified]\n"
+        "                     [--outdate-checks]\n"
+        "  loom fingerprint <proof-id>\n"
+        "  loom add-check <proof-id> --by dakota|agent:<model> --verdict pass|needs-changes|fail\n"
+        "                     [--changes <text> | --changes-file <path>] [--fingerprint <fp>]\n"
+        "                     [--record <path>] [--note <path>]\n"
+        "  loom merge-checks <base> <ours> <theirs>\n"
         "Every subcommand that works in a project takes --project <folder> and --json.");
 }
 
@@ -109,7 +127,10 @@ std::optional<Args> parseArgs(const QStringList& args, const QString& name, cons
         }
     }
     if (parsed.positional.size() != spec.positionals) {
-        error = QStringLiteral("`loom %1` needs %2.").arg(name, spec.positionals == 1 ? QStringLiteral("an ID") : QStringLiteral("no other arguments"));
+        const QString wanted = spec.positionals == 0 ? QStringLiteral("no other arguments")
+                             : spec.positionals == 1 ? QStringLiteral("an ID")
+                                                     : QStringLiteral("%1 arguments").arg(spec.positionals);
+        error = QStringLiteral("`loom %1` needs %2.").arg(name, wanted);
         return std::nullopt;
     }
     return parsed;
@@ -132,6 +153,89 @@ std::optional<QString> findProject(const Context& context, QString& message)
     return std::nullopt;
 }
 
+QString listed(const QStringList& items)
+{
+    if (items.size() < 2)
+        return items.join(QString());
+    return items.first(items.size() - 1).join(u", ") + QStringLiteral(" and ") + items.last();
+}
+
+bool inputIsTerminal()
+{
+#ifdef Q_OS_WIN
+    // _isatty() is true for any character device, `NUL` included; only a console has a mode.
+    DWORD mode = 0;
+    return GetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), &mode) != 0;
+#else
+    return isatty(STDIN_FILENO) != 0;
+#endif
+}
+
+std::optional<QString> readTerminalLine()
+{
+    QString line;
+#ifdef Q_OS_WIN
+    const HANDLE input = GetStdHandle(STD_INPUT_HANDLE);
+    wchar_t buffer[256];
+    while (!line.endsWith(u'\n')) {
+        DWORD read = 0;
+        if (!ReadConsoleW(input, buffer, static_cast<DWORD>(std::size(buffer)), &read, nullptr) || read == 0)
+            break;
+        line += QString::fromWCharArray(buffer, static_cast<qsizetype>(read));
+        if (line.contains(QChar(0x1a))) // Ctrl+Z, the console's end of input.
+            return std::nullopt;
+    }
+    if (line.isEmpty())
+        return std::nullopt;
+#else
+    std::string text;
+    if (!std::getline(std::cin, text))
+        return std::nullopt;
+    line = QString::fromUtf8(text);
+#endif
+    while (line.endsWith(u'\n') || line.endsWith(u'\r'))
+        line.chop(1);
+    return line;
+}
+
+bool requireTerminal(const QString& what, bool json, int& exitCode)
+{
+    if (inputIsTerminal())
+        return true;
+    exitCode = fail(exitRefused, QStringLiteral("dakota-only"), QStringLiteral("Only Dakota can %1, and only at a terminal.").arg(what), json);
+    return false;
+}
+
+bool askDakota(const QString& what, bool json, int& exitCode)
+{
+    write(stderr, QStringLiteral("This is Dakota's decision: %1. Type yes to go ahead: ").arg(what));
+    const std::optional<QString> answer = readTerminalLine();
+    if (answer && answer->trimmed() == u"yes")
+        return true;
+    exitCode = fail(exitRefused, QStringLiteral("not-confirmed"), QStringLiteral("Nothing was done: the answer wasn't yes."), json);
+    return false;
+}
+
+std::optional<QByteArray> readTextFile(const QString& path, bool json, int& exitCode)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        exitCode = fail(exitCantWork, QStringLiteral("unreadable"),
+            QStringLiteral("Loom couldn't read `%1`.").arg(QDir::toNativeSeparators(path)), json);
+        return std::nullopt;
+    }
+    QByteArray bytes = file.readAll();
+    if (const std::optional<qsizetype> bad = loom::firstInvalidUtf8(bytes)) {
+        exitCode = fail(exitUsage, QStringLiteral("not-utf8"),
+            QStringLiteral("`%1` isn't valid UTF-8 (the first bad byte is at offset %2). Save it as UTF-8.")
+                .arg(QDir::toNativeSeparators(path)).arg(*bad), json);
+        return std::nullopt;
+    }
+    if (bytes.startsWith("\xEF\xBB\xBF"))
+        bytes.remove(0, 3);
+    return bytes;
+}
+
 std::optional<QByteArray> readBody(const Args& args, bool json, int& exitCode)
 {
     const std::optional<QString> body = args.value(QStringLiteral("--body"));
@@ -140,21 +244,7 @@ std::optional<QByteArray> readBody(const Args& args, bool json, int& exitCode)
         return body->toUtf8();
     if (!bodyFile)
         return QByteArray();
-
-    QFile file(*bodyFile);
-    if (!file.open(QIODevice::ReadOnly)) {
-        exitCode = fail(exitCantWork, QStringLiteral("unreadable"),
-            QStringLiteral("Loom couldn't read `%1`.").arg(QDir::toNativeSeparators(*bodyFile)), json);
-        return std::nullopt;
-    }
-    const QByteArray bytes = file.readAll();
-    if (const std::optional<qsizetype> bad = loom::firstInvalidUtf8(bytes)) {
-        exitCode = fail(exitUsage, QStringLiteral("not-utf8"),
-            QStringLiteral("`%1` isn't valid UTF-8 (the first bad byte is at offset %2). Save it as UTF-8.")
-                .arg(QDir::toNativeSeparators(*bodyFile)).arg(*bad), json);
-        return std::nullopt;
-    }
-    return bytes;
+    return readTextFile(*bodyFile, json, exitCode);
 }
 
 int report(const loom::ChangeResult& result, bool json, const QString& text, const QString& jsonFields)

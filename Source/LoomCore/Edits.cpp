@@ -3,6 +3,7 @@
 #include "LoomCore/FrontMatter.h"
 #include "LoomCore/Ids.h"
 #include "LoomCore/ProjectContents.h"
+#include "LoomCore/ProofChecks.h"
 #include "LoomCore/ProjectFiles.h"
 #include "LoomCore/ProjectToml.h"
 #include "LoomCore/TomlWriter.h"
@@ -12,6 +13,7 @@
 #include <QHash>
 #include <QLockFile>
 #include <QSet>
+#include <QTimeZone>
 
 #include <algorithm>
 #include <memory>
@@ -145,11 +147,21 @@ ChangeResult refusedFor(const std::vector<Problem>& problems, const QString& wha
     return result;
 }
 
+/// "A, B and C".
+QString listed(const QStringList& items)
+{
+    if (items.size() < 2)
+        return items.join(QString());
+    return items.first(items.size() - 1).join(u", ") + QStringLiteral(" and ") + items.last();
+}
+
 /// Writes `bytes` to `path` if, with the file's contents replaced by `changed`, the project has no
-/// error it didn't have before.
+/// error it didn't have before, and the change outdates no checked proof's checks unless
+/// `outdateChecks` (Specs/m1-core.md, "Statements": editing text in a checked proof's fingerprint
+/// needs Dakota's confirmation, and the refusal names the proofs).
 /// @param what For the refusal: `create the statement`, …
 ChangeResult commit(Session& session, const QString& path, const QByteArray& bytes, const ProjectContents& changed,
-                    const QString& what, ChangeResult result)
+                    const QString& what, ChangeResult result, bool outdateChecks = false)
 {
     const ProjectConfig& config = session.project.config;
     const std::vector<Problem> added = addedErrors(session.problems(config, session.project.problems, session.contents),
@@ -160,6 +172,18 @@ ChangeResult commit(Session& session, const QString& path, const QByteArray& byt
         refusal.id = result.id;
         refusal.path = path;
         return refusal;
+    }
+    result.outdatedChecks = outdatedChecks(session.contents, changed);
+    if (!result.outdatedChecks.isEmpty() && !outdateChecks) {
+        const bool one = result.outdatedChecks.size() == 1;
+        result.outcome = ChangeOutcome::Refused;
+        result.code = QStringLiteral("outdates-checks");
+        result.message = QStringLiteral("Loom didn't %1, because it would outdate the checks of %2: %3 checked, and the "
+                                        "text %4 read would change. Only Dakota can outdate checks (`--outdate-checks`, "
+                                        "at a terminal).")
+                             .arg(what, listed(result.outdatedChecks), one ? QStringLiteral("it is") : QStringLiteral("they are"),
+                                  one ? QStringLiteral("its checks") : QStringLiteral("their checks"));
+        return result;
     }
     const QString error = writeProjectFile(session.project.root, path, bytes);
     if (!error.isEmpty())
@@ -253,8 +277,8 @@ qint64 highestProofNumber(const ProjectContents& contents, const QString& tag)
         consider(proof.id);
     for (const VerboseFile& verbose : contents.verbose)
         consider(verbose.proofId);
-    for (const QString& path : contents.checksFiles)
-        consider(QFileInfo(path).fileName().chopped(12)); // `.checks.toml`
+    for (const ChecksFile& checks : contents.checks)
+        consider(checks.proofId);
     return highest;
 }
 
@@ -435,7 +459,7 @@ ChangeResult editStatement(const QString& root, const QString& typed, const Stat
         if (entry.path == file.path)
             entry.reading = readStatement(bytes, file.path);
     }
-    return commit(*session, file.path, bytes, changed, QStringLiteral("change %1").arg(*tag), result);
+    return commit(*session, file.path, bytes, changed, QStringLiteral("change %1").arg(*tag), result, edit.outdateChecks);
 }
 
 ChangeResult createProof(const QString& root, const NewProof& request, const ChangeOptions& options)
@@ -525,7 +549,100 @@ ChangeResult editProof(const QString& root, const QString& typed, const ProofEdi
         if (entry.path == file.path)
             entry.reading = readProof(bytes, file.path);
     }
-    return commit(*session, file.path, bytes, changed, QStringLiteral("change %1").arg(*id), result);
+    return commit(*session, file.path, bytes, changed, QStringLiteral("change %1").arg(*id), result, edit.outdateChecks);
+}
+
+CheckAdded addCheck(const QString& root, const QString& typed, const NewCheck& request, bool dakotaConfirmed,
+                    const ChangeOptions& options)
+{
+    CheckAdded added;
+    ChangeResult& result = added.change;
+    std::optional<Session> session = begin(root, options, result);
+    if (!session)
+        return added;
+    const ProjectContents& contents = session->contents;
+
+    const std::optional<QString> id = resolveProof(contents, typed);
+    if (!id) {
+        result = refused(QStringLiteral("ref-unknown"), QStringLiteral("`%1` isn't a proof in this project.").arg(typed));
+        return added;
+    }
+    const auto refuse = [&](const char* code, const QString& message) {
+        result = refused(QString::fromLatin1(code), message);
+        result.id = *id;
+        return added;
+    };
+    Check check;
+    check.by = request.by;
+    if (check.byDakota() && !dakotaConfirmed)
+        return refuse("dakota-only", QStringLiteral("Only Dakota can add Dakota's checks, and only at a terminal."));
+
+    // Loom computes the fingerprint itself, never on the caller's word (Specs/m1-core.md, "Adding a check").
+    QString why;
+    const std::optional<QString> current = proofFingerprint(contents, *id, &why);
+    if (!current)
+        return refuse("no-fingerprint", why);
+    if (check.byAgent() && request.fingerprint.isEmpty())
+        return refuse("fingerprint-needed",
+            QStringLiteral("An agent's check needs `--fingerprint`: what `loom fingerprint %1` printed before you read the proof.").arg(*id));
+    if (!request.fingerprint.isEmpty() && request.fingerprint != *current)
+        return refuse("proof-changed",
+            QStringLiteral("%1 changed after you read it (you read %2, it is now %3). Read it again before checking it.")
+                .arg(*id, request.fingerprint, *current));
+
+    const QDateTime& now = options.now;
+    check.date = QDateTime(now.date(), QTime(now.time().hour(), now.time().minute(), now.time().second()),
+                           QTimeZone::fromSecondsAheadOfUtc(now.offsetFromUtc()));
+    check.fingerprint = *current;
+    check.verdict = request.verdict;
+    QString changes = request.changes;
+    changes.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
+    if (changes.trimmed().isEmpty())
+        changes.clear();
+    else if (changes.contains(u'\n') && !changes.endsWith(u'\n'))
+        changes += u'\n'; // So the closing `"""` of the multi-line string sits on its own line.
+    check.changes = changes;
+    check.record = request.record;
+    check.note = request.note;
+
+    // Appended as text: the entries already there stay byte for byte (rule 1, append-only).
+    const QString path = QStringLiteral("%1/%2.checks.toml").arg(QFileInfo(contents.proof(*id)->path).path(), *id);
+    QByteArray bytes;
+    if (const ChecksFile* existing = contents.checksOf(*id)) {
+        if (!existing->reading.parsed) {
+            result = notEditable(existing->path, existing->reading.problems);
+            result.id = *id;
+            return added;
+        }
+        const std::optional<QByteArray> before = readProjectFile(session->project.root, path);
+        if (!before) {
+            result = cantWork(QStringLiteral("unreadable"), QStringLiteral("Loom couldn't read %1.").arg(path));
+            return added;
+        }
+        bytes = *before;
+        if (!bytes.isEmpty() && !bytes.endsWith('\n'))
+            bytes += '\n';
+        if (!bytes.trimmed().isEmpty())
+            bytes += '\n';
+    }
+    bytes += formatCheck(check);
+
+    const ChecksReading reading = readChecks(bytes, path);
+    ProjectContents changed = contents;
+    const auto entry = std::find_if(changed.checks.begin(), changed.checks.end(), [&](const ChecksFile& c) { return c.path == path; });
+    if (entry != changed.checks.end())
+        entry->reading = reading;
+    else
+        changed.checks.push_back({path, *id, reading});
+
+    result.id = *id;
+    result = commit(*session, path, bytes, changed, QStringLiteral("add the check"), result);
+    if (result.outcome == ChangeOutcome::Done) {
+        added.check = check;
+        added.index = static_cast<qsizetype>(reading.checks.size()) - 1;
+        added.standing = standingOf(reading.checks, *current);
+    }
+    return added;
 }
 
 } // namespace loom

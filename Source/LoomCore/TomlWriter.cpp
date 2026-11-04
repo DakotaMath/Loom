@@ -1,5 +1,7 @@
 #include "LoomCore/TomlWriter.h"
 
+#include <cstdlib>
+
 namespace loom {
 
 namespace {
@@ -46,6 +48,21 @@ QString tomlMultilineString(const QString& text)
     if (!body.endsWith(u'\n'))
         body += u'\n';
     return u"\"\"\"\n" + escapeBasic(body, true) + u"\"\"\"";
+}
+
+QString tomlMultilineStringAsIs(const QString& text)
+{
+    return u"\"\"\"\n" + escapeBasic(text, true) + u"\"\"\"";
+}
+
+QString tomlOffsetDateTime(const QDateTime& dateTime)
+{
+    const int offset = dateTime.offsetFromUtc();
+    QString text = dateTime.toString(QStringLiteral("yyyy-MM-dd'T'HH:mm:ss"));
+    if (offset == 0)
+        return text + u'Z';
+    const int minutes = std::abs(offset) / 60;
+    return text + (offset < 0 ? u'-' : u'+') + QStringLiteral("%1:%2").arg(minutes / 60, 2, 10, u'0').arg(minutes % 60, 2, 10, u'0');
 }
 
 QString tomlDate(const QDate& date)

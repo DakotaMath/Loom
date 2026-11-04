@@ -5,6 +5,7 @@
 // the order its specs list them.
 
 #include <QDate>
+#include <QDateTime>
 #include <QString>
 #include <QStringList>
 
@@ -23,6 +24,21 @@ QString tomlBasicString(const QString& text);
 /// @param text The string's value.
 /// @returns The TOML text, from the opening to the closing `"""`. No side effects.
 QString tomlMultilineString(const QString& text);
+
+/// Writes a TOML multi-line basic string that reads back as exactly `text`, as check histories
+/// write a `changes` message with line breaks (Specs/m1-core.md, "Checks"): `"""`, a line break
+/// (which TOML drops), the text, then `"""`. Unlike tomlMultilineString() nothing is added or
+/// changed: a CR is escaped rather than dropped, and no final line break is added, so a value
+/// read from a file is written back unchanged.
+/// @param text The string's value.
+/// @returns The TOML text, from the opening to the closing `"""`. No side effects.
+QString tomlMultilineStringAsIs(const QString& text);
+
+/// Writes a TOML offset date-time to the second, as check histories date their entries
+/// (Specs/m1-core.md, D1): `2026-11-04T15:32:10-06:00`, or `…Z` when the offset is zero.
+/// @param dateTime A valid date-time; its offset from UTC is written, its milliseconds aren't.
+/// @returns The TOML text. No side effects.
+QString tomlOffsetDateTime(const QDateTime& dateTime);
 
 /// Writes a TOML local date, e.g. `2026-11-03`.
 /// @param date A valid date.

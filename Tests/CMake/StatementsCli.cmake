@@ -61,9 +61,9 @@ expect_match("new-proof --json" "${out}" "^{\"id\": \"${theorem}\\.b\", \"path\"
 run_loom(0 out edit-proof "${theorem}.a" --level sketch)
 expect_match("edit-proof" "${out}" "^${theorem}\\.a: changed level\\.\n$")
 run_loom(0 out edit-proof "${theorem}.a" --level sketch --json)
-expect_match("edit-proof, no change" "${out}" "^{\"id\": \"${theorem}\\.a\", \"changed\": \\[\\]}\n$")
+expect_match("edit-proof, no change" "${out}" "^{\"id\": \"${theorem}\\.a\", \"changed\": \\[\\], \"outdated_checks\": \\[\\]}\n$")
 run_loom_in("${WORK}" 0 out edit-statement "${theorem}" --title "Decay, sharp" --verified --json --project "${PROJECT}")
-expect_match("edit-statement --json" "${out}" "^{\"id\": \"${theorem}\", \"changed\": \\[\"title\", \"verified\"\\]}\n$")
+expect_match("edit-statement --json" "${out}" "^{\"id\": \"${theorem}\", \"changed\": \\[\"title\", \"verified\"\\], \"outdated_checks\": \\[\\]}\n$")
 
 # 1: refused by a rule, with the JSON error on stdout; nothing written.
 run_loom(1 out new-statement --kind lemma --title "X" --body "X" --tag no-such-tag)
