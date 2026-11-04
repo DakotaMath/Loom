@@ -189,20 +189,49 @@ TEST_CASE("BibTeX: escaping &, % and # outside math", "[bib]")
 TEST_CASE("BibTeX: a value with unbalanced braces skips its entry", "[bib]")
 {
     CHECK(loom::bracesBalanced("The {Navier--Stokes} equations"));
-    CHECK(loom::bracesBalanced("A \\{ literal brace"));
     CHECK_FALSE(loom::bracesBalanced("Open {brace"));
     CHECK_FALSE(loom::bracesBalanced("Close} {first"));
+    // A6: BibTeX counts every brace, `\{` and `\}` too, so a lone `\{` would break refs.bib.
+    CHECK_FALSE(loom::bracesBalanced("A \\{ literal brace"));
+    CHECK_FALSE(loom::bracesBalanced("On the set \\{x > 0"));
+    CHECK(loom::bracesBalanced("The set \\{x > 0\\}"));
 
     const loom::Paper broken = paperOf("Smith24", "article", {{"journal", "\"J. {Ex.\""}, {"year", "2024"}});
     const loom::BibEntry entry = loom::bibEntry(broken);
     CHECK(entry.text.isEmpty());
     CHECK(entry.error == "Smith24's `journal` has unbalanced braces, so its BibTeX entry was left out of refs.bib.");
 
-    const loom::Bibliography bib = loom::formatBibliography({broken, paperOf("Jones20", "article", {{"year", "2020"}})});
+    const loom::Bibliography bib = loom::formatBibliography(
+        {{"Papers/Smith24/paper.toml", broken}, {"Papers/Jones20/paper.toml", paperOf("Jones20", "article", {{"year", "2020"}})}});
     CHECK(bib.text.startsWith("@article{Jones20,"));
     REQUIRE(bib.problems.size() == 1);
     CHECK(bib.problems[0].severity == loom::Severity::Error);
     CHECK(bib.problems[0].file == "Papers/Smith24/paper.toml");
+}
+
+TEST_CASE("BibTeX: problems are filed under the paper's own paper.toml", "[bib]")
+{
+    // A folder that disagrees with its key (`paper-key-mismatch`) still names the file that is there.
+    const loom::Paper broken = paperOf("Smith24", "article", {{"journal", "\"J. {Ex.\""}, {"year", "2024"}});
+    const loom::Bibliography bib = loom::formatBibliography({{"Papers/Smith2024/paper.toml", broken}});
+    REQUIRE(bib.problems.size() == 1);
+    CHECK(bib.problems[0].file == "Papers/Smith2024/paper.toml");
+}
+
+TEST_CASE("BibTeX: a name whose first is empty is its surname in braces (A5)", "[bib]")
+{
+    // Without the braces, BibTeX reads `Garcia Lopez` as first name Garcia, surname Lopez.
+    const loom::Paper paper = paperOf("GarciaLopezSmith24", "article", {{"year", "2024"}}, false,
+        "authors = " + f("[{ last = \"Garcia Lopez\", first = \"\" }, { last = \"Smith\", first = \"Alice\" }]"));
+    CHECK(entryOf(paper).contains("  author = {{Garcia Lopez} and Smith, Alice},\n"));
+}
+
+TEST_CASE("BibTeX: a % after a LaTeX line break \\\\ is escaped", "[bib]")
+{
+    // An odd run of backslashes escapes the character after it; an even run is line breaks.
+    CHECK(loom::escapeBibValue("A\\\\% B") == "A\\\\\\% B");
+    CHECK(loom::escapeBibValue("A\\\\\\% B") == "A\\\\\\% B");
+    CHECK(loom::escapeBibValue("Line\\\\& more") == "Line\\\\\\& more");
 }
 
 TEST_CASE("BibTeX: entries in key order, and a warning naming each unverified field used", "[bib]")
@@ -216,7 +245,9 @@ TEST_CASE("BibTeX: entries in key order, and a warning naming each unverified fi
     const loom::Paper jones = paperOf("Jones20", "article", {{"journal", "\"J\""}, {"year", "2020"}});
     const loom::Paper adams = paperOf("Adams19", "article", {{"journal", "\"J\""}, {"year", "2019"}});
 
-    const loom::Bibliography bib = loom::formatBibliography({smith, jones, adams});
+    const loom::Bibliography bib = loom::formatBibliography({{"Papers/SmithJones24/paper.toml", smith},
+                                                             {"Papers/Jones20/paper.toml", jones},
+                                                             {"Papers/Adams19/paper.toml", adams}});
     const QString written = QString::fromUtf8(bib.text);
     CHECK(written.indexOf("@article{Adams19,") == 0);
     CHECK(written.indexOf("}\n\n@article{Jones20,") > 0);

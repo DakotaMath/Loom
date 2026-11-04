@@ -188,9 +188,9 @@ ProjectTomlReading readProjectToml(const QByteArray& bytes, const QString& root)
         config.idea = *idea;
 
     if (const toml::node* node = table.get("created")) {
-        if (const toml::value<toml::date>* value = node->as_date()) {
-            const toml::date date = value->get();
-            config.created = QDate(date.year, date.month, date.day);
+        if (node->as_date()) {
+            // A date QDate can't hold (the year 0) is reported, not dropped without a word.
+            config.created = checker.date(QStringLiteral("created"), *node);
         } else if (!checker.reportEmpty(QStringLiteral("created"), *node, project, Need::Required)) {
             checker.wrongType(QStringLiteral("created"), QStringLiteral("a date"), *node);
         }

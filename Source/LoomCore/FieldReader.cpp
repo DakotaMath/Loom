@@ -115,22 +115,14 @@ QDate FieldReader::date(const toml::table& table, const char* key, bool required
     lines.fields.insert(field, checker.line(*node));
     if (checker.reportEmpty(field, *node, thing, required ? Need::Required : Need::Naming))
         return {};
-    const toml::value<toml::date>* value = node->as_date();
-    if (!value) {
+    if (!node->as_date()) {
         checker.wrongType(field, QStringLiteral("a date"), *node);
         lost = true;
         return {};
     }
-    // toml++ reads years 0000 to 9999, and QDate has no year 0. Such a date would otherwise be
-    // dropped without a word, and lost on the next rewrite.
-    const toml::date date = value->get();
-    const QDate out(date.year, date.month, date.day);
-    if (!out.isValid()) {
-        const QString text = QString::asprintf("%04d-%02d-%02d", int(date.year), int(date.month), int(date.day));
-        checker.add("bad-value", checker.line(*node),
-            QStringLiteral("`%1` can't be `%2`; it must be one of the dates from 0001-01-01 on.").arg(field, text));
-        lost = true;
-    }
+    // A date QDate can't hold (the year 0) is reported, and the file isn't rewritten without it.
+    const QDate out = checker.date(field, *node);
+    lost = lost || !out.isValid();
     return out;
 }
 

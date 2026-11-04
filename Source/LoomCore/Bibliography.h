@@ -29,7 +29,8 @@ struct BibEntry {
 /// Writes one paper's entry (Specs/m1-core.md, "The bibliography").
 /// Rules: the entry type and fields come from the work's type and the cited version's kind, in
 /// the spec's order, two-space indented, `field = {value},`, and only when they have a value.
-/// Authors and editors are `Last, First` joined by ` and `. A published version adds the newest
+/// Authors and editors are `Last, First` joined by ` and `, a name whose `first` is empty its
+/// surname in braces, `{Garcia Lopez}` (A5). A published version adds the newest
 /// arXiv version's identifier without its version as `eprint`, with `archiveprefix`,
 /// `primaryclass` and `note = {arXiv:…}`; an arXiv-only paper is `@misc` with the identifier
 /// with its version. In values, `&`, `%` and `#` that aren't already escaped and aren't inside
@@ -46,17 +47,26 @@ struct Bibliography {
     std::vector<Problem> problems;
 };
 
+/// A paper for the bibliography, with the file it was read from.
+struct BibSource {
+    /// Its project-relative `paper.toml`, which its problems name. Not built from the key: a
+    /// folder may disagree with its key (`paper-key-mismatch`).
+    QString path;
+    Paper paper;
+};
+
 /// Writes the bibliography of a project's papers.
 /// @param papers The papers, each read without losing a field; in any order.
 /// @returns The text and its problems, sorted with sortProblems(). No side effects.
-Bibliography formatBibliography(const std::vector<Paper>& papers);
+Bibliography formatBibliography(const std::vector<BibSource>& papers);
 
 /// Escapes a BibTeX value: `&`, `%` and `#` that aren't already escaped and aren't inside `$…$`
-/// get a `\`. No side effects.
+/// get a `\`. A character is already escaped when an odd number of backslashes comes before it;
+/// after an even number (`\\`, a LaTeX line break) it isn't. No side effects.
 QString escapeBibValue(const QString& value);
 
-/// Whether a value's braces are balanced: no `}` before its `{`, and none left open; `\{` and
-/// `\}` don't count. No side effects.
+/// Whether a value's braces are balanced: no `}` before its `{`, and none left open. Every brace
+/// counts, `\{` and `\}` too, as BibTeX counts them (A6). No side effects.
 bool bracesBalanced(const QString& value);
 
 } // namespace loom

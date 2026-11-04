@@ -277,7 +277,9 @@ struct ContentsChecker {
     /// Checks each paper's folder, keys, tags and sessions.
     void papers()
     {
-        // Every key and old key, to the papers using it, for `paper-key-duplicate`.
+        // Every key and old key, case-folded, to the papers using it, for `paper-key-duplicate`:
+        // keys compare ignoring case (A3), since a key is a folder name and Windows folder names
+        // ignore case.
         QHash<QString, QString> folderOfName;
         std::vector<KeyedPaper> keyed;
         for (const PaperFile& file : contents.papers) {
@@ -303,26 +305,31 @@ struct ContentsChecker {
                 names.emplace_back(p.aliases[i], r.lines.of(QStringLiteral("aliases"), i));
             QSet<QString> own;
             for (const auto& [name, line] : names) {
-                if (own.contains(name))
+                const QString folded = name.toCaseFolded();
+                if (own.contains(folded))
                     continue; // A repeat within the paper, reported with the file.
-                own.insert(name);
-                if (folderOfName.contains(name))
+                own.insert(folded);
+                if (folderOfName.contains(folded))
                     add("paper-key-duplicate", file.path, line,
                         QStringLiteral("`%1` is the key or an old key of more than one paper.").arg(name));
                 else
-                    folderOfName.insert(name, file.folder);
+                    folderOfName.insert(folded, file.folder);
             }
 
             if (!p.key.isEmpty()) {
+                std::vector<KeyedPaper> others;
+                for (const KeyedPaper& other : keyed) {
+                    if (other.paper != &p)
+                        others.push_back(other);
+                }
                 const KeyBase base = baseKey(p);
                 if (base.key.isEmpty()) {
-                    add("paper-key-rule", file.path, keyLine, base.problem, Severity::Warning);
-                } else if (!keyFitsBase(p.key, base.key)) {
-                    std::vector<KeyedPaper> others;
-                    for (const KeyedPaper& other : keyed) {
-                        if (other.paper != &p)
-                            others.push_back(other);
-                    }
+                    // With no authors or editors, `authors-missing` already says so (or the list
+                    // couldn't be read, which is reported too). Without a year or Latin letters,
+                    // the key rule's own message (Specs/m1-core.md, "The key rule", steps 1 and 3).
+                    if (!p.keyNames().empty())
+                        add("paper-key-rule", file.path, keyLine, base.problem, Severity::Warning);
+                } else if (!keyFollowsRule(p.key, base.key, others)) {
                     const KeyAssignment expected = assignKey(p, others);
                     add("paper-key-rule", file.path, keyLine,
                         QStringLiteral("By the key rule this paper's key is `%1`, not `%2`. Run `loom rekey %2`.")
@@ -511,11 +518,15 @@ void loadPapers(const QString& root, ContentsLoading& loading)
         }
         const QString holds = QStringLiteral("paper.toml, Statements/, notes.md, Sessions/ and local/");
         PaperFile paper{join(folderPath, QStringLiteral("paper.toml")), key, {}, {}};
+        // Whether paper.toml is there, and whether Loom read it: one refused (`bad-path`) is
+        // there, so it isn't also missing.
         bool hasPaper = false;
+        bool sawPaper = false;
         for (const QFileInfo& entry : entriesOf(folder.filePath())) {
             const QString name = entry.fileName();
             const QString path = join(folderPath, name);
             if (name == u"paper.toml" && entry.isFile()) {
+                sawPaper = true;
                 if (const std::optional<QByteArray> bytes = readFile(root, path, loading)) {
                     paper.reading = readPaper(*bytes, path);
                     hasPaper = true;
@@ -545,7 +556,7 @@ void loadPapers(const QString& root, ContentsLoading& loading)
         }
         if (hasPaper)
             contents.papers.push_back(std::move(paper));
-        else
+        else if (!sawPaper)
             contents.listingProblems.push_back({Severity::Error, QStringLiteral("missing-field"), folderPath, 1,
                 QStringLiteral("`paper.toml` is missing; every paper folder needs one.")});
     }

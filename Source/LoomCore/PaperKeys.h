@@ -44,8 +44,10 @@ struct KeyBase {
 /// @returns The key, or why it can't be made. No side effects.
 KeyBase baseKey(const Paper& paper);
 
-/// Whether `key` follows the rule for a paper whose base key is `base`: it is `base`, or `base`
-/// and one lowercase letter (a shared key, which never changes once lettered). No side effects.
+/// Whether `key` has the shape the rule allows a paper whose base key is `base`: it is `base`,
+/// or `base` and one lowercase letter (a shared key, which never changes once lettered). Only
+/// the shape, the paper alone: keyFollowsRule() also looks at the other papers (step 4).
+/// No side effects.
 bool keyFitsBase(const QString& key, const QString& base);
 
 /// Whether paper `a` comes before paper `b` in posting order, which letters shared keys the
@@ -62,6 +64,16 @@ struct KeyedPaper {
     const Paper* paper = nullptr;
 };
 
+/// Whether a paper's `key` follows the key rule among the project's papers (Specs/m1-core.md,
+/// "The key rule", steps 1–4).
+/// Rule: it fits its base (keyFitsBase()); and if it is the bare base, no other paper's key or
+/// old key is the base and a letter, compared ignoring case (A3), since once a base is shared
+/// every paper with it carries a letter (step 4).
+/// @param base   The paper's base key, from baseKey().
+/// @param others Every other paper of the project (not the paper itself).
+/// @returns Whether it follows the rule. No side effects.
+bool keyFollowsRule(const QString& key, const QString& base, const std::vector<KeyedPaper>& others);
+
 /// The key a paper gets, and the other papers that must be renamed for it.
 struct KeyAssignment {
     /// The paper's key; empty when it can't be made.
@@ -75,12 +87,14 @@ struct KeyAssignment {
 /// Gives a paper its key among the project's other papers (Specs/m1-core.md, "The key rule",
 /// step 4).
 /// Rule: the base key, if no other paper's key or old key is the base or the base with a letter.
-/// When another paper's key is exactly the base and no lettered key exists yet, both get letters
-/// in posting order (`a` for the earlier) and the other paper is renamed. Otherwise the paper
+/// When another paper's key is the base and no lettered key exists yet, both get letters in
+/// posting order (`a` for the earlier) and the other paper is renamed. Otherwise the paper
 /// takes the letter after the highest one already used with this base, as a key or an old key
 /// (so an existing lettered key never changes, whatever the dates); an unlettered paper with the
 /// same key is first renamed to the next letter. A key only an old key of another paper uses
-/// is never taken, since `\cite` of it still means that paper.
+/// is never taken, since `\cite` of it still means that paper. Keys and old keys are compared
+/// ignoring case (A3: a key is a folder name, and Windows folder names ignore case), and a paper
+/// renamed keeps its own spelling of the base (`MacDonald20` becomes `MacDonald20a`).
 /// @param paper  The paper to key (its own `key` and `aliases` are ignored).
 /// @param others Every other paper of the project.
 /// @returns The key and renames, or why there is no key. No side effects.

@@ -14,9 +14,12 @@
 
 #include "PaperFixture.h"
 #include "ProjectFixture.h"
+#include "TestSupport.h"
 
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
+#include <QTemporaryDir>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -98,6 +101,29 @@ QByteArray publishedVersion()
     const QByteArray text = smithJones24();
     const qsizetype start = text.indexOf("\n[[versions]]\nid = \"published\"");
     return text.mid(start, text.indexOf("\n[[reading]]") - start);
+}
+
+/// smithJones24() as another paper by Smith and Jones, published in 2024: keyed `key`, without
+/// old keys or a reading, posted on `posted` and titled `title`.
+QByteArray smithJonesAs(const QByteArray& key, const QByteArray& posted, const QByteArray& title)
+{
+    QByteArray text = smithJones24();
+    text = text.left(text.indexOf("\n[[reading]]")) + text.mid(text.indexOf("\n[[renumbering]]"));
+    text.replace("key = \"SmithJones24\"\naliases = [\"SmithJones23\"]", "key = \"" + key + "\"");
+    text.replace("posted = { value = 2023-01-15", "posted = { value = " + posted);
+    text.replace("Energy decay for a model parabolic system", title);
+    return text;
+}
+
+/// The problems of `project` with code `code`.
+std::vector<P> problemsWith(const ProjectFixture& project, const QString& code)
+{
+    std::vector<P> out;
+    for (const P& problem : problemsOf(project)) {
+        if (std::get<1>(problem) == code)
+            out.push_back(problem);
+    }
+    return out;
 }
 
 } // namespace
@@ -196,6 +222,67 @@ TEST_CASE("A paper whose key doesn't follow the rule is warned about", "[papers]
     CHECK(problemsOf(project) == expected);
 }
 
+TEST_CASE("An unlettered key beside a lettered one of its base is warned about, and rekey letters it", "[papers][contents]")
+{
+    // The key rule, step 4: once a base is shared, both papers carry letters. A folder made by
+    // hand, or restored, can leave one without.
+    const ProjectFixture project;
+    project.write("Papers/SmithJones24a/paper.toml", smithJonesAs("SmithJones24a", "2023-05-01", "An earlier paper"));
+    project.write("Papers/SmithJones24/paper.toml", smithJonesAs("SmithJones24", "2024-01-10", "A later paper"));
+    CHECK(problemsOf(project) == std::vector<P>{
+        {"Papers/SmithJones24/paper.toml", "paper-key-rule", 1,
+         "By the key rule this paper's key is `SmithJones24b`, not `SmithJones24`. Run `loom rekey SmithJones24`.", false}});
+
+    Options o;
+    const loom::PaperChange result = loom::rekeyPaper(project.root, "SmithJones24", o.options);
+    REQUIRE(result.change.outcome == loom::ChangeOutcome::Done);
+    CHECK(result.change.id == "SmithJones24b");
+    REQUIRE(result.renamed.size() == 1);
+    CHECK(result.renamed[0].from == "SmithJones24");
+    CHECK(result.renamed[0].to == "SmithJones24b");
+    CHECK(project.read("Papers/SmithJones24b/paper.toml").startsWith("key = \"SmithJones24b\"\naliases = [\"SmithJones24\"]\n"));
+    CHECK(problemsOf(project).empty());
+}
+
+TEST_CASE("Keys and old keys that differ only in case are duplicates (A3)", "[papers][contents]")
+{
+    const ProjectFixture project;
+    project.write("Papers/SmithJones24/paper.toml", smithJones24());
+    QByteArray other = smithJonesAs("SmithJones24b", "2024-01-10", "A later paper");
+    other.replace("key = \"SmithJones24b\"", "key = \"SmithJones24b\"\naliases = [\"smithjones23\"]");
+    project.write("Papers/SmithJones24b/paper.toml", other);
+    CHECK(problemsWith(project, "paper-key-duplicate") == std::vector<P>{
+        {"Papers/SmithJones24b/paper.toml", "paper-key-duplicate", 2,
+         "`smithjones23` is the key or an old key of more than one paper.", true}});
+}
+
+TEST_CASE("A paper with no authors gets authors-missing, not also paper-key-rule", "[papers][contents]")
+{
+    QByteArray text = smithJones24();
+    const QByteArray authors = "authors = { value = [{ last = \"Smith\", first = \"Alice\" }, { last = \"Jones\", first = \"Bob\" }]";
+    REQUIRE(text.contains(authors));
+    text.replace(authors, "authors = { value = []");
+    const ProjectFixture project;
+    writeSmithJones24(project);
+    project.write("Papers/SmithJones24/paper.toml", text);
+    CHECK(problemsOf(project) == std::vector<P>{
+        {"Papers/SmithJones24/paper.toml", "authors-missing", 14, "SmithJones24 has no authors.", true}});
+}
+
+TEST_CASE("A paper.toml Loom refuses to read is reported once, as bad-path", "[papers][contents]")
+{
+    const ProjectFixture project;
+    QTemporaryDir outside;
+    REQUIRE(outside.isValid());
+    loomtest::writeFile(outside.path() + "/paper.toml", smithJones24());
+    QDir().mkpath(project.root + "/Papers");
+    if (!loomtest::makeDirectoryLink(outside.path(), project.root + "/Papers/SmithJones24"))
+        SKIP("This system can make neither a symbolic link nor a junction.");
+    CHECK(problemsOf(project) == std::vector<P>{
+        {"Papers/SmithJones24/paper.toml", "bad-path", 1,
+         "`Papers/SmithJones24/paper.toml` must be a path inside the project, written with `/`, without `..`.", true}});
+}
+
 TEST_CASE("new-statement and new-stub never take a stub's tag", "[papers][edits]")
 {
     const ProjectFixture project;
@@ -252,9 +339,43 @@ TEST_CASE("new-paper writes the entry from a draft, computing its key", "[papers
     CHECK(result.change.id == "SmithJones24");
     CHECK(result.change.path == "Papers/SmithJones24/paper.toml");
     CHECK(result.renamed.empty());
+    // The draft's `verified` dates are Dakota's clicks, which new-paper doesn't make (S16).
     QByteArray expected = smithJones24();
     expected.replace("created = 2026-10-18", "created = 2026-11-04");
+    expected.replace("verified = 2026-11-03\n", "");
+    expected.replace("verified = 2026-11-03", "verified = false");
     CHECK(project.read("Papers/SmithJones24/paper.toml") == expected);
+}
+
+TEST_CASE("new-paper writes the draft's verified and checked dates as false, and says which (S16)", "[papers][edits]")
+{
+    // Setting `verified` or `checked` to a date is Dakota's click; `new-paper` isn't one.
+    const ProjectFixture project;
+    Options o;
+    QByteArray draft = without(smithJones24(), {"key = ", "cite = ", "created = "});
+    draft.replace("checked = false", "checked = 2026-11-01");
+    const loom::PaperChange result = loom::createPaper(project.root, draft, "draft.toml", o.options);
+    REQUIRE(result.change.outcome == loom::ChangeOutcome::Done);
+    const QByteArray written = project.read("Papers/SmithJones24/paper.toml");
+    CHECK_FALSE(written.contains("2026-11-03"));
+    CHECK_FALSE(written.contains("2026-11-01"));
+    CHECK(written.contains("\ncreated = 2026-11-04\n\n[work]\n"));
+    CHECK(written.contains("\nchecked = false\n"));
+    CHECK(result.unclicked == QStringList{"verified", "work.type", "work.title", "work.authors", "arxiv-v1.arxiv_id",
+                                          "arxiv-v1.arxiv_version", "arxiv-v1.posted", "arxiv-v1.primary_class",
+                                          "published.journal", "published.volume", "published.number", "published.pages",
+                                          "published.year", "published.doi", "published.mr", "renumbering.checked"});
+
+    // A draft that sets none says nothing.
+    const ProjectFixture other;
+    QByteArray plain = draft;
+    plain.replace("verified = 2026-11-03\n", "");
+    plain.replace("verified = 2026-11-03", "verified = false");
+    plain.replace("checked = 2026-11-01", "checked = false");
+    const loom::PaperChange quiet = loom::createPaper(other.root, plain, "draft.toml", o.options);
+    REQUIRE(quiet.change.outcome == loom::ChangeOutcome::Done);
+    CHECK(quiet.unclicked.isEmpty());
+    CHECK(other.read("Papers/SmithJones24/paper.toml") == written);
 }
 
 TEST_CASE("new-paper defaults cite to the newest arXiv version when there is no published one", "[papers][edits]")
@@ -362,6 +483,79 @@ TEST_CASE("new-paper never replaces a folder that is already there", "[papers][e
     CHECK(project.read("Papers/" + folder + "/paper.toml") == existing);
 }
 
+TEST_CASE("rekey refuses before renaming anything when a folder is in the way", "[papers][edits]")
+{
+    // A3, as for new-paper's `paper-exists`: a folder already where a rename goes, whatever the
+    // case of its name, is refused up front, so no paper is renamed and then put back.
+    const ProjectFixture project;
+    QByteArray later = smithJones24();
+    later.replace("aliases = [\"SmithJones23\"]\n", "");
+    later.replace("posted = { value = 2023-01-15", "posted = { value = 2024-01-10");
+    project.write("Papers/SmithJones24/paper.toml", later);
+    project.write("Papers/SmithJones24/Statements/7RT2.toml", stubToml("7RT2", "theorem", true));
+    const QByteArray earlier = preprint() + publishedVersion();
+    project.write("Papers/SmithJones23/paper.toml", earlier);
+    // The plan is SmithJones24 → SmithJones24b, then SmithJones23 → SmithJones24a.
+    QString folder;
+    SECTION("where the paper itself goes") { folder = "SmithJones24a"; }
+    SECTION("where the paper it letters goes, in another case") { folder = "smithjones24B"; }
+    project.write("Papers/" + folder + "/notes.md", "In the way.\n");
+    const QStringList files = loomtest::filesUnder(project.root + "/Papers");
+    Options o;
+
+    const loom::PaperChange result = loom::rekeyPaper(project.root, "SmithJones23", o.options);
+    CHECK(result.change.outcome == loom::ChangeOutcome::Refused);
+    CHECK(result.change.code == "paper-exists");
+    CHECK(result.change.message == "`Papers/" + folder + "/` already exists. Fix or remove what's there first; "
+                                   "`loom validate` shows its problems.");
+    CHECK(result.renamed.empty());
+    CHECK(loomtest::filesUnder(project.root + "/Papers") == files);
+    CHECK(project.read("Papers/SmithJones24/paper.toml") == later);
+    CHECK(project.read("Papers/SmithJones23/paper.toml") == earlier);
+}
+
+TEST_CASE("rekey renames the folder of a key that follows the rule to match the key", "[papers][edits]")
+{
+    const ProjectFixture project;
+    project.write("Papers/Smith/paper.toml", smithJones24());
+    Options o;
+    const loom::PaperChange result = loom::rekeyPaper(project.root, "SmithJones24", o.options);
+    REQUIRE(result.change.outcome == loom::ChangeOutcome::Done);
+    CHECK(result.change.id == "SmithJones24");
+    CHECK(loomtest::filesUnder(project.root + "/Papers") == QStringList{"SmithJones24/paper.toml"});
+}
+
+TEST_CASE("rekey refuses an entry it can't rewrite without losing a field", "[papers][edits]")
+{
+    const ProjectFixture project;
+    QByteArray text = preprint() + publishedVersion();
+    text.replace("relevance = 1", "relevance = 1\ncolour = \"red\"");
+    project.write("Papers/SmithJones23/paper.toml", text);
+    Options o;
+    const loom::PaperChange result = loom::rekeyPaper(project.root, "SmithJones23", o.options);
+    CHECK(result.change.outcome == loom::ChangeOutcome::Refused);
+    CHECK(result.change.code == "not-editable");
+    CHECK(result.renamed.empty());
+    CHECK(project.read("Papers/SmithJones23/paper.toml") == text);
+}
+
+TEST_CASE("rekey renames a paper whose key differs from the rule's only in case", "[papers][edits]")
+{
+    // Its own folder is where it goes, ignoring case; that's not something in the way. On
+    // Windows, where the two names are one folder, the rename changes only the name's case.
+    const ProjectFixture project;
+    QByteArray text = smithJones24();
+    text.replace("key = \"SmithJones24\"", "key = \"smithjones24\"");
+    project.write("Papers/smithjones24/paper.toml", text);
+    Options o;
+    const loom::PaperChange result = loom::rekeyPaper(project.root, "smithjones24", o.options);
+    REQUIRE(result.change.outcome == loom::ChangeOutcome::Done);
+    CHECK(result.change.id == "SmithJones24");
+    CHECK(loomtest::filesUnder(project.root + "/Papers") == QStringList{"SmithJones24/paper.toml"});
+    CHECK(project.read("Papers/SmithJones24/paper.toml").startsWith(
+        "key = \"SmithJones24\"\naliases = [\"SmithJones23\", \"smithjones24\"]\n"));
+}
+
 TEST_CASE("A rename that fails part way is undone, every rename before it too", "[papers][edits]")
 {
     // The key rule, step 4: letters go by posting order the first time. If the second rename
@@ -374,18 +568,36 @@ TEST_CASE("A rename that fails part way is undone, every rename before it too", 
     project.write("Papers/SmithJones24/Statements/7RT2.toml", stubToml("7RT2", "theorem", true));
     const QByteArray earlier = preprint() + publishedVersion();
     project.write("Papers/SmithJones23/paper.toml", earlier);
-    // The plan is SmithJones24 → SmithJones24b, then SmithJones23 → SmithJones24a; something is
-    // already where the second rename goes.
-    project.write("Papers/SmithJones24a/notes.md", "In the way.\n");
+    project.write("Papers/SmithJones23/local/arxiv-v1.pdf", "%PDF");
+    const QStringList files = loomtest::filesUnder(project.root + "/Papers");
     Options o;
 
+    // The plan is SmithJones24 → SmithJones24b, then SmithJones23 → SmithJones24a; the second
+    // fails. On Windows a folder holding an open file can't be renamed (a PDF open in a viewer);
+    // elsewhere a folder Loom can't write in makes its paper.toml rewrite fail.
+#ifdef Q_OS_WIN
+    QFile open(project.root + "/Papers/SmithJones23/local/arxiv-v1.pdf");
+    REQUIRE(open.open(QIODevice::ReadOnly));
+#else
+    const QString blocked = project.root + "/Papers/SmithJones23";
+    REQUIRE(QFile::setPermissions(blocked, QFile::ReadOwner | QFile::ExeOwner));
+    struct Restore {
+        QString path;
+        ~Restore() { QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner); }
+    } restore{blocked};
+#endif
+
     const loom::PaperChange result = loom::rekeyPaper(project.root, "SmithJones23", o.options);
+    if (result.change.outcome == loom::ChangeOutcome::Done)
+        SKIP("This system let Loom rename and write where the test meant it to fail (running as root?).");
     CHECK(result.change.outcome == loom::ChangeOutcome::CantWork);
     CHECK(result.change.code == "write-failed");
+    CHECK(result.change.message.endsWith("Loom undid the renames it had done, so the papers are as they were."));
     CHECK(result.renamed.empty());
-    CHECK(loomtest::filesUnder(project.root + "/Papers") ==
-          QStringList{"SmithJones23/paper.toml", "SmithJones24/Statements/7RT2.toml", "SmithJones24/paper.toml",
-                      "SmithJones24a/notes.md"});
+#ifdef Q_OS_WIN
+    open.close();
+#endif
+    CHECK(loomtest::filesUnder(project.root + "/Papers") == files);
     CHECK(project.read("Papers/SmithJones24/paper.toml") == later);
     CHECK(project.read("Papers/SmithJones23/paper.toml") == earlier);
 }
@@ -535,6 +747,27 @@ TEST_CASE("build-bib writes refs.bib, with its warnings", "[papers][edits]")
     const loom::BibliographyBuilt outside = loom::buildBibliography(project.root, "../refs.bib", o.options);
     CHECK(outside.change.outcome == loom::ChangeOutcome::CantWork);
     CHECK(outside.change.code == "bad-path");
+}
+
+TEST_CASE("build-bib files a skipped entry under the paper's own paper.toml", "[papers][edits]")
+{
+    // A folder that disagrees with its key (`paper-key-mismatch`): the problem names the file
+    // that is there, not `Papers/<key>/paper.toml`.
+    const ProjectFixture project;
+    QByteArray text = smithJones24();
+    text.replace("Journal of Example Analysis", "Journal of {Example Analysis");
+    project.write("Papers/SmithJones2024/paper.toml", text);
+    // And an entry Loom can't read at all.
+    project.write("Papers/Brown20/paper.toml", "key = \"Brown20\"\nhalf an edit\n");
+    Options o;
+    const loom::BibliographyBuilt built = loom::buildBibliography(project.root, {}, o.options);
+    REQUIRE(built.change.outcome == loom::ChangeOutcome::Done);
+    REQUIRE(built.problems.size() == 2);
+    CHECK(built.problems[0].code == "bib-entry-skipped");
+    CHECK(built.problems[0].file == "Papers/Brown20/paper.toml");
+    CHECK(built.problems[1].code == "bib-entry-skipped");
+    CHECK(built.problems[1].file == "Papers/SmithJones2024/paper.toml");
+    CHECK(built.problems[1].message == "SmithJones24's `journal` has unbalanced braces, so its BibTeX entry was left out of refs.bib.");
 }
 
 TEST_CASE("build-bib never writes over the project's own files", "[papers][edits]")

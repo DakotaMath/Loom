@@ -3,6 +3,12 @@
 Traps, dead ends and their fixes, in one folder per area (`qt`, `build`, `git`, `latex`, `windows`, …) so no folder grows without bound. Before adding one, check the area's list below for an existing page to extend. Template: [`_TEMPLATE.md`](_TEMPLATE.md).
 
 <!-- BEGIN GENERATED: do not edit below; run python Tools/update_indexes.py -->
+### bibtex
+
+| Page | Summary |
+| --- | --- |
+| [BibTeX splits a name without a comma, and counts every brace](bibtex/names-and-braces.md) | BibTeX reads a name with no comma as "First von Last", so `author = {Garcia Lopez}` becomes first name Garcia, surname Lopez; write such a name braced, `{Garcia Lopez}`. Its parser also counts every `{` and `}` in a value, `\{` and `\}` included, so a lone `\{` breaks the rest of the file. Loom's `build-bib` does both (Specs/m1-core.md, A5 and A6). |
+
 ### ci
 
 | Page | Summary |

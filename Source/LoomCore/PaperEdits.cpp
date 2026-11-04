@@ -34,14 +34,6 @@ std::vector<KeyedPaper> othersThan(const ProjectContents& contents, const QStrin
     return others;
 }
 
-/// The arXiv version number of a version: its `arxiv_version`, else the N of `arxiv-v<N>`.
-qint64 arxivNumber(const PaperVersion& version)
-{
-    if (const PaperField* field = version.field(u"arxiv_version"); field && std::holds_alternative<qint64>(field->value))
-        return std::get<qint64>(field->value);
-    return version.id.mid(7).toLongLong();
-}
-
 /// `cite`'s default (Specs/m1-core.md, "Papers": "`published` if there is a published version,
 /// else the newest arXiv version").
 QString defaultCite(const Paper& paper)
@@ -50,7 +42,7 @@ QString defaultCite(const Paper& paper)
         return QStringLiteral("published");
     const PaperVersion* newest = nullptr;
     for (const PaperVersion& v : paper.versions) {
-        if (v.kind == u"arxiv" && (!newest || arxivNumber(v) > arxivNumber(*newest)))
+        if (v.kind == u"arxiv" && (!newest || v.arxivNumber() > newest->arxivNumber()))
             newest = &v;
     }
     if (newest)
@@ -161,7 +153,8 @@ QString carryOut(const QString& root, const std::vector<Rename>& renames, std::v
         if (!fromPath || !toPath)
             return QStringLiteral("`%1` must be a path inside the project, written with `/`, without `..`.")
                 .arg(fromPath ? toRelative : fromRelative);
-        if (QFileInfo::exists(*toPath))
+        // A rename that only changes the case of the name finds itself there on Windows.
+        if (QFileInfo::exists(*toPath) && rename.from.compare(rename.to, Qt::CaseInsensitive) != 0)
             return QStringLiteral("Loom couldn't rename `%1` to `%2`: `%2` already exists.").arg(fromRelative, toRelative);
         if (!QDir().rename(*fromPath, *toPath))
             return QStringLiteral("Loom couldn't rename `%1` to `%2`. Is a file in it open in another program?")
@@ -229,6 +222,36 @@ std::optional<QString> entryInPapers(const QString& root, const QString& name)
     return std::nullopt;
 }
 
+/// The refusal for something already in `Papers/` where a paper would go (A3: never replaced).
+/// @param taken The entry's name as it is on disk. No side effects.
+ChangeResult paperExists(const QString& taken)
+{
+    return refused(QStringLiteral("paper-exists"),
+        QStringLiteral("`Papers/%1/` already exists. Fix or remove what's there first; `loom validate` shows its problems.").arg(taken));
+}
+
+/// Checks, before anything is renamed, that nothing is in `Papers/` where a rename goes, compared
+/// ignoring case (A3). A folder an earlier rename moves away doesn't count, nor the paper's own
+/// folder when only the case of its name changes. Otherwise the rename would fail part way,
+/// after the renames before it, which then have to be undone.
+/// @returns The refusal (`paper-exists`), or nothing if every target is free. Reads `Papers/`.
+std::optional<ChangeResult> renameTargetTaken(const QString& root, const std::vector<Rename>& renames)
+{
+    const QStringList entries = QDir(root + QStringLiteral("/Papers"))
+                                    .entryList(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot);
+    for (std::size_t i = 0; i < renames.size(); ++i) {
+        for (const QString& entry : entries) {
+            if (entry.compare(renames[i].to, Qt::CaseInsensitive) != 0)
+                continue;
+            const bool movedAway = std::any_of(renames.begin(), renames.begin() + std::ptrdiff_t(i) + 1,
+                                               [&](const Rename& earlier) { return earlier.from == entry; });
+            if (!movedAway)
+                return paperExists(entry);
+        }
+    }
+    return std::nullopt;
+}
+
 /// Whether `build-bib` must refuse to write to `path` (a project path): one of the project's own
 /// files, or a file in a folder Loom reads every file of. Those are `loom.toml`, the files
 /// `new-project` writes, the preamble files, the write lock, and anything in `Statements/`,
@@ -248,6 +271,47 @@ bool isProjectOwnFile(const ProjectConfig& config, const QString& path)
             return true;
     }
     return false;
+}
+
+/// Takes Dakota's clicks out of a draft (open spec question S16, its obvious reading): setting
+/// `verified` or `checked` to a date is his click (Specs/m1-core.md, "Papers", "Fields": "agents
+/// write `false`"), and `new-paper` isn't one, so each such date becomes `false`, and the
+/// top-level `verified`, which can't be `false`, is left out.
+/// @returns The fields changed, in file order (`verified`, `work.title`, `arxiv-v1.posted`,
+///          `renumbering.checked`). Side effects: changes `paper`.
+QStringList withoutClicks(Paper& paper)
+{
+    QStringList changed;
+    if (paper.verified.isValid()) {
+        paper.verified = QDate();
+        changed << QStringLiteral("verified");
+    }
+    const auto unclick = [&](std::optional<PaperField>& field, const QString& name) {
+        if (field && field->verified.isValid()) {
+            field->verified = QDate();
+            changed << name;
+        }
+    };
+    unclick(paper.work.type, QStringLiteral("work.type"));
+    unclick(paper.work.title, QStringLiteral("work.title"));
+    unclick(paper.work.authors, QStringLiteral("work.authors"));
+    unclick(paper.work.editors, QStringLiteral("work.editors"));
+    for (PaperVersion& version : paper.versions) {
+        for (NamedField& field : version.fields) {
+            if (field.field.verified.isValid()) {
+                field.field.verified = QDate();
+                changed << version.id + u'.' + field.name;
+            }
+        }
+    }
+    for (Renumbering& renumbering : paper.renumberings) {
+        if (renumbering.checked.isValid()) {
+            renumbering.checked = QDate();
+            if (!changed.contains(QStringLiteral("renumbering.checked")))
+                changed << QStringLiteral("renumbering.checked");
+        }
+    }
+    return changed;
 }
 
 /// Plans the renames a key assignment needs, applying them to `model`.
@@ -319,8 +383,7 @@ PaperChange createPaper(const QString& root, const QByteArray& draft, const QStr
     // under their `key`, so an entry that doesn't parse, or whose key disagrees with its folder,
     // or a folder differing only in case, would otherwise be written over.
     if (const std::optional<QString> taken = entryInPapers(session->project.root, paper.key)) {
-        result = refused(QStringLiteral("paper-exists"),
-            QStringLiteral("`Papers/%1/` already exists. Fix or remove what's there first; `loom validate` shows its problems.").arg(*taken));
+        result = paperExists(*taken);
         return out;
     }
     result.id = paper.key;
@@ -330,6 +393,11 @@ PaperChange createPaper(const QString& root, const QByteArray& draft, const QStr
     const std::optional<std::vector<Rename>> renames = planRenames(session->project.root, changed, assigned.renames, result);
     if (!renames)
         return out;
+    if (std::optional<ChangeResult> taken = renameTargetTaken(session->project.root, *renames)) {
+        result = std::move(*taken);
+        return out;
+    }
+    const QStringList unclicked = withoutClicks(paper);
     const QByteArray bytes = formatPaper(paper);
     PaperFile file{result.path, paper.key, readPaper(bytes, result.path), {}};
     changed.papers.push_back(std::move(file));
@@ -338,6 +406,7 @@ PaperChange createPaper(const QString& root, const QByteArray& draft, const QStr
     if (result.outcome == ChangeOutcome::Done) {
         for (const Rename& rename : *renames)
             out.renamed.push_back({rename.fromKey, rename.to});
+        out.unclicked = unclicked;
     }
     return out;
 }
@@ -416,14 +485,17 @@ PaperChange rekeyPaper(const QString& root, const QString& typed, const ChangeOp
     }
     result.id = paper.key;
     result.path = file->path;
-    if (keyFitsBase(paper.key, base.key) && paper.key == file->folder) {
+    const std::vector<KeyedPaper> others = othersThan(contents, file->folder);
+    const bool follows = keyFollowsRule(paper.key, base.key, others);
+    if (follows && paper.key == file->folder) {
         result.outcome = ChangeOutcome::Done;
         return out;
     }
 
-    // A key that fits the rule but disagrees with its folder is put back with its folder's name.
-    const KeyAssignment assigned = keyFitsBase(paper.key, base.key) ? KeyAssignment{paper.key, {}, {}}
-                                                                    : assignKey(paper, othersThan(contents, file->folder));
+    // A key that follows the rule but disagrees with its folder: the folder is renamed to match
+    // the key. Otherwise the key the rule gives, among the other papers (an unlettered key beside
+    // a lettered one of its base takes the next letter, step 4).
+    const KeyAssignment assigned = follows ? KeyAssignment{paper.key, {}, {}} : assignKey(paper, others);
     if (assigned.key.isEmpty()) {
         result = refused(QStringLiteral("paper-key-rule"), assigned.problem);
         return out;
@@ -436,6 +508,10 @@ PaperChange rekeyPaper(const QString& root, const QString& typed, const ChangeOp
     if (!own)
         return out;
     renames->push_back(*own);
+    if (std::optional<ChangeResult> taken = renameTargetTaken(session->project.root, *renames)) {
+        result = std::move(*taken);
+        return out;
+    }
 
     result.id = assigned.key;
     result.path = paperPath(assigned.key);
@@ -470,10 +546,10 @@ BibliographyBuilt buildBibliography(const QString& root, const QString& out, con
         return built;
     }
 
-    std::vector<Paper> papers;
+    std::vector<BibSource> papers;
     for (const PaperFile& file : session->contents.papers) {
         if (file.reading.parsed && !file.reading.document.key.isEmpty()) {
-            papers.push_back(file.reading.document);
+            papers.push_back({file.path, file.reading.document});
             continue;
         }
         built.problems.push_back({Severity::Error, QStringLiteral("bib-entry-skipped"), file.path, 1,

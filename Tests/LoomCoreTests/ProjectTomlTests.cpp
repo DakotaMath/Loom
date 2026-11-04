@@ -221,6 +221,13 @@ TEST_CASE("loom.toml problems: syntax and fields", "[loom.toml]")
               P{"wrong-type", 3, "`created` should be a date, not a date and time."});
     }
 
+    SECTION("a date Qt can't hold, the year 0")
+    {
+        // toml++ reads it, QDate has no year 0: it must be reported, not dropped without a word.
+        CHECK(only(project.read(withTopLevel("").replace("created = 2026-11-03", "created = 0000-11-03"))) ==
+              P{"bad-value", 3, "`created` can't be `0000-11-03`; it must be one of the dates from 0001-01-01 on."});
+    }
+
     SECTION("[tex] that isn't a table")
     {
         CHECK(only(project.read("format = 1\nname = \"Demo\"\ncreated = 2026-11-03\ntex = \"x\"\n")) ==
