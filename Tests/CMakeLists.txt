@@ -11,8 +11,15 @@ add_test(NAME loom.version-json COMMAND loom --version --json)
 set_tests_properties(loom.version-json PROPERTIES PASS_REGULAR_EXPRESSION "^\\{\"version\": \"0\\.1\\.0\"\\}[\r\n]*$")
 add_test(NAME loom.no-arguments-is-usage-error COMMAND loom)
 set_tests_properties(loom.no-arguments-is-usage-error PROPERTIES WILL_FAIL TRUE)
+# `loom new-project`: exit codes, output and the first commit (Tests/CMake/NewProjectCli.cmake).
+add_test(NAME loom.new-project
+    COMMAND "${CMAKE_COMMAND}"
+        "-DLOOM=$<TARGET_FILE:loom>"
+        "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/NewProjectCli"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/CMake/NewProjectCli.cmake")
+set_tests_properties(loom.new-project PROPERTIES PASS_REGULAR_EXPRESSION "new-project CLI: passed")
 if(WIN32)
-    set_tests_properties(loom.version loom.version-json loom.no-arguments-is-usage-error
+    set_tests_properties(loom.version loom.version-json loom.no-arguments-is-usage-error loom.new-project
         PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${LOOM_QT_BIN_DIR}")
 endif()
 

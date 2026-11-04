@@ -1,0 +1,6 @@
+# Written by Loom.
+* text=auto eol=lf
+*.pdf binary
+*.png binary
+*.h5 filter=lfs diff=lfs merge=lfs -text
+*.checks.toml merge=loom-checks
