@@ -1,6 +1,7 @@
 #include "LoomCore/ProjectToml.h"
 
 #include "LoomCore/ProjectFiles.h"
+#include "LoomCore/TomlFields.h"
 #include "LoomCore/TomlWriter.h"
 
 #include <QDir>
@@ -8,10 +9,6 @@
 #include <QRegularExpression>
 #include <QSet>
 
-#include <toml++/toml.hpp>
-
-#include <algorithm>
-#include <initializer_list>
 #include <optional>
 #include <string_view>
 
@@ -24,95 +21,14 @@ constexpr auto projectFieldList = u"format, name, idea, created, tex.preamble, t
 /// The fields of a tag, likewise.
 constexpr auto tagFieldList = u"id, kind, title";
 
-QString fromUtf8(std::string_view text)
+/// A FieldChecker for loom.toml, a plain TOML file: its lines are the TOML's lines.
+FieldChecker makeChecker()
 {
-    return QString::fromUtf8(text.data(), static_cast<qsizetype>(text.size()));
+    return FieldChecker{QStringLiteral("loom.toml"), 0, {}};
 }
-
-/// The line a value or table starts on; 1 if toml++ doesn't know (Specs/m1-core.md, "Validation":
-/// "the line of the offending value, else of its table header, else 1").
-int lineOf(const toml::source_region& region)
-{
-    return region.begin.line > 0 ? static_cast<int>(region.begin.line) : 1;
-}
-
-/// What a TOML value is, for the `wrong-type` message ("…, not {what it is}").
-QString describe(const toml::node& node)
-{
-    switch (node.type()) {
-    case toml::node_type::string:
-        return node.as_string()->get().empty() ? QStringLiteral("an empty string") : QStringLiteral("a string");
-    case toml::node_type::integer: return QStringLiteral("a whole number");
-    case toml::node_type::floating_point: return QStringLiteral("a decimal number");
-    case toml::node_type::boolean: return QStringLiteral("true or false");
-    case toml::node_type::date: return QStringLiteral("a date");
-    case toml::node_type::time: return QStringLiteral("a time");
-    case toml::node_type::date_time: return QStringLiteral("a date and time");
-    case toml::node_type::array: return QStringLiteral("a list");
-    case toml::node_type::table: return QStringLiteral("a table");
-    case toml::node_type::none: break;
-    }
-    return QStringLiteral("nothing");
-}
-
-/// Whether a string field may be absent or empty.
-enum class Need { Optional, Required, RequiredNonEmpty };
-
-/// Collects the problems found in `loom.toml`, with the spec's messages.
-struct Checker {
-    std::vector<Problem> problems;
-
-    void add(const char* code, int line, const QString& message)
-    {
-        problems.push_back({Severity::Error, QString::fromLatin1(code), QStringLiteral("loom.toml"), line, message});
-    }
-
-    void unknownFields(const toml::table& table, std::initializer_list<std::string_view> known,
-                       const QString& prefix, const QString& thing, QStringView fieldList)
-    {
-        for (auto&& [key, node] : table) {
-            if (std::find(known.begin(), known.end(), key.str()) != known.end())
-                continue;
-            add("unknown-field", lineOf(key.source()),
-                QStringLiteral("`%1%2` isn't a field of %3. Is it misspelt? The fields are: %4.")
-                    .arg(prefix, fromUtf8(key.str()), thing, fieldList));
-        }
-    }
-
-    void missingField(const QString& field, int line, const QString& thing)
-    {
-        add("missing-field", line, QStringLiteral("`%1` is missing; every %2 needs one.").arg(field, thing));
-    }
-
-    void wrongType(const QString& field, const QString& expected, const toml::node& node)
-    {
-        add("wrong-type", lineOf(node.source()),
-            QStringLiteral("`%1` should be %2, not %3.").arg(field, expected, describe(node)));
-    }
-
-    /// Reads a string field of `table`, reporting it if it is missing, not a string, or empty
-    /// when it mustn't be.
-    /// @returns The value, or nothing if absent or wrong.
-    std::optional<QString> stringField(const toml::table& table, std::string_view key, const QString& field,
-                                       int tableLine, const QString& thing, Need need)
-    {
-        const toml::node* node = table.get(key);
-        if (!node) {
-            if (need != Need::Optional)
-                missingField(field, tableLine, thing);
-            return std::nullopt;
-        }
-        const toml::value<std::string>* value = node->as_string();
-        if (!value || (need == Need::RequiredNonEmpty && value->get().empty())) {
-            wrongType(field, need == Need::RequiredNonEmpty ? QStringLiteral("a non-empty string") : QStringLiteral("a string"), *node);
-            return std::nullopt;
-        }
-        return fromUtf8(value->get());
-    }
-};
 
 /// Reads `tex.preamble`: a list of project paths to existing `.tex` files.
-void readPreamble(Checker& checker, const toml::table& root, const QString& projectRoot, ProjectConfig& config)
+void readPreamble(FieldChecker& checker, const toml::table& root, const QString& projectRoot, ProjectConfig& config)
 {
     const toml::node* texNode = root.get("tex");
     if (!texNode) {
@@ -141,7 +57,7 @@ void readPreamble(Checker& checker, const toml::table& root, const QString& proj
         const toml::value<std::string>* value = entry.as_string();
         if (!value) {
             checker.add("wrong-type", line,
-                QStringLiteral("`tex.preamble` should be a list of paths, not a list holding %1.").arg(describe(entry)));
+                QStringLiteral("`tex.preamble` should be a list of paths, not a list holding %1.").arg(describeToml(entry)));
             continue;
         }
         const QString path = fromUtf8(value->get());
@@ -170,7 +86,7 @@ void readPreamble(Checker& checker, const toml::table& root, const QString& proj
 }
 
 /// Reads `[[tags]]`: each tag's fields, the ID's syntax, and that no ID is declared twice.
-void readTags(Checker& checker, const toml::table& root, ProjectConfig& config)
+void readTags(FieldChecker& checker, const toml::table& root, ProjectConfig& config)
 {
     const toml::node* tagsNode = root.get("tags");
     if (!tagsNode)
@@ -188,7 +104,7 @@ void readTags(Checker& checker, const toml::table& root, ProjectConfig& config)
         const toml::table* tag = entry.as_table();
         if (!tag) {
             checker.add("wrong-type", lineOf(entry.source()),
-                QStringLiteral("`tags` should be a list of tables, not a list holding %1.").arg(describe(entry)));
+                QStringLiteral("`tags` should be a list of tables, not a list holding %1.").arg(describeToml(entry)));
             continue;
         }
         const int line = lineOf(tag->source());
@@ -226,7 +142,7 @@ void readTags(Checker& checker, const toml::table& root, ProjectConfig& config)
 ProjectTomlReading readProjectToml(const QByteArray& bytes, const QString& root)
 {
     ProjectTomlReading reading;
-    Checker checker;
+    FieldChecker checker = makeChecker();
 
     toml::table table;
     try {

@@ -18,8 +18,15 @@ add_test(NAME loom.new-project
         "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/NewProjectCli"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/CMake/NewProjectCli.cmake")
 set_tests_properties(loom.new-project PROPERTIES PASS_REGULAR_EXPRESSION "new-project CLI: passed")
+# The statement and proof subcommands (Tests/CMake/StatementsCli.cmake).
+add_test(NAME loom.statements
+    COMMAND "${CMAKE_COMMAND}"
+        "-DLOOM=$<TARGET_FILE:loom>"
+        "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/StatementsCli"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/CMake/StatementsCli.cmake")
+set_tests_properties(loom.statements PROPERTIES PASS_REGULAR_EXPRESSION "statements CLI: passed")
 if(WIN32)
-    set_tests_properties(loom.version loom.version-json loom.no-arguments-is-usage-error loom.new-project
+    set_tests_properties(loom.version loom.version-json loom.no-arguments-is-usage-error loom.new-project loom.statements
         PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${LOOM_QT_BIN_DIR}")
 endif()
 
