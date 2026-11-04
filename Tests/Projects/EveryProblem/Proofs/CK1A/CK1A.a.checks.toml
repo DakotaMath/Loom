@@ -1,0 +1,65 @@
+[[checks]]
+by = "robot"
+date = 2026-11-04T10:00:00-06:00
+fingerprint = "0123456789ab"
+verdict = "pass"
+
+[[checks]]
+by = "dakota"
+date = 2026-11-04T10:01:00-06:00
+fingerprint = "0123456789ab"
+verdict = "maybe"
+
+[[checks]]
+by = "dakota"
+date = 2026-11-04T10:02:00-06:00
+fingerprint = "0123456789ab"
+verdict = "needs-changes"
+
+[[checks]]
+by = "dakota"
+date = 2026-11-04T10:03:00-06:00
+fingerprint = "0123456789ab"
+verdict = "pass"
+changes = "Nothing, really."
+
+[[checks]]
+by = "agent:claude-opus-5-5"
+date = 2026-11-04T10:04:00-06:00
+fingerprint = "XYZ"
+verdict = "pass"
+record = "Records/2026-11/job-0001.md"
+
+[[checks]]
+by = "agent:claude-opus-5-5"
+date = 2026-11-04T10:05:00-06:00
+fingerprint = "0123456789ab"
+verdict = "pass"
+
+[[checks]]
+by = "agent:claude-opus-5-5"
+date = 2026-11-04T10:06:00-06:00
+fingerprint = "0123456789ab"
+verdict = "pass"
+record = "Records/2026-11/job-9999.md"
+
+[[checks]]
+by = "agent:claude-opus-5-5"
+date = 2026-11-04T09:00:00-06:00
+fingerprint = "0123456789ab"
+verdict = "pass"
+record = "Records/2026-11/job-0001.md"
+
+[[checks]]
+by = "agent:claude-opus-5-5"
+date = 2026-11-04T09:00:00-06:00
+fingerprint = "0123456789ab"
+verdict = "pass"
+record = "Records/2026-11/job-0001.md"
+
+[[checks]]
+by = "agent:claude-opus-5-5"
+date = 2026-11-04T11:00:00-06:00
+fingerprint = "0123456789ab"
+verdict = "pass"
+record = "../outside.md"

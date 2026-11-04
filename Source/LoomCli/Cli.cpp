@@ -76,6 +76,7 @@ QString usageText()
         "Usage:\n"
         "  loom --version [--json]\n"
         "  loom new-project <folder> --name <name> [--idea <text>] [--json]\n"
+        "  loom install-hooks\n"
         "  loom new-tag <tag> --kind equation|technique|other --title <title>\n"
         "  loom new-statement --kind <kind> --title <title> (--body <text> | --body-file <path>)\n"
         "                     [--tag <tag>]... [--stated-using <id>]... [--origin <origin>]\n"
@@ -102,6 +103,7 @@ QString usageText()
         "                     [--paper-premise <id>]...\n"
         "  loom rekey <key>\n"
         "  loom build-bib [--out <path>]\n"
+        "  loom validate [--staged]\n"
         "Every subcommand that works in a project takes --project <folder> and --json.");
 }
 

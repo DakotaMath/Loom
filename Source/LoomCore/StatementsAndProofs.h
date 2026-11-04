@@ -91,6 +91,8 @@ struct DocumentReading {
     bool lossless = false;
     /// Where each field is.
     FieldLines lines;
+    /// The file line the body starts on; 0 if there's no front matter, so no body.
+    int bodyLine = 0;
     /// The problems this file shows on its own: syntax, `unknown-field`, `missing-field`,
     /// `wrong-type`, `bad-value`, `id-syntax` and `id-mismatch` (or `proof-id-mismatch`),
     /// `alias-invalid`, `refuted-incomplete`, `premise-self`, `premise-duplicate`, `body-empty`.

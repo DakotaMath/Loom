@@ -1,6 +1,6 @@
 // Creating a project (Specs/m1-core.md, "The project folder"; Verification, "New project layout":
 // "writes exactly the files listed, with the listed contents; one commit; …; refuses a non-empty
-// folder; stops cleanly without git identity"). The hook and merge driver come with #9 and #6.
+// folder; stops cleanly without git identity"). The hook and merge driver are HooksTests.cpp's.
 
 #include "LoomCore/NewProject.h"
 #include "LoomCore/ProjectToml.h"
@@ -42,6 +42,8 @@ struct Workspace {
         request.idea = "Find the sharp decay rate.";
         request.created = QDate(2026, 11, 3);
         request.git = git;
+        // The first commit runs the pre-commit hook, which runs this build's `loom`.
+        request.loomProgram = QStringLiteral(LOOM_PROGRAM);
         return request;
     }
 

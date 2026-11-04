@@ -1,0 +1,84 @@
+paper-key-mismatch Papers/Brown20/paper.toml:1: error: The key is `Brown21` but the folder is `Brown20`; they must match.
+cite-unknown Papers/Garcia25/paper.toml:2: error: `cite` names `ed9`, which isn't one of this paper's versions.
+field-shape Papers/Garcia25/paper.toml:8: error: `work.title` must be `{ value = …, source = "…", verified = … }`.
+field-source Papers/Garcia25/paper.toml:9: error: `work.authors` has no source. Every field says where it came from.
+field-not-for-type Papers/Garcia25/paper.toml:19: error: `published.school` isn't a field of an article's published version.
+pdf-path Papers/Garcia25/paper.toml:20: error: `../garcia.pdf` must be inside this paper's `local/` folder.
+version-id Papers/Garcia25/paper.toml:23: error: `arxiv-2` isn't a valid version id for an arxiv version: use arxiv-v<N>.
+field-verified Papers/Garcia25/paper.toml:25: error: `arxiv-2.arxiv_id`'s `verified` must be a date or `false`.
+arxiv-version-mismatch Papers/Garcia25/paper.toml:35: error: Version `arxiv-v3` has `arxiv_version = 4`; they must agree.
+version-duplicate Papers/Garcia25/paper.toml:41: error: Two versions are called `arxiv-v3`.
+version-unknown Papers/Garcia25/paper.toml:50: error: `reading` names version `arxiv-v9`, which this paper doesn't have.
+paper-key-duplicate Papers/Jones22/paper.toml:2: error: `Brown21` is the key or an old key of more than one paper.
+authors-missing Papers/Nobody19/paper.toml:9: error: Nobody19 has no authors.
+stub-locator-missing Papers/SmithJones24/Statements/3WQ6.toml:4: error: Stub 3WQ6 was extracted from `published` but has no locator for it.
+stub-paper-premise Papers/SmithJones24/Statements/5TPP.toml:4: error: `K3MA` in `paper_premises` isn't a result of the same paper.
+stub-gist-empty Papers/SmithJones24/Statements/6GST.toml:3: error: Stub 6GST has no gist.
+version-unknown Papers/SmithJones24/Statements/8VRS.toml:10: error: `locators` names version `ed5`, which this paper doesn't have.
+proves-mismatch Proofs/1DDB/1DDB.a.tex:3: error: 1DDB.a says it proves K3MA, but it's filed under 1DDB.
+proof-of-stub Proofs/7RT2/7RT2.a.tex:3: error: 7RT2 is a result from SmithJones24; it's cited from the paper, not proved here.
+check-by Proofs/CK1A/CK1A.a.checks.toml:2: error: Check 1: `by` must be `dakota` or `agent:<model>`, not `robot`.
+check-verdict Proofs/CK1A/CK1A.a.checks.toml:11: error: Check 2: `maybe` isn't a verdict. Use pass, needs-changes or fail.
+check-changes-missing Proofs/CK1A/CK1A.a.checks.toml:13: error: Check 3 is Dakota's needs-changes but doesn't say what to change. Add `changes`.
+check-changes-unexpected Proofs/CK1A/CK1A.a.checks.toml:24: error: Check 4 has `changes`, but only a needs-changes check says what to change.
+check-fingerprint Proofs/CK1A/CK1A.a.checks.toml:29: error: Check 5: the fingerprint must be 12 characters from 0–9 and a–f.
+check-record-missing Proofs/CK1A/CK1A.a.checks.toml:33: error: Check 6 is by an agent and has no `record`: every agent check links its reasoning.
+check-order Proofs/CK1A/CK1A.a.checks.toml:48: error: Check 8 is dated before check 7. Checks are kept in date order.
+check-duplicate Proofs/CK1A/CK1A.a.checks.toml:53: error: Checks 8 and 9 are the same entry twice.
+bad-path Proofs/CK1A/CK1A.a.checks.toml:65: error: `../outside.md` must be a path inside the project, written with `/`, without `..`.
+check-changed Proofs/CK2A/CK2A.a.checks.toml:1: error: A check committed earlier (agent:claude-opus-5-5, 2026-11-04T10:00:00-06:00) was changed or removed. Checks are never edited; add a new one instead.
+proof-of-no-status Proofs/D3FN/D3FN.a.tex:3: error: D3FN is a definition; only lemmas, propositions, theorems, corollaries and conjectures have proofs.
+proof-id-mismatch Proofs/K3MA/K3MA.b.tex:2: error: The proof's id `K3MA.c` doesn't match its file name `K3MA.b`, or doesn't start with its folder's tag.
+checks-orphan Proofs/K3MA/K3MA.y.checks.toml:1: error: `Proofs/K3MA/K3MA.y.checks.toml` holds checks of K3MA.y, which doesn't exist.
+verbose-orphan Proofs/K3MA/K3MA.z.verbose.tex:1: error: `Proofs/K3MA/K3MA.z.verbose.tex` is the verbose version of K3MA.z, which doesn't exist.
+premise-cycle Proofs/PC1A/PC1A.a.tex:4: error: Premises go round in a circle: PC1A → PC1B → PC1A. A statement can't help prove itself.
+premise-duplicate Proofs/PD1P/PD1P.a.tex:4: error: K3MA is listed twice in the premises of PD1P.a.
+premise-no-status Proofs/PN1S/PN1S.a.tex:4: error: D3FN is a definition, so it can't be a premise. Definitions belong in the statement's `stated_using`.
+premise-self Proofs/PS1F/PS1F.a.tex:4: error: PS1F.a uses PS1F, the statement it proves, as a premise.
+ref-unknown Proofs/RN1S/RN1S.b.tex:4: error: `ZZZZ` in `premises` isn't a statement or paper stub in this project.
+proof-folder-unknown Proofs/ZZZY/ZZZY.a.tex:1: error: `Proofs/ZZZY/` is for proofs of ZZZY, but there is no statement ZZZY.
+id-mismatch Statements/1DMM.tex:2: error: The id is `1DDB` but the file is named `1DMM`; they must match.
+id-duplicate Statements/1DMM.tex:2: error: The tag `1DDB` is used by both Statements/1DDB.tex and Statements/1DMM.tex.
+id-syntax Statements/1DSX.tex:5: error: `D3FO` isn't a valid tag: four characters from 0–9 and A–Z without I, L, O and U. Did you mean `D3F0`?
+alias-invalid Statements/A1V0.tex:5: error: `has space` can't be an alias: it contains whitespace or one of {}[],".
+alias-duplicate Statements/A2SB.tex:5: error: `lem:shared` is an alias of both A2SA and A2SB.
+body-empty Statements/B0DY.tex:7: error: B0DY has no text below its front matter.
+unknown-field Statements/F1D0.tex:5: error: `colour` isn't a field of a statement. Is it misspelt? The fields are: id, kind, title, tags, stated_using, aliases, origin, superseded_by, refuted_by, refuted_on, created, verified.
+front-matter-missing Statements/M1SS.tex:1: error: The first line should be `+++`: Loom files start with front matter between two `+++` lines.
+missing-field Statements/MSNG.tex:1: error: `created` is missing; every statement needs one.
+not-utf8 Statements/N8T8.tex:3: error: This file isn't valid UTF-8 (the first bad byte is at offset 25). Save it as UTF-8.
+front-matter-unclosed Statements/NC10.tex:1: error: The front matter starting on line 1 is never closed by a `+++` line.
+ref-alias Statements/RA1S.tex:5: error: `def:old` is an old name of D3FN. Write `D3FN` here.
+refuted-incomplete Statements/RF1C.tex:5: error: RF1C has `refuted_by` but not `refuted_on`. Refuting a statement needs both: the proof and the date Dakota accepted it.
+refuted-unknown Statements/RF2N.tex:5: error: RF2N is refuted by `ZZZZ.a`, which isn't a proof in this project.
+refuted-no-status Statements/RF3N.tex:5: error: RF3N is a definition; only lemmas, propositions, theorems, corollaries and conjectures can be refuted.
+toml-syntax Statements/S1NX.tex:4: error: This isn't valid TOML: Error while parsing string: unescaped control characters other than TAB (U+0009) are explicitly prohibited.
+stated-using-self Statements/S5F1.tex:5: error: S5F1 can't be stated using itself.
+stated-using-cycle Statements/SC1A.tex:5: error: `stated_using` goes round in a circle: SC1A → SC1B → SC1A.
+superseded-invalid Statements/SP1N.tex:5: error: SP1N is superseded by ZZZY, which doesn't exist.
+tag-unknown Statements/TG1V.tex:5: error: `no-such-tag` isn't one of the project's tags. Add it with `loom new-tag`, or fix the spelling.
+wrong-type Statements/TYPE.tex:5: error: `tags` should be a list of tags, not a string.
+bad-value Statements/VA1E.tex:3: error: `kind` can't be `theorm`; it must be one of `definition`, `lemma`, `proposition`, `theorem`, `corollary`, `conjecture`, `question`, `remark`, `example`.
+stray-file Statements/notes.txt:1: error: `Statements/notes.txt` doesn't belong in Statements/: it holds only statements, each as `<tag>.tex`.
+preamble-missing loom.toml:9: error: The preamble file `TeX/missing.tex` listed in loom.toml doesn't exist.
+tag-duplicate loom.toml:17: error: The tag `model-system` is declared twice in loom.toml.
+tag-syntax loom.toml:22: error: `Bad_Tag` isn't a valid tag name: use lowercase letters, digits and single hyphens, like `energy-estimates`.
+unknown-top-level Junk.txt:1: warning: Loom doesn't know `Junk.txt` at the top of the project. Move it into a folder Loom knows, or remove it.
+paper-key-rule Papers/Brown20/paper.toml:1: warning: By the key rule this paper's key is `Brown20`, not `Brown21`. Run `loom rekey Brown21`.
+field-expected Papers/Garcia25/paper.toml:11: warning: Garcia25's published version has no `number`; articles usually have one.
+session-missing Papers/Garcia25/paper.toml:60: warning: Reading of 2026-11-04 links `Sessions/2026-11-04`, which doesn't exist.
+paper-key-rule Papers/Nobody19/paper.toml:1: warning: Can't make a key for this paper: it has no authors or editors.
+check-record-not-found Proofs/CK1A/CK1A.a.checks.toml:44: warning: Check 7 links `Records/2026-11/job-9999.md`, which doesn't exist.
+verbose-stale Proofs/K3MA/K3MA.a.verbose.tex:3: warning: The verbose version of K3MA.a was written from an older version of the proof.
+premise-false Proofs/PF1S/PF1S.a.tex:4: warning: PF1S.a uses RF4P, which is false.
+premise-superseded Proofs/PV1S/PV1S.a.tex:4: warning: PV1S.a uses SP2S, which is superseded by K3MA.
+ref-not-listed Proofs/RN1S/RN1S.a.tex:8: warning: The text refers to 1DDB (`\ref`) but `premises` doesn't list it.
+bom Statements/B0M0.tex:1: warning: This file starts with a byte-order mark. Loom will drop it the next time it saves the file.
+conjecture-proved Statements/CJ1P.tex:3: warning: Conjecture CJ1P is now proved. Change its kind to theorem (or lemma, …) when you're ready.
+deleted-since-commit Statements/DE1T.tex:1: warning: DE1T was in the last commit but its file is gone. Tags are permanent: supersede a statement, or mark a proof `failed`, instead of deleting it.
+ref-alias Statements/RB0D.tex:8: warning: `def:old` is an old name of D3FN. Write `D3FN` here.
+ref-dangling Statements/RB0D.tex:9: warning: `\ref{eq:nowhere}` points to nothing: it isn't a tag, an alias, or a `\label` in any body.
+refuted-but-proved Statements/RF4P.tex:5: warning: RF4P is marked false, but RF4P.a would prove it. One of them is wrong.
+ref-not-listed Statements/RN1S.tex:8: warning: The text refers to K3MA (`\ref`) but `stated_using` doesn't list it.
+ref-not-listed Statements/RN1S.tex:8: warning: The text refers to 7RT2 (`\paperref`) but `stated_using` doesn't list it.
+cite-alias Statements/RN1S.tex:8: warning: `\cite{SmithJones23}` uses an old key of SmithJones24. It still works; `SmithJones24` is its current key.

@@ -1,0 +1,9 @@
+id = "7RT2"
+kind = "theorem"
+gist = "A made-up result"
+extracted_from = "published"
+extracted_by = "agent:claude-opus-5-5"
+created = 2026-11-04
+
+[locators]
+published = { at = "Theorem 1.2", checked_against_pdf = 2026-11-04 }

@@ -4,7 +4,8 @@
 
 namespace loom {
 
-GitRun runGit(const GitTool& git, const QStringList& arguments, const QString& workingDir, int timeoutMs)
+GitRun runGit(const GitTool& git, const QStringList& arguments, const QString& workingDir, int timeoutMs,
+              const QByteArray& input)
 {
     QProcess process;
     process.setProgram(git.program);
@@ -16,6 +17,10 @@ GitRun runGit(const GitTool& git, const QStringList& arguments, const QString& w
     GitRun run;
     if (!process.waitForStarted())
         return run;
+    // QProcess buffers the input and writes it while waiting below, so a large input can't
+    // block against git's output filling its pipe.
+    if (!input.isEmpty())
+        process.write(input);
     process.closeWriteChannel();
     if (!process.waitForFinished(timeoutMs)) {
         process.kill();
@@ -24,7 +29,8 @@ GitRun runGit(const GitTool& git, const QStringList& arguments, const QString& w
     }
     run.started = process.exitStatus() == QProcess::NormalExit;
     run.exitCode = process.exitCode();
-    run.output = QString::fromUtf8(process.readAllStandardOutput());
+    run.outputBytes = process.readAllStandardOutput();
+    run.output = QString::fromUtf8(run.outputBytes);
     run.errors = QString::fromUtf8(process.readAllStandardError());
     return run;
 }

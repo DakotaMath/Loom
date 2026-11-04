@@ -1,0 +1,8 @@
+id = "3WQ6"
+kind = "lemma"
+gist = "Another made-up result"
+extracted_from = "published"
+extracted_by = "agent:claude-opus-5-5"
+created = 2026-11-04
+
+[locators]
