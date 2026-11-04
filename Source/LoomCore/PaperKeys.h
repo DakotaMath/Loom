@@ -100,4 +100,16 @@ struct KeyAssignment {
 /// @returns The key and renames, or why there is no key. No side effects.
 KeyAssignment assignKey(const Paper& paper, const std::vector<KeyedPaper>& others);
 
+/// The key the rule gives a paper that already has one: what `loom rekey` renames it to, and what
+/// the `paper-key-rule` warning names, so the two always agree (Specs/m1-core.md, "The key rule").
+/// Rule: its own key if it follows the rule (keyFollowsRule()). Else, if its key is the base and
+/// a letter compared ignoring case, and no other paper's key or old key is that lettered key,
+/// the base and the same letter: a lettered key never changes (step 4) and case doesn't make
+/// another key (A3), so only the spelling is fixed, by a case-only rename (A17). Otherwise
+/// assignKey().
+/// @param paper  The paper; its `key` is the one it has now.
+/// @param others Every other paper of the project.
+/// @returns The key and the other papers' renames, or why there is no key. No side effects.
+KeyAssignment ruleKey(const Paper& paper, const std::vector<KeyedPaper>& others);
+
 } // namespace loom

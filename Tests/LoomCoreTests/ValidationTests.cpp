@@ -1,6 +1,7 @@
 // `loom validate` (Specs/m1-core.md, "Validation"; Verification, "Worked example" and
 // "Validation messages": "A test project with one of every problem gives exactly the expected
-// list"). The JSON of the same list is checked through `loom` in Tests/CMake/ValidateCli.cmake.
+// list"). The JSON form of a problem list is checked through `loom`, on the worked example, in
+// Tests/CMake/ValidateCli.cmake; the every-problem list is checked here as text only.
 
 #include "LoomCore/Validation.h"
 
@@ -269,6 +270,33 @@ TEST_CASE("validate reports a git failure reading the last commit", "[validate]"
     CHECK(result.message.startsWith("Loom couldn't read the last commit to compare the checks with it"));
 }
 
+TEST_CASE("validate stops a git that doesn't finish, with git-timeout (A16)", "[validate][git]")
+{
+    // Every git command validate runs, reading the last commit or the staged files.
+    const auto [slowAt, staged] = GENERATE(table<const char*, bool>({
+        {"ls-tree", false},
+        {"cat-file", false},
+        {"cat-file", true},
+    }));
+    INFO(slowAt << (staged ? " --staged" : ""));
+    const Copy copy(QStringLiteral(LOOM_WORKED_EXAMPLE));
+    copy.commitAll();
+    loom::ValidationRequest request;
+    request.root = copy.root;
+    request.staged = staged;
+    request.git = copy.git;
+    request.git.program = QStringLiteral(LOOM_FAKE_GIT);
+    request.git.environment.insert("LOOM_FAKE_GIT_MODE", "slow-at");
+    request.git.environment.insert("LOOM_FAKE_GIT_SLOW", slowAt);
+    request.git.timeoutMs = 2000;
+    const loom::ValidationResult result = loom::validateProject(request);
+    CHECK(result.outcome == loom::ValidationOutcome::CantWork);
+    CHECK(result.code == "git-timeout");
+    const QString command = QString::fromUtf8(slowAt) == u"ls-tree" ? "git ls-tree -r -z HEAD" : "git cat-file --batch";
+    CHECK(result.message == "`" + command + "` didn't finish in time, so Loom stopped it. Git may be waiting for something, "
+                            "such as another git's lock or a slow network drive; try again.");
+}
+
 TEST_CASE("validate without --staged makes no temporary folder", "[validate]")
 {
     // validateProject() needs a temporary folder only for the staged copy. Point the temporary
@@ -292,7 +320,7 @@ TEST_CASE("validate without --staged makes no temporary folder", "[validate]")
     CHECK(changedBy(true)); // The way of watching works.
 }
 
-TEST_CASE("committed checks may move, but not change or go", "[validate]")
+TEST_CASE("new checks may sit between committed ones, which must not change or go", "[validate]")
 {
     // Specs/m1-core.md, "Checks", rule 1, and the edge case of a merge interleaving by date.
     const QString a = "[[checks]]\nby = \"agent:x\"\ndate = 2026-11-04T10:00:00-06:00\nfingerprint = \"0123456789ab\"\n"

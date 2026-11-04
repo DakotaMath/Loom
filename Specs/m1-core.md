@@ -9,7 +9,7 @@ tags: [m1, formats, validation, status, checks, ids, papers, cli, toolchain]
 > **Summary:** Everything `LoomCore` and the `loom` command do in M1, precisely enough to build without guessing: the folder `loom new-project` creates, `loom.toml`, the `+++` TOML front matter, statements, proofs, IDs, check histories and their fingerprints, the status rules with a worked example, paper entries, stubs, the key rule and the BibTeX it produces, every check `loom validate` makes with its message, every `loom` subcommand, and the toolchain (MSVC, CMake, Qt 6, toml++, Catch2) with the CI matrix. Departures from `Specs/loom.md` are listed in one place.
 
 **Last verified:** 2026-11-03 · commit e5b68aa
-**Status:** Approved by Dakota on 2026-11-03; amendments A1–A7 (from the M1 review) answered by Dakota on 2026-11-04; A8 onwards (readings the review's fixes applied) approved by merging their PR
+**Status:** Approved by Dakota on 2026-11-03; amendments A1–A7 (from the M1 review) and A18 (from the final review) answered by Dakota on 2026-11-04; the others from A8 on (readings the fixes applied) approved by merging their PR
 **Milestone:** M1
 
 ## Scope
@@ -33,7 +33,7 @@ The design is approved; these are the places this spec makes it more precise in 
 | D10 | Agents give `pass`, `needs-changes`, `fail`; Dakota gives `accept`, `reject` | Both give `pass`, `needs-changes`, `fail`. Dakota's `needs-changes` carries a `changes` message, which becomes a task (from M4) | Dakota's decision on the PR: one set of verdicts, and the changes he asks for go straight onto the task list |
 
 ## Amendments from the M1 review
-The M1 code review (`Reviews/M1/` on branch `m1/review`) found places where the spec was silent or the code needed a rule to be fixed against. Dakota answered A1–A7 on 2026-11-04, before the fixes. A8 onwards are the readings the fixes (PRs #21–#25 and batch 6) applied where the spec was still silent; Dakota approves them by merging the PR that adds them. Each is marked in the text where it applies.
+The M1 code review (`Reviews/M1/` on branch `m1/review`) found places where the spec was silent or the code needed a rule to be fixed against. Dakota answered A1–A7 on 2026-11-04, before the fixes, and A18 after the final review (`Reviews/M1/FINAL.md`). A8–A17 and A19–A23 are the readings the fixes (PRs #21–#25, batch 6 and the final fixes) applied where the spec was still silent, or answers that make the spec say what the code does (A19, A20); Dakota approves them by merging the PR that adds them. Each is marked in the text where it applies.
 
 | # | Question | Answer |
 | --- | --- | --- |
@@ -54,6 +54,12 @@ The M1 code review (`Reviews/M1/` on branch `m1/review`) found places where the 
 | A15 | The JSON every subcommand prints | As listed under JSON shapes (The `loom` command) |
 | A16 | Which proofs Dakota's `--outdate-checks` covers; whether `level = "failed"` is his click; what `new-paper` does with a draft's `verified` dates; a git command that hangs | Exactly the proofs he was shown; yes, when setting it, in `new-proof` and `edit-proof`; written as `false`, and it says so; stopped, code `git-timeout` (Statements; Proofs; Papers; The `loom` command) |
 | A17 | Do lookups by key, old keys and `\cite` follow A3? Which entries `build-bib` leaves out | Yes: commands find a paper in any case, a case-only rename keeps no old key, an old key equal to the key ignoring case is `alias-duplicate`, and `\cite` in another case is `cite-alias`; an entry is left out (`bib-entry-skipped`, error) for unbalanced braces, a value ending in an unpaired `\`, or a `paper.toml` with errors (Papers; Validation) |
+| A18 | Is a proof's `level` in its fingerprint? | Yes: a level change outdates the proof's checks; a checked proof's level changes only with `--outdate-checks` *(Dakota)* (Checks, the fingerprint; Proofs) |
+| A19 | S4: what "shaped like a tag" means for an alias | What the command line would read as a tag: four characters, all in the tag alphabet once lower case is raised and `O` is read as `0`, `I` and `L` as `1` (`thm1`, `eq12`); such an alias is `alias-invalid` (IDs) |
+| A20 | S5: does `new-project` check git before creating the folder? | Yes: steps 1 and 2 write nothing, and step 3 creates the folder (The project folder) |
+| A21 | Is a value of only whitespace empty? | Yes, for required and naming fields: `missing-field`, "is empty"; free text is unaffected (Front matter) |
+| A22 | Does a check whose `date` Loom can't read (missing, of the wrong type, or in the year 0) count? | No: it is reported, and it never counts, since it has no place in the date order (Checks, rules 2 and 5) |
+| A23 | Which form of `path` the JSON gives | Project-relative with `/`, as in files, for every subcommand, `build-bib` too; `new-project` gives the new folder's absolute path (The `loom` command) |
 
 ## Decisions this spec makes
 | Decision | Choice | Why |
@@ -71,12 +77,12 @@ The M1 code review (`Reviews/M1/` on branch `m1/review`) found places where the 
 A project is a folder with `loom.toml` at its top. Every `loom` command finds the project by looking for `loom.toml` in the current folder and then each parent, as git does, unless `--project <folder>` is given.
 
 **What `loom new-project <folder> --name <name> [--idea <text>]` does, in order:**
-1. Refuses if `<folder>` exists and isn't empty: *"`C:\Temp\Demo` isn't empty. Loom creates projects only in a new or empty folder."* Creates `<folder>` if it doesn't exist (its parent must).
-2. Checks, before writing anything, that `git` and `git lfs` run and that git knows the user's name and email. If not, it stops with one of: *"Loom needs git, and `git` didn't run. Install Git for Windows and try again."*, *"Loom needs Git LFS, and `git lfs` didn't run. Git for Windows includes it; reinstall Git with LFS ticked."*, *"Git doesn't know your name and email yet, so Loom can't make the first commit. Run `git config --global user.name \"…\"` and `git config --global user.email …`, then try again."* It also stops (code `hooks-path-outside`) if the user's global or system git config sets `core.hooksPath`, since both `git lfs install --local` and the commit guard would then write their hooks into that shared folder (A1). Its message is its own, since `install-hooks`' remedy needs a repository that doesn't exist yet (A10): *"Git runs hooks from `{folder}` (`core.hooksPath` in your global git config), so a new project's commit guard and Git LFS hooks would go there. Unset it with `git config --global --unset core.hooksPath`, then try again."*
-3. Writes the files below from the project kit (`Templates/project/`, compiled into `loom` as a Qt resource so `loom` is one self-contained program).
+1. Refuses if `<folder>` exists and isn't empty: *"`C:\Temp\Demo` isn't empty. Loom creates projects only in a new or empty folder."* If it doesn't exist, its parent must.
+2. Checks, before writing anything (the folder isn't created yet; A20), that `git` and `git lfs` run and that git knows the user's name and email. If not, it stops with one of: *"Loom needs git, and `git` didn't run. Install Git for Windows and try again."*, *"Loom needs Git LFS, and `git lfs` didn't run. Git for Windows includes it; reinstall Git with LFS ticked."*, *"Git doesn't know your name and email yet, so Loom can't make the first commit. Run `git config --global user.name \"…\"` and `git config --global user.email …`, then try again."* It also stops (code `hooks-path-outside`) if the user's global or system git config sets `core.hooksPath`, since both `git lfs install --local` and the commit guard would then write their hooks into that shared folder (A1). Its message is its own, since `install-hooks`' remedy needs a repository that doesn't exist yet (A10): *"Git runs hooks from `{folder}` (`core.hooksPath` in your global git config), so a new project's commit guard and Git LFS hooks would go there. Unset it with `git config --global --unset core.hooksPath`, then try again."*
+3. Creates `<folder>` if it doesn't exist, and writes the files below from the project kit (`Templates/project/`, compiled into `loom` as a Qt resource so `loom` is one self-contained program).
 4. Runs `git init -b main`, then `git lfs install --local` (hooks for this repo only; the user's global git config is never touched), then `loom install-hooks` (below).
 5. Stages everything and commits with the message `Create project <name>`, through the pre-commit hook like any commit.
-6. Prints the folder's path. If any step after 1 fails, it says which, and leaves what it made in place for the user to inspect (it never deletes files).
+6. Prints the folder's path. If any step after 2 fails, it says which, and leaves what it made in place for the user to inspect (it never deletes files).
 
 **Files it creates:**
 
@@ -97,8 +103,9 @@ No other folder is created. `Statements/`, `Proofs/`, `Papers/` and `.loom/` app
 
 Loom owns the files in this folder. Change them only with `loom` commands, or with plain edits
 that `loom validate` accepts. Run `loom validate` before every commit; the pre-commit hook runs it too.
-Never write a check by `dakota`, never set `refuted_on` or `checked_against_pdf`, and never mark a
-field verified: those are Dakota's clicks.
+Never write a check by `dakota`, never set `refuted_on` or `checked_against_pdf`, never mark a
+field verified, never mark a proof `failed`, and never outdate checks (`--outdate-checks`): those
+are Dakota's clicks.
 ```
 
 **`.gitignore`:**
@@ -177,7 +184,7 @@ Every statement, proof and verbose proof is a text file with TOML front matter, 
 - **The body is kept byte for byte.** When Loom changes front matter, it re-parses the file, changes the data and writes `+++`, the front matter in canonical form, `+++`, then the body bytes it read, untouched (apart from CRLF becoming LF, above). When Loom creates a file from a `--body` it adds a final newline if the text has none.
 - **Canonical form:** the fields in the order of this spec's tables, one per line as `key = value`; strings as basic strings (`"…"`, escaping `"`, `\` and control characters, so no string ever spans lines); arrays inline (`["7RT2", "9D3F"]`); dates as `2026-11-03`; optional fields left out when empty or absent. Comments in front matter are dropped on rewrite, since front matter is data: prose belongs in the body.
 - **Unknown fields are errors,** so a misspelt field is caught rather than ignored.
-- **Empty values are missing values** (A2). In every file Loom reads (front matter, `loom.toml`, `paper.toml`, stubs, check histories), a required field, or an optional field whose value names something (an ID, a tag, a key, a path, a date, a fingerprint), that is present but empty (`""`) is `missing-field`, worded "`{field}` is empty". An optional field with no value is left out, never written empty. Free-text optional fields (such as a version's `differences`), and fields the tables say may be empty (an author's `first`), are unaffected.
+- **Empty values are missing values** (A2). In every file Loom reads (front matter, `loom.toml`, `paper.toml`, stubs, check histories), a required field, or an optional field whose value names something (an ID, a tag, a key, a path, a date, a fingerprint), that is present but empty (`""`) is `missing-field`, worded "`{field}` is empty". A value of only whitespace (`"   "`) is empty too (A21). An optional field with no value is left out, never written empty. Free-text optional fields (such as a version's `differences`), and fields the tables say may be empty (an author's `first`), are unaffected.
   - **Wording** (A8): a required field says "`{field}` is empty; every {thing} needs one."; an optional one says "`{field}` is empty; give it a value or leave it out."
   - **Which optional fields name something** (A8): `origin`, `superseded_by`, `refuted_by`, every date, a version's `pdf`, a reading's `session`, a check's `record` and `note`, a draft's `key` and `cite`, and every bibliographic string value of a version (`doi`, `journal`, `primary_class`, …). Free text that may be empty: `idea`, `relevance_why`, `summary`, `differences`, a stub's `title`, an author's `first`, renumbering labels. An empty `gist` keeps its own code, `stub-gist-empty`; a check's `changes` keeps `wrong-type`, since the Checks table already requires it non-empty.
 - **Dates Loom can't hold** (A9): TOML allows the year 0 (`0000-01-01`), Qt's dates don't. Such a date, in any file, is `bad-value`: "`{field}` can't be `0000-01-01`; it must be one of the dates from 0001-01-01 on." Loom then won't rewrite the file, since the rewrite would drop the date.
@@ -271,7 +278,7 @@ created = 2026-11-05
 
 **Proof IDs** are `<tag>.<letters>`: `4KX7.a`, …, `4KX7.z`, then `4KX7.aa`, `4KX7.ab`, … (lowercase letters counting in bijective base 26). A new proof takes the letter after the highest one in its folder, so a deleted proof's letter isn't reused. Collisions between branches are handled like tags, at merge (M4).
 
-**Aliases** are a statement's or stub's old names: from an import (`lem:energy-decay`) or anything else it used to be called. An alias is 1–100 characters with no whitespace and none of `{}[],"`, isn't shaped like a tag, and is unique across every tag and alias in the project. Loom resolves an alias wherever a person types an ID (the picker, the command line), but **files must use tags**: an alias in front matter is an error that names the tag to write instead.
+**Aliases** are a statement's or stub's old names: from an import (`lem:energy-decay`) or anything else it used to be called. An alias is 1–100 characters with no whitespace and none of `{}[],"`, isn't shaped like a tag, and is unique across every tag and alias in the project. **Shaped like a tag** means the command line would read it as one (A19): four characters that are all in the alphabet once lower case is raised and `O` is read as `0`, `I` and `L` as `1`. So `thm1`, `eq12` and `4kx7` can't be aliases, while `thm:1` and `lem-2` can. Loom resolves an alias wherever a person types an ID (the picker, the command line), but **files must use tags**: an alias in front matter is an error that names the tag to write instead.
 
 **Paper keys** follow the key rule (Papers); a paper's old keys are its `aliases`, unique across every key and key alias.
 
@@ -320,7 +327,7 @@ as a separate lemma or start the induction at k = 1 and treat k = 0 by hand.
 2. **Date order.** Entries are in non-decreasing `date` order. Ties are allowed; then the later entry in the file is the newer.
 3. **Who.** Every agent check has a `record`. Every `needs-changes` by Dakota has `changes`.
 4. **Matching.** A check *matches* when its `fingerprint` equals the proof's current fingerprint. Checks that don't match stay in the history and count for nothing.
-5. **The counting checks.** The **counting agent check** is the newest matching check by an agent (any model). The **counting Dakota check** is the newest matching check by Dakota.
+5. **The counting checks.** The **counting agent check** is the newest matching check by an agent (any model). The **counting Dakota check** is the newest matching check by Dakota. A check without a `date` Loom can read (missing, of the wrong type, or in the year 0, A9) is an error and never counts (A22).
 6. **Checked.** A proof is **checked** when the counting agent check is `pass`, the counting Dakota check is `pass`, and Dakota's pass is newer than the agent's. (Dakota's pass confirms the agent's; if an agent checks again afterwards, Dakota passes it again.)
 7. **Fail.** When either counting check is `fail`, the proof **doesn't support** its statement: for status it is treated like a `failed` proof.
 
@@ -528,7 +535,7 @@ A stub is **cited** when its locator for `extracted_from` has `checked_against_p
 1. **Each surname** (`last`) becomes ASCII CamelCase: decompose it (Unicode NFKD) and drop the combining marks (`é` → `e`, `ő` → `o`); replace the letters that don't decompose (`ß` → `ss`, `æ` → `ae`, `Æ` → `Ae`, `ø` → `o`, `Ø` → `O`, `œ` → `oe`, `Œ` → `Oe`, `ł` → `l`, `Ł` → `L`, `đ`/`ð` → `d`, `Đ`/`Ð` → `D`, `þ` → `th`, `Þ` → `Th`, `ı` → `i`); split at spaces, hyphens and apostrophes; capitalise the first letter of each part and leave the rest as written; join; drop everything that isn't an ASCII letter. If nothing is left, the key can't be made: *"Can't make a key from the surname `…`: write it in Latin letters, as the paper prints it."*
 2. **One to three authors:** every CamelCase surname, in order. **Four or more:** the first CamelCase surname, then the first two letters of each other's CamelCase surname (one letter if the surname has only one).
 3. **The year:** the `year` of the `published` version if there is one; else the year of `posted` of the arXiv version with the lowest `arxiv_version`; else (talks, lecture notes, other) the year of `date`. Its last two digits are appended. With no year anywhere: *"Can't make a key for this paper: it has no year. Add a published year, an arXiv posting date, or a date."*
-4. **Shared keys:** when a new paper's key equals an existing paper's key (or alias), both get letters. Keys are compared **ignoring case** here and everywhere else (A3), since a key is a folder name and Windows folder names ignore case: `MacDonald20` and `Macdonald20` are the same key. The first time, the letters go by posting order (the earliest of the arXiv `posted` dates, else the published year; then title): `SmithJones24a`, `SmithJones24b`, and the existing paper is renamed (below). After that, a lettered key never changes: a later paper with the same base takes the next unused letter, whatever its date.
+4. **Shared keys:** when a new paper's key equals an existing paper's key (or alias), both get letters. Keys are compared **ignoring case** here and everywhere else (A3), since a key is a folder name and Windows folder names ignore case: `MacDonald20` and `Macdonald20` are the same key. The first time, the letters go by posting order (the earliest of the arXiv `posted` dates, else the published year; then title): `SmithJones24a`, `SmithJones24b`, and the existing paper is renamed (below). After that, a lettered key never changes: a later paper with the same base takes the next unused letter, whatever its date. A lettered key that differs from the base and its letter only in case (the surname `MacDonald` corrected to `Macdonald`) keeps its letter; `rekey` only fixes the spelling (`MacDonald24a` → `Macdonald24a`), and `paper-key-rule` names that key.
 5. **Renaming** (`loom rekey`, and when the year changes because a preprint was published in a later year): the folder is renamed, `key` changes, the old key is added to `aliases`, unless it differs from the new key only in case: then it is the same key (A3), so no old key is added and any old key equal to the new one is dropped (A17). Commands that take a key (`rekey`, `new-stub`) find the paper in any case, an exact match first (A17). Nothing else in the project names a paper by key except `\cite{…}` in bodies, which isn't rewritten (D9); old keys keep working through the alias, and validation warns that they could be updated.
 
 | Authors (last names) | Year source | Key |
@@ -638,7 +645,7 @@ Other types, cited version `published`:
 | `alias-duplicate` | error | `{alias}` is an alias of both {id} and {id} (or is also a tag). In `paper.toml` (A17): an old key that is the paper's own key, or another of its old keys, in another case. |
 | `ref-unknown` | error | `{ref}` in `{field}` isn't a statement or paper stub in this project. |
 | `ref-alias` | error in front matter, warning in a body | `{ref}` is an old name of {id}. Write `{id}` here. |
-| `ref-not-listed` | warning | The text refers to {id} (`\ref` or `\paperref`) but {premises / stated_using} doesn't list it. (A proof's refs to the statement it proves, and to statements without a status, such as definitions, don't count.) |
+| `ref-not-listed` | warning | The text refers to {id} (`\ref` or `\paperref`) but `{premises / stated_using}` doesn't list it. (A proof's refs to the statement it proves, and to statements without a status, such as definitions, don't count.) |
 | `ref-dangling` | warning | `\ref{{label}}` points to nothing: it isn't a tag, an alias, or a `\label` in any body. For `\paperref` (A12): `\paperref{{id}}` points to nothing: it isn't the tag or old name of a paper stub. |
 | `paperref-not-stub` | error | `\paperref{{ref}}` names {id}, a statement of this project, not a paper's result. Use `\ref{{id}}`. (A12) |
 | `cite-alias` | warning | `\cite{{old}}` uses an old key of {Key}. It still works; `{Key}` is its current key. For a key or old key in another case (A17): `\cite{{key}}` spells the key of {Key} in another case. BibTeX matches keys exactly, so write `{Key}`. (For an old key: "spells an old key of {Key} in another case", then the same.) |
@@ -735,7 +742,7 @@ Other types, cited version `published`:
 
 | Subcommand | Arguments | Does | Prints (text; `--json`) |
 | --- | --- | --- | --- |
-| `--version` | | | `loom 0.1.0`; `{"version": "0.1.0"}` |
+| `--version` | | A word after it is a usage error: *"`loom --version` takes no arguments."* | `loom 0.1.0`; `{"version": "0.1.0"}` |
 | `help` | `[subcommand]` | Usage, on stdout, exit 0 (A11). With a subcommand, only its usage lines and the common options; an unknown subcommand, or more than one word, is a usage error | Usage text; `{"usage": "…"}` |
 | `new-project` | `<folder> --name <name> [--idea <text>]` | Creates a project (above) | The path; `{"path": …}` |
 | `install-hooks` | | Pre-commit hook and merge driver (above) | What it did |
@@ -749,7 +756,7 @@ Other types, cited version `published`:
 | `refute` | `<id> --by <proof-id>` *(Dakota)* | Sets `refuted_by` and `refuted_on` (today). Refuses a proof of `<id>` itself (A12, code `refuted-self`): *{proof} is a proof of {id} itself, so it can't refute it. A statement is refuted by a proof of another statement, such as its negation.* | The new status |
 | `status` | `[<id>]` | Computes status | One line per statement (`ID  status  title`) and the counts by status; with an ID, the explanation sentence. JSON below |
 | `graph` | `--json` | | The graph (below) |
-| `new-paper` | `<draft.toml>` | Reads a draft `paper.toml` without `key` (or with a `key` that is checked against the rule), computes the key, creates `Papers/<Key>/paper.toml` in canonical form (`cite` defaulted if absent, `created` today), renaming a paper that now shares its key. Never replaces a file: if `Papers/<Key>/` already exists (compared ignoring case), whatever is in it, it refuses and writes nothing: *"`Papers/{Key}/` already exists. Fix or remove what's there first; `loom validate` shows its problems."* (A3, code `paper-exists`; `{Key}` is the folder as it is on disk, which may differ in case). Setting `verified` and `checked` dates is Dakota's click, so a draft's are written as `false` (a top-level `verified` is left out), and `new-paper` says so on stderr (A16): *"Set to false, since verifying is Dakota's click: {fields}."* | The key; `{"key", "path", "renamed": [{from, to}]}` |
+| `new-paper` | `<draft.toml>` | Reads a draft `paper.toml` without `key` (or with a `key` that is checked against the rule), computes the key, creates `Papers/<Key>/paper.toml` in canonical form (`cite` defaulted if absent, `created` today), renaming a paper that now shares its key. Never replaces a file: if `Papers/<Key>/` already exists (compared ignoring case), whatever is in it, it refuses and writes nothing: *"`Papers/{Key}/` already exists. Fix or remove what's there first; `loom validate` shows its problems."* (A3, code `paper-exists`; `{Key}` is the folder as it is on disk, which may differ in case). Setting `verified` and `checked` dates is Dakota's click, so a draft's are written as `false` (a top-level `verified` is left out), and `new-paper` says so on stderr (A16): *"Set to false, since verifying is Dakota's click: {fields}."*, and for a top-level `verified`, *"Left out `verified`, since verifying is Dakota's click."* | The key; `{"key", "path", "renamed": [{from, to}]}` |
 | `new-stub` | `<key> --kind <kind> --gist <text> --version <version-id> --at <locator> --by <dakota\|agent:model> [--title …] [--stated-using <id>]… [--paper-premise <id>]…` | Creates a stub with a new tag, its locator `checked_against_pdf = false` | The new tag |
 | `rekey` | `<key>` | Renames the paper to the key the rule gives (see the key rule) | `old → new`, or "already right" |
 | `build-bib` | `[--out <path>]` | Writes the bibliography. Refuses (exit 1, code `bib-out-project-file`, A10) an `--out` that is one of the project's own files or in a folder Loom keeps them in (`loom.toml`, `CLAUDE.md`, `.gitignore`, `.gitattributes`, the preambles, `.loom/write.lock`, anything in `Statements/`, `Proofs/`, `Papers/` or `.git/`; compared ignoring case): *"`{path}` is one of the project's own files, or in a folder Loom keeps them in, so Loom won't write the bibliography there. Give `--out` a path of its own, such as `TeX/refs.bib`."* | The path and any warnings |
@@ -790,7 +797,7 @@ Other types, cited version `published`:
                "line": 4, "message": "…"}]}
 ```
 
-**The other subcommands' JSON** (A15). Each prints one object on success; `index` and `counting_*_check` count checks from 0, as in `graph`.
+**The other subcommands' JSON** (A15). Each prints one object on success; `index` and `counting_*_check` count checks from 0, as in `graph`. A `path` inside the project is project-relative with `/`, as in files, `build-bib`'s too (A23); `new-project`'s is the new folder's absolute path.
 
 | Subcommand | JSON |
 | --- | --- |

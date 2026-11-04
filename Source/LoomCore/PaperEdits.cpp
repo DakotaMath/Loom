@@ -498,9 +498,10 @@ PaperChange rekeyPaper(const QString& root, const QString& typed, const ChangeOp
     }
 
     // A key that follows the rule but disagrees with its folder: the folder is renamed to match
-    // the key. Otherwise the key the rule gives, among the other papers (an unlettered key beside
-    // a lettered one of its base takes the next letter, step 4).
-    const KeyAssignment assigned = follows ? KeyAssignment{paper.key, {}, {}} : assignKey(paper, others);
+    // the key. Otherwise the key the rule gives, among the other papers, as the `paper-key-rule`
+    // warning names it: an unlettered key beside a lettered one of its base takes the next
+    // letter, and a lettered key in another case keeps its letter (step 4, A3).
+    const KeyAssignment assigned = ruleKey(paper, others);
     if (assigned.key.isEmpty()) {
         result = refused(QStringLiteral("paper-key-rule"), assigned.problem);
         return out;

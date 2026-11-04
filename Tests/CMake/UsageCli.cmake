@@ -66,6 +66,11 @@ run_loom(2 out help frobnicate --json)
 expect_match("help frobnicate" "${out}" "^{\"error\": {\"code\": \"usage\", \"message\": \"`frobnicate` isn't a loom subcommand\\. ")
 run_loom(2 out help status graph)
 
+# 2: `--version` with a word after it says what is wrong, not that `--version` isn't a subcommand.
+run_loom(2 out --version extra --json)
+expect_match("--version extra" "${out}"
+    "^{\"error\": {\"code\": \"usage\", \"message\": \"`loom --version` takes no arguments\\.\"}}\n$")
+
 # 2: the common options, wrong; a `--json` after the problem still gets the error as JSON.
 run_loom(2 out status --project a --project b --json)
 expect_match("--project twice" "${out}"

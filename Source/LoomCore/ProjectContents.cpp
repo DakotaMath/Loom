@@ -330,7 +330,8 @@ struct ContentsChecker {
                     if (!p.keyNames().empty())
                         add("paper-key-rule", file.path, keyLine, base.problem, Severity::Warning);
                 } else if (!keyFollowsRule(p.key, base.key, others)) {
-                    const KeyAssignment expected = assignKey(p, others);
+                    // The key `loom rekey` would give it, so the warning names that one.
+                    const KeyAssignment expected = ruleKey(p, others);
                     add("paper-key-rule", file.path, keyLine,
                         QStringLiteral("By the key rule this paper's key is `%1`, not `%2`. Run `loom rekey %2`.")
                             .arg(expected.key.isEmpty() ? base.key : expected.key, p.key),

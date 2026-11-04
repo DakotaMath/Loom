@@ -419,6 +419,18 @@ TEST_CASE("Empty values are missing values", "[statements][proofs]")
     }
 }
 
+TEST_CASE("A value of only whitespace is an empty value (A21)", "[statements][proofs]")
+{
+    // Specs/m1-core.md, "Front matter", A21: for required and naming fields, a value of only
+    // whitespace says nothing, so it is empty.
+    CHECK(statementProblems("+++\nid = \"4KX7\"\nkind = \"theorem\"\ntitle = \"   \"\ncreated = 2026-11-03\n+++\nBody\n")
+          == std::vector<P>{{"missing-field", 4, "`title` is empty; every statement needs one."}});
+    CHECK(statementProblems(statementWith("origin = \" \\t \"\n")) == std::vector<P>{
+        {"missing-field", 5, "`origin` is empty; give it a value or leave it out."}});
+    CHECK(proofProblems("+++\nid = \"4KX7.a\"\nproves = \"4KX7\"\npremises = []\nlevel = \"  \"\ncreated = 2026-11-03\n+++\nBody\n")
+          == std::vector<P>{{"missing-field", 5, "`level` is empty; every proof needs one."}});
+}
+
 TEST_CASE("A value ending in a line break doesn't pass a rule", "[statements][proofs]")
 {
     // Qt's `$` also matches before a final line break, so each rule must be anchored at the very end.

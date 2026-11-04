@@ -9,6 +9,11 @@ QString fromUtf8(std::string_view text)
     return QString::fromUtf8(text.data(), static_cast<qsizetype>(text.size()));
 }
 
+bool isBlank(QStringView text)
+{
+    return text.trimmed().isEmpty();
+}
+
 int lineOf(const toml::source_region& region)
 {
     return region.begin.line > 0 ? static_cast<int>(region.begin.line) : 1;
@@ -64,9 +69,10 @@ void FieldChecker::emptyField(const QString& field, int line, const QString& thi
 bool FieldChecker::reportEmpty(const QString& field, const toml::node& node, const QString& thing, Need need)
 {
     // Specs/m1-core.md, "Front matter", A2: an empty value in a required field, or in an
-    // optional one that names something, is a missing value. Free text may be empty.
+    // optional one that names something, is a missing value; A21: so is one of only whitespace,
+    // which names nothing either. Free text may be empty.
     const toml::value<std::string>* value = node.as_string();
-    if (need == Need::Optional || !value || !value->get().empty())
+    if (need == Need::Optional || !value || !isBlank(fromUtf8(value->get())))
         return false;
     emptyField(field, line(node), thing, need == Need::Required);
     return true;
@@ -79,11 +85,16 @@ void FieldChecker::wrongType(const QString& field, const QString& expected, cons
 
 QDate FieldChecker::date(const QString& field, const toml::node& node)
 {
-    const toml::date value = node.as_date()->get();
+    return date(field, node.as_date()->get(), line(node));
+}
+
+QDate FieldChecker::date(const QString& field, const toml::date& value, int line)
+{
+    // Specs/m1-core.md, "Front matter", A9: toml++ reads the year 0, which QDate can't hold.
     const QDate out(value.year, value.month, value.day);
     if (!out.isValid()) {
         const QString text = QString::asprintf("%04d-%02d-%02d", int(value.year), int(value.month), int(value.day));
-        add("bad-value", line(node),
+        add("bad-value", line,
             QStringLiteral("`%1` can't be `%2`; it must be one of the dates from 0001-01-01 on.").arg(field, text));
     }
     return out;
