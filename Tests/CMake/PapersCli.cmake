@@ -94,6 +94,28 @@ run_loom(1 out new-paper "${WORK}/keyed.toml" --json)
 expect_match("new-paper wrong key" "${out}" "^{\"error\": {\"code\": \"paper-key-rule\"")
 run_loom(1 out new-stub Nobody99 --kind lemma --gist "G" --version published --at "L" --by dakota)
 run_loom(1 out rekey Nobody99)
+# A third paper sharing the key would be SmithJones24c, and a folder of that name is already there
+# (A3): refused, and the folder is left alone.
+string(REPLACE "2023-01-15" "2024-06-01" third "${draft}")
+string(REPLACE "Energy decay for a model parabolic system" "A third paper" third "${third}")
+file(WRITE "${WORK}/third.toml" "${third}")
+file(WRITE "${PROJECT}/Papers/SmithJones24c/notes.md" "Mine.\n")
+run_loom(1 out new-paper "${WORK}/third.toml" --json)
+expect_match("new-paper onto a folder" "${out}"
+    "^{\"error\": {\"code\": \"paper-exists\", \"message\": \"`Papers/SmithJones24c/` already exists\\. ")
+file(GLOB left RELATIVE "${PROJECT}/Papers/SmithJones24c" "${PROJECT}/Papers/SmithJones24c/*")
+if(NOT left STREQUAL "notes.md")
+    message(FATAL_ERROR "new-paper wrote into Papers/SmithJones24c: ${left}")
+endif()
+file(REMOVE_RECURSE "${PROJECT}/Papers/SmithJones24c")
+# build-bib never writes over a file of the project.
+file(READ "${PROJECT}/loom.toml" before)
+run_loom(1 out build-bib --out loom.toml --json)
+expect_match("build-bib --out loom.toml" "${out}" "^{\"error\": {\"code\": \"bib-out-project-file\", ")
+file(READ "${PROJECT}/loom.toml" after)
+if(NOT before STREQUAL after)
+    message(FATAL_ERROR "build-bib --out loom.toml changed loom.toml")
+endif()
 
 # 2: wrong usage.
 run_loom(2 out new-paper)

@@ -7,6 +7,7 @@
 
 #include "TestSupport.h"
 
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QTemporaryDir>
@@ -25,17 +26,37 @@ struct Repository {
     QString root;
     loom::GitTool git;
 
-    Repository()
+    /// @param project Whether the repository is a Loom project: `loom.toml` at its top.
+    explicit Repository(bool project = true)
     {
         REQUIRE(temp.isValid());
         root = temp.path() + "/Project";
         git = loomtest::testGit(temp.path() + "/gitconfig");
         writeFile(root + "/README.md", "A repository.\n");
+        if (project)
+            writeFile(root + "/loom.toml", "format = 1\nname = \"Demo\"\ncreated = 2026-11-04\n");
         gitOutput(git, {"init", "-q", "-b", "main"}, root);
     }
 
+    /// Where git runs the pre-commit hook from when nothing says otherwise.
     QString hook() const { return root + "/.git/hooks/pre-commit"; }
+
+    /// Whether the repository's own config has the merge driver; false until installHooks() ran.
+    bool hasMergeDriver() const
+    {
+        return loom::runGit(git, {"config", "--local", "--get", "merge.loom-checks.driver"}, root).ok();
+    }
 };
+
+/// The spec's `hooks-path-outside` message for hooks run from `folder` (Specs/m1-core.md,
+/// "`loom install-hooks`", A1).
+QString hooksPathOutside(const QString& folder)
+{
+    return QStringLiteral("Git runs hooks from `%1` (`core.hooksPath`), outside this project, so Loom can't install its "
+                          "commit guard there. Run `git config --local core.hooksPath .git/hooks` here, then `loom "
+                          "install-hooks` again.")
+        .arg(QDir::toNativeSeparators(folder));
+}
 
 } // namespace
 
@@ -113,6 +134,101 @@ TEST_CASE("install-hooks needs a git repository", "[hooks]")
     const loom::HooksResult result = loom::installHooks(temp.path() + "/Project", "/usr/bin/loom", git);
     CHECK(result.outcome == loom::HooksOutcome::CantWork);
     CHECK(result.code == "not-a-repository");
+}
+
+TEST_CASE("install-hooks refuses a folder without loom.toml, writing nothing", "[hooks]")
+{
+    // A repository that isn't a Loom project: Loom's hook would refuse every commit in it (A1).
+    const Repository repo(false);
+    writeFile(repo.hook(), "#!/bin/sh\nexec make check\n");
+    const loom::HooksResult result = loom::installHooks(repo.root, "/usr/bin/loom", repo.git);
+    CHECK(result.outcome == loom::HooksOutcome::CantWork);
+    CHECK(result.code == "not-a-project");
+    CHECK(result.message == "`" + QDir::toNativeSeparators(repo.root) + "` isn't a Loom project: it has no loom.toml.");
+    CHECK(readFile(repo.hook()) == "#!/bin/sh\nexec make check\n");
+    CHECK_FALSE(QFileInfo::exists(repo.hook() + ".before-loom"));
+    CHECK_FALSE(repo.hasMergeDriver());
+}
+
+TEST_CASE("install-hooks refuses a project that isn't the top of its repository", "[hooks]")
+{
+    // The project is a folder inside a bigger repository, whose hooks belong to that repository (A1).
+    const Repository repo(false);
+    const QString inner = repo.root + "/Inner";
+    writeFile(inner + "/loom.toml", "format = 1\nname = \"Inner\"\ncreated = 2026-11-04\n");
+    const loom::HooksResult result = loom::installHooks(inner, "/usr/bin/loom", repo.git);
+    CHECK(result.outcome == loom::HooksOutcome::CantWork);
+    CHECK(result.code == "hooks-not-top-level");
+    CHECK(result.message == "`" + QDir::toNativeSeparators(inner) + "` isn't the top of its git repository, so its hooks "
+                            "belong to another project. Run `loom install-hooks` in a Loom project.");
+    CHECK_FALSE(QFileInfo::exists(repo.hook()));
+    CHECK_FALSE(repo.hasMergeDriver());
+}
+
+TEST_CASE("install-hooks refuses when git runs hooks from outside the repository", "[hooks]")
+{
+    // `git rev-parse --git-path hooks/pre-commit` follows core.hooksPath. Loom must never write
+    // there (A1): that folder's hooks run for other repositories too.
+    const Repository repo;
+    const QString shared = repo.temp.path() + "/SharedHooks";
+    writeFile(shared + "/pre-commit", "#!/bin/sh\nexec company-check\n");
+    const auto untouched = [&] {
+        CHECK(loomtest::filesUnder(shared) == QStringList{"pre-commit"});
+        CHECK(readFile(shared + "/pre-commit") == "#!/bin/sh\nexec company-check\n");
+        CHECK_FALSE(QFileInfo::exists(repo.hook()));
+        CHECK_FALSE(repo.hasMergeDriver());
+    };
+
+    SECTION("set in the repository's own config")
+    {
+        gitOutput(repo.git, {"config", "--local", "core.hooksPath", shared}, repo.root);
+        const loom::HooksResult result = loom::installHooks(repo.root, "/usr/bin/loom", repo.git);
+        CHECK(result.outcome == loom::HooksOutcome::CantWork);
+        CHECK(result.code == "hooks-path-outside");
+        CHECK(result.message == hooksPathOutside(shared));
+        untouched();
+    }
+    SECTION("set in the global config, until the repository's own config points back at .git/hooks")
+    {
+        const QString global = repo.temp.path() + "/gitconfig";
+        writeFile(global, readFile(global) + "[core]\n\thooksPath = " + shared.toUtf8() + "\n");
+        const loom::HooksResult result = loom::installHooks(repo.root, "/usr/bin/loom", repo.git);
+        CHECK(result.outcome == loom::HooksOutcome::CantWork);
+        CHECK(result.code == "hooks-path-outside");
+        CHECK(result.message == hooksPathOutside(shared));
+        untouched();
+
+        // The way out the message gives.
+        gitOutput(repo.git, {"config", "--local", "core.hooksPath", ".git/hooks"}, repo.root);
+        const loom::HooksResult fixed = loom::installHooks(repo.root, "/usr/bin/loom", repo.git);
+        INFO(fixed.message.toStdString());
+        REQUIRE(fixed.outcome == loom::HooksOutcome::Installed);
+        CHECK(loom::isLoomHook(readFile(repo.hook())));
+        CHECK(loomtest::filesUnder(shared) == QStringList{"pre-commit"});
+    }
+}
+
+TEST_CASE("new-project stops before writing anything when git's global config sets core.hooksPath", "[hooks][new-project]")
+{
+    // Both `git lfs install --local` and the commit guard would write into that shared folder (A1).
+    QTemporaryDir temp;
+    REQUIRE(temp.isValid());
+    const QString shared = temp.path() + "/SharedHooks";
+    writeFile(shared + "/pre-commit", "#!/bin/sh\nexec company-check\n");
+    loom::NewProjectRequest request;
+    request.folder = temp.path() + "/Demo";
+    request.name = "Demo";
+    request.git = loomtest::testGit(temp.path() + "/gitconfig");
+    writeFile(temp.path() + "/gitconfig", readFile(temp.path() + "/gitconfig") + "[core]\n\thooksPath = " + shared.toUtf8() + "\n");
+    request.loomProgram = QStringLiteral(LOOM_PROGRAM);
+
+    const loom::NewProjectResult result = loom::createProject(request);
+    CHECK(result.outcome == loom::NewProjectOutcome::CantWork);
+    CHECK(result.code == "hooks-path-outside");
+    CHECK(result.message == hooksPathOutside(shared));
+    CHECK_FALSE(QFileInfo::exists(request.folder));
+    CHECK(loomtest::filesUnder(shared) == QStringList{"pre-commit"});
+    CHECK(readFile(shared + "/pre-commit") == "#!/bin/sh\nexec company-check\n");
 }
 
 TEST_CASE("new-project installs the hook, which then guards every commit", "[hooks][new-project]")

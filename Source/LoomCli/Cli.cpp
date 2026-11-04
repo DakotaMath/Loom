@@ -160,8 +160,16 @@ std::optional<Args> parseArgs(const QStringList& args, const QString& name, cons
 
 std::optional<QString> findProject(const Context& context, QString& message)
 {
-    if (!context.project.isEmpty())
-        return QFileInfo(context.project).absoluteFilePath();
+    if (!context.project.isEmpty()) {
+        // As openProject() decides: a loom.toml that is a link or can't be read is still the
+        // project's, and gets its own message when it is opened.
+        const QString folder = QDir::cleanPath(QFileInfo(context.project).absoluteFilePath());
+        const QFileInfo toml(folder + QStringLiteral("/loom.toml"));
+        if (toml.exists() || toml.isSymbolicLink())
+            return folder;
+        message = QStringLiteral("`%1` isn't a Loom project: it has no loom.toml.").arg(QDir::toNativeSeparators(folder));
+        return std::nullopt;
+    }
     QDir folder(QDir::currentPath());
     while (true) {
         if (QFileInfo(folder.filePath(QStringLiteral("loom.toml"))).isFile())

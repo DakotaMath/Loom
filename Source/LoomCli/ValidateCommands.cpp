@@ -74,10 +74,16 @@ int runInstallHooks(const QStringList& args, const Context& context)
         return exitCode;
     const QString& root = started->second;
 
-    // A project from a newer Loom is left untouched, like every other write.
+    // Only a project Loom can open (A1); one from a newer Loom is left untouched, like every
+    // other write. installHooks() checks the rest: the top of the repository, and where git
+    // runs hooks from.
     const loom::OpenedProject project = loom::openProject(root);
-    if (project.status == loom::OpenStatus::FormatTooNew)
-        return fail(exitCantWork, QStringLiteral("format-too-new"), project.message, context.json);
+    switch (project.status) {
+    case loom::OpenStatus::Opened: break;
+    case loom::OpenStatus::NotAProject: return fail(exitCantWork, QStringLiteral("not-a-project"), project.message, context.json);
+    case loom::OpenStatus::Unreadable: return fail(exitCantWork, QStringLiteral("unreadable"), project.message, context.json);
+    case loom::OpenStatus::FormatTooNew: return fail(exitCantWork, QStringLiteral("format-too-new"), project.message, context.json);
+    }
 
     const loom::HooksResult result = loom::installHooks(root, QCoreApplication::applicationFilePath(), loom::GitTool());
     switch (result.outcome) {

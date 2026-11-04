@@ -16,6 +16,12 @@ Traps, dead ends and their fixes, in one folder per area (`qt`, `build`, `git`, 
 | [CMake's `CMAKE_MATCH_<n>` doesn't leave the function that matched](cmake/cmake-match-inside-function.md) | `if(x MATCHES …)` sets `CMAKE_MATCH_1` and the rest only in the current scope, so a helper `function()` that does the match leaves the caller's `CMAKE_MATCH_1` empty. In a CMake test script, capture groups at the top level with `string(REGEX REPLACE …)` (or match there), not through a helper function. |
 | [CMake's `execute_process` garbles `loom`'s UTF-8 output on Windows](cmake/execute-process-encoding.md) | On Windows, `execute_process` decodes a program's output in the console's code page, so the UTF-8 `→` that `loom` writes reaches a CMake test script as `ΓåÆ` and an exact comparison fails. Pass `ENCODING UTF-8` to every `execute_process` that reads `loom`'s output. |
 
+### git
+
+| Page | Summary |
+| --- | --- |
+| [`git rev-parse --git-path hooks/…` follows `core.hooksPath` out of the repository](git/hookspath-moves-hooks.md) | Asking git where a hook goes (`git rev-parse --git-path hooks/pre-commit`) gives `core.hooksPath` when it is set, locally or globally, which can be a folder every repository on the machine shares. Writing a hook there changes every one of those repositories. Check that the answer is inside the repository's own git directory (`git rev-parse --git-common-dir`), and refuse if it isn't; `loom install-hooks` and `loom new-project` do (A1). |
+
 ### qt
 
 | Page | Summary |

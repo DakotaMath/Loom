@@ -1,9 +1,11 @@
 #pragma once
 
 // Changing a project's papers: what `loom new-paper`, `new-stub`, `rekey` and `build-bib` do
-// (Specs/m1-core.md, "Papers" and "The `loom` command"). Like the changes in Edits.h, each takes
-// the write lock, reads the project, makes the change in memory, and writes only if the change
-// adds no error to the project.
+// (Specs/m1-core.md, "Papers" and "The `loom` command"). Each takes the write lock and reads the
+// project. Like the changes in Edits.h, `new-paper`, `new-stub` and `rekey` make the change in
+// memory and write only if it adds no error to the project. `build-bib` writes a generated file
+// that isn't part of the project's model, so it has no such check; it refuses instead to write
+// over any of the project's own files.
 
 #include "LoomCore/Edits.h"
 #include "LoomCore/Problem.h"
@@ -38,7 +40,9 @@ struct PaperChange {
 /// sets `created` to today if absent, and writes the entry in canonical form. A paper that now
 /// shares the key is renamed, both getting letters (the key rule, step 4).
 /// Refuses: a draft with errors of its own; a paper with no key by the rule; a draft key that
-/// isn't the rule's; anything that would add an error to the project.
+/// isn't the rule's; `paper-exists` when anything named `Papers/<Key>` is already there,
+/// compared ignoring case (A3: it is never replaced); anything that would add an error to the
+/// project. If a write fails part way, the renames already done are undone.
 /// @param draft     The draft's bytes.
 /// @param draftName The draft's name, for its problems (e.g. its path as typed).
 /// @returns The result and the renames. Side effects: renames paper folders; writes the entry.
@@ -66,7 +70,8 @@ ChangeResult createStub(const QString& root, const NewStub& request, const Chang
 /// `loom rekey <key>`: renames a paper to the key the rule gives (Specs/m1-core.md, "The key
 /// rule", step 5): the folder is renamed, `key` changes, and the old key is added to `aliases`.
 /// `\cite{…}` in bodies isn't rewritten (D9): old keys keep working through the alias. A key that
-/// already fits the rule (its base, or its base and a letter) is left alone.
+/// already fits the rule (its base, or its base and a letter) is left alone. If a write fails
+/// part way, the renames already done are undone.
 /// @param typed The paper's key or old key.
 /// @returns The result; `renamed` is empty when the key was already right. Side effects: renames
 ///          paper folders and rewrites their `paper.toml`.
@@ -82,6 +87,10 @@ struct BibliographyBuilt {
 
 /// `loom build-bib [--out <path>]`: writes the bibliography (Specs/m1-core.md, "The bibliography")
 /// of every paper Loom can read. The file is written even when some entries are skipped.
+/// Refuses (`bib-out-project-file`) an `out` that is one of the project's own files or in a
+/// folder Loom reads every file of: `loom.toml`, `CLAUDE.md`, `.gitignore`, `.gitattributes`,
+/// the preamble files, `.loom/write.lock`, and anything in `Statements/`, `Proofs/`, `Papers/`
+/// or `.git/`, compared ignoring case.
 /// @param out The project-relative path to write; empty means `.loom/build/refs.bib`.
 /// @returns The result and the problems. Side effects: writes the file.
 BibliographyBuilt buildBibliography(const QString& root, const QString& out = {}, const ChangeOptions& options = {});

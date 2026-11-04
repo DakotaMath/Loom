@@ -118,9 +118,40 @@ std::vector<Problem> movedBy(std::vector<Problem> problems, const std::vector<Re
     return problems;
 }
 
-/// Carries out renames on disk: each folder renamed, then its paper.toml rewritten.
-/// @returns An empty string, or what went wrong (after undoing the rename it was doing).
-QString carryOut(const QString& root, const std::vector<Rename>& renames)
+/// A rename done on disk, with what undoing it needs.
+struct DoneRename {
+    QString fromPath; ///< The folder's absolute path before.
+    QString toPath;   ///< Its absolute path now.
+    QString to;       ///< Its name now.
+    /// Its paper.toml before Loom rewrote it; nothing while it hasn't been rewritten.
+    std::optional<QByteArray> before;
+};
+
+/// Undoes renames done on disk, the last first: each paper.toml put back as it was, then its
+/// folder renamed back. A rename that can't be undone doesn't stop the others.
+/// @returns What couldn't be undone, one sentence each; empty if everything was.
+/// Side effects: writes paper.toml files and renames paper folders.
+QStringList undo(const QString& root, const std::vector<DoneRename>& done)
+{
+    QStringList failed;
+    for (auto it = done.rbegin(); it != done.rend(); ++it) {
+        if (it->before) {
+            if (const QString error = writeProjectFile(root, paperPath(it->to), *it->before); !error.isEmpty())
+                failed << error;
+        }
+        if (!QDir().rename(it->toPath, it->fromPath))
+            failed << QStringLiteral("Loom couldn't rename `%1` back to `%2`; rename it by hand.")
+                          .arg(QDir::toNativeSeparators(it->toPath), QDir::toNativeSeparators(it->fromPath));
+    }
+    return failed;
+}
+
+/// Carries out renames on disk, in order: each folder renamed, then its paper.toml rewritten.
+/// @param done Each rename done so far, so that the caller can undo them all if this or a later
+///             step fails (the key rule's posting order lives in which paper got which letter).
+/// @returns An empty string, or what went wrong; `done` then holds what was done before it.
+/// Side effects: renames paper folders and rewrites their paper.toml.
+QString carryOut(const QString& root, const std::vector<Rename>& renames, std::vector<DoneRename>& done)
 {
     for (const Rename& rename : renames) {
         const QString fromRelative = QStringLiteral("Papers/%1").arg(rename.from);
@@ -135,16 +166,23 @@ QString carryOut(const QString& root, const std::vector<Rename>& renames)
         if (!QDir().rename(*fromPath, *toPath))
             return QStringLiteral("Loom couldn't rename `%1` to `%2`. Is a file in it open in another program?")
                 .arg(QDir::toNativeSeparators(*fromPath), QDir::toNativeSeparators(*toPath));
-        const QString error = writeProjectFile(root, paperPath(rename.to), rename.bytes);
-        if (!error.isEmpty()) {
-            QDir().rename(*toPath, *fromPath);
+        done.push_back({*fromPath, *toPath, rename.to, std::nullopt});
+        const std::optional<QByteArray> before = readProjectFile(root, paperPath(rename.to));
+        if (!before)
+            return QStringLiteral("Loom couldn't read `%1`.").arg(QDir::toNativeSeparators(*toPath + QStringLiteral("/paper.toml")));
+        // A failed write leaves the old file in place (QSaveFile), so only the folder needs undoing.
+        if (const QString error = writeProjectFile(root, paperPath(rename.to), rename.bytes); !error.isEmpty())
             return error;
-        }
+        done.back().before = *before;
     }
     return {};
 }
 
 /// Writes a multi-file paper change if it adds no error: renames, then `extra` (path → bytes).
+/// If any write fails, every rename already done is undone, the last first, so a retry letters
+/// the papers as the first try would have.
+/// @returns `result` marked done, or why nothing was written (refused) or what failed (can't work).
+/// Side effects: renames paper folders, rewrites their paper.toml, writes `extra`.
 ChangeResult commitPapers(Session& session, const ProjectContents& changed, const std::vector<Rename>& renames,
                           const std::vector<std::pair<QString, QByteArray>>& extra, const QString& what, ChangeResult result)
 {
@@ -156,14 +194,60 @@ ChangeResult commitPapers(Session& session, const ProjectContents& changed, cons
         refusal.path = result.path;
         return refusal;
     }
-    if (const QString error = carryOut(session.project.root, renames); !error.isEmpty())
-        return cantWork(QStringLiteral("write-failed"), error);
-    for (const auto& [path, bytes] : extra) {
-        if (const QString error = writeProjectFile(session.project.root, path, bytes); !error.isEmpty())
-            return cantWork(QStringLiteral("write-failed"), error);
+    const QString& root = session.project.root;
+    std::vector<DoneRename> done;
+    QString error = carryOut(root, renames, done);
+    for (auto it = extra.begin(); error.isEmpty() && it != extra.end(); ++it) {
+        error = writeProjectFile(root, it->first, it->second);
+        // Its folder, if the write made it and left it empty, would block a retry (`paper-exists`).
+        if (!error.isEmpty())
+            QDir().rmdir(QFileInfo(root + u'/' + it->first).absolutePath());
     }
-    result.outcome = ChangeOutcome::Done;
-    return result;
+    if (error.isEmpty()) {
+        result.outcome = ChangeOutcome::Done;
+        return result;
+    }
+    if (const QStringList notUndone = undo(root, done); !notUndone.isEmpty())
+        error += QStringLiteral(" Loom couldn't undo all the renames it had done: ") + notUndone.join(u' ');
+    else if (!done.empty())
+        error += QStringLiteral(" Loom undid the renames it had done, so the papers are as they were.");
+    return cantWork(QStringLiteral("write-failed"), error);
+}
+
+/// The entry in `Papers/` whose name is `name` ignoring case, whatever it is (a folder, a file;
+/// whether or not its paper.toml parses). Windows ignores case in file names, so `MacDonald20`
+/// and `Macdonald20` are one folder there, and Loom treats them as one everywhere (A3).
+/// @returns The entry's name as it is on disk, or nothing. Reads the folder.
+std::optional<QString> entryInPapers(const QString& root, const QString& name)
+{
+    const QStringList entries = QDir(root + QStringLiteral("/Papers"))
+                                    .entryList(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot);
+    for (const QString& entry : entries) {
+        if (entry.compare(name, Qt::CaseInsensitive) == 0)
+            return entry;
+    }
+    return std::nullopt;
+}
+
+/// Whether `build-bib` must refuse to write to `path` (a project path): one of the project's own
+/// files, or a file in a folder Loom reads every file of. Those are `loom.toml`, the files
+/// `new-project` writes, the preamble files, the write lock, and anything in `Statements/`,
+/// `Proofs/`, `Papers/` (each file there is read, or is a `stray-file`) or `.git/`. Compared
+/// ignoring case, as Windows does. No side effects.
+bool isProjectOwnFile(const ProjectConfig& config, const QString& path)
+{
+    QStringList files = {QStringLiteral("loom.toml"), QStringLiteral("CLAUDE.md"), QStringLiteral(".gitignore"),
+                         QStringLiteral(".gitattributes"), QStringLiteral(".loom/write.lock")};
+    files += config.preamble;
+    for (const QString& file : files) {
+        if (path.compare(file, Qt::CaseInsensitive) == 0)
+            return true;
+    }
+    for (const QString& folder : {QStringLiteral("Statements/"), QStringLiteral("Proofs/"), QStringLiteral("Papers/"), QStringLiteral(".git/")}) {
+        if (path.startsWith(folder, Qt::CaseInsensitive))
+            return true;
+    }
+    return false;
 }
 
 /// Plans the renames a key assignment needs, applying them to `model`.
@@ -230,6 +314,15 @@ PaperChange createPaper(const QString& root, const QByteArray& draft, const QStr
         return out;
     }
     paper.key = assigned.key;
+
+    // A3: never replace what is in `Papers/<Key>/`. The key rule sees only entries that parse,
+    // under their `key`, so an entry that doesn't parse, or whose key disagrees with its folder,
+    // or a folder differing only in case, would otherwise be written over.
+    if (const std::optional<QString> taken = entryInPapers(session->project.root, paper.key)) {
+        result = refused(QStringLiteral("paper-exists"),
+            QStringLiteral("`Papers/%1/` already exists. Fix or remove what's there first; `loom validate` shows its problems.").arg(*taken));
+        return out;
+    }
     result.id = paper.key;
     result.path = paperPath(paper.key);
 
@@ -366,6 +459,14 @@ BibliographyBuilt buildBibliography(const QString& root, const QString& out, con
     if (!isProjectPath(path) || !resolveProjectPath(session->project.root, path)) {
         result = cantWork(QStringLiteral("bad-path"),
             QStringLiteral("`%1` must be a path inside the project, written with `/`, without `..`.").arg(path));
+        return built;
+    }
+    // The bibliography is generated, outside the model, so it can't go through the "adds no
+    // error" check; it must never replace a file of the project instead.
+    if (isProjectOwnFile(session->project.config, path)) {
+        result = refused(QStringLiteral("bib-out-project-file"),
+            QStringLiteral("`%1` is one of the project's own files, or in a folder Loom keeps them in, so Loom won't write "
+                           "the bibliography there. Give `--out` a path of its own, such as `TeX/refs.bib`.").arg(path));
         return built;
     }
 

@@ -106,6 +106,13 @@ NewProjectResult createProject(const NewProjectRequest& request)
                                "Run `git config --global user.name \"…\"` and `git config --global user.email …`, then try again."), path);
     }
 
+    // A1: with core.hooksPath in the global (or system) config, `git lfs install --local` and the
+    // commit guard would both write their hooks into that folder, which other repositories share.
+    const GitRun hooksPath = runGit(identityGit, {QStringLiteral("config"), QStringLiteral("--get"), QStringLiteral("--type=path"),
+                                                  QStringLiteral("core.hooksPath")}, runIn);
+    if (hooksPath.ok() && !hooksPath.output.trimmed().isEmpty())
+        return failure(NewProjectOutcome::CantWork, "hooks-path-outside", hooksPathOutsideMessage(hooksPath.output.trimmed()), path);
+
     const std::vector<std::pair<QString, QByteArray>> kit = readKit();
     if (kit.empty())
         return failure(NewProjectOutcome::CantWork, "kit-missing",

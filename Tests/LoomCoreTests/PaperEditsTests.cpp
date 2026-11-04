@@ -322,6 +322,74 @@ TEST_CASE("new-paper letters a shared key, renaming the paper already there", "[
         CHECK_FALSE(std::get<4>(problem));
 }
 
+TEST_CASE("new-paper never replaces a folder that is already there", "[papers][edits]")
+{
+    // Specs/m1-core.md, `new-paper` and the edge cases (A3): whatever is in `Papers/<Key>/`, and
+    // whatever case its name is in, it is refused with `paper-exists` and left as it was.
+    const ProjectFixture project;
+    Options o;
+    const QByteArray draft = without(smithJones24(), {"key = ", "aliases = ", "cite = ", "created = "});
+    QString folder;
+    QByteArray existing;
+
+    SECTION("an entry that doesn't parse")
+    {
+        folder = "SmithJones24";
+        existing = "key = \"SmithJones24\"\nhalf an edit\n";
+    }
+    SECTION("an entry whose key disagrees with its folder")
+    {
+        folder = "SmithJones24";
+        existing = smithJones24();
+        existing.replace("key = \"SmithJones24\"", "key = \"SmithJones2\"");
+    }
+    SECTION("a folder whose name differs only in case")
+    {
+        // On Windows it is the same folder; Loom compares ignoring case on every system.
+        folder = "smithjones24";
+        existing = "key = \"smithjones24\"\nhalf an edit\n";
+    }
+    project.write("Papers/" + folder + "/paper.toml", existing);
+    project.write("Papers/" + folder + "/notes.md", "Mine.\n");
+
+    const loom::PaperChange result = loom::createPaper(project.root, draft, "draft.toml", o.options);
+    CHECK(result.change.outcome == loom::ChangeOutcome::Refused);
+    CHECK(result.change.code == "paper-exists");
+    CHECK(result.change.message == "`Papers/" + folder + "/` already exists. Fix or remove what's there first; "
+                                   "`loom validate` shows its problems.");
+    CHECK(result.renamed.empty());
+    CHECK(loomtest::filesUnder(project.root + "/Papers") == QStringList{folder + "/notes.md", folder + "/paper.toml"});
+    CHECK(project.read("Papers/" + folder + "/paper.toml") == existing);
+}
+
+TEST_CASE("A rename that fails part way is undone, every rename before it too", "[papers][edits]")
+{
+    // The key rule, step 4: letters go by posting order the first time. If the second rename
+    // fails and the first stayed done, a retry would letter the papers in the wrong order.
+    const ProjectFixture project;
+    QByteArray later = smithJones24();
+    later.replace("aliases = [\"SmithJones23\"]\n", "");
+    later.replace("posted = { value = 2023-01-15", "posted = { value = 2024-01-10");
+    project.write("Papers/SmithJones24/paper.toml", later);
+    project.write("Papers/SmithJones24/Statements/7RT2.toml", stubToml("7RT2", "theorem", true));
+    const QByteArray earlier = preprint() + publishedVersion();
+    project.write("Papers/SmithJones23/paper.toml", earlier);
+    // The plan is SmithJones24 → SmithJones24b, then SmithJones23 → SmithJones24a; something is
+    // already where the second rename goes.
+    project.write("Papers/SmithJones24a/notes.md", "In the way.\n");
+    Options o;
+
+    const loom::PaperChange result = loom::rekeyPaper(project.root, "SmithJones23", o.options);
+    CHECK(result.change.outcome == loom::ChangeOutcome::CantWork);
+    CHECK(result.change.code == "write-failed");
+    CHECK(result.renamed.empty());
+    CHECK(loomtest::filesUnder(project.root + "/Papers") ==
+          QStringList{"SmithJones23/paper.toml", "SmithJones24/Statements/7RT2.toml", "SmithJones24/paper.toml",
+                      "SmithJones24a/notes.md"});
+    CHECK(project.read("Papers/SmithJones24/paper.toml") == later);
+    CHECK(project.read("Papers/SmithJones23/paper.toml") == earlier);
+}
+
 TEST_CASE("new-stub writes a stub with a new tag and an unchecked locator", "[papers][edits]")
 {
     const ProjectFixture project;
@@ -467,4 +535,37 @@ TEST_CASE("build-bib writes refs.bib, with its warnings", "[papers][edits]")
     const loom::BibliographyBuilt outside = loom::buildBibliography(project.root, "../refs.bib", o.options);
     CHECK(outside.change.outcome == loom::ChangeOutcome::CantWork);
     CHECK(outside.change.code == "bad-path");
+}
+
+TEST_CASE("build-bib never writes over the project's own files", "[papers][edits]")
+{
+    const ProjectFixture project;
+    writeSmithJones24(project);
+    project.statement("4KX7", "lemma");
+    project.proof("4KX7", "4KX7.a", "4KX7", "[]");
+    Options o;
+    const QStringList files = loomtest::filesUnder(project.root);
+    std::vector<QByteArray> before;
+    for (const QString& file : files)
+        before.push_back(project.read(file));
+
+    // `loom.toml`, a paper, a stub, a statement, a proof, a preamble file, and new files in the
+    // folders Loom reads (a stray file there is an error).
+    const QStringList outs = {"loom.toml", "Loom.toml", "Papers/SmithJones24/paper.toml",
+                              "Papers/SmithJones24/Statements/7RT2.toml", "Papers/SmithJones24/notes.md",
+                              "Papers/refs.bib", "Statements/4KX7.tex", "statements/4KX7.tex", "Statements/refs.bib",
+                              "Proofs/4KX7/4KX7.a.tex", "Proofs/4KX7/4KX7.a.checks.toml", "Proofs/4KX7/4KX7.a.verbose.tex",
+                              "TeX/preamble.tex", "CLAUDE.md", ".loom/write.lock", ".git/config"};
+    for (const QString& out : outs) {
+        INFO(out.toStdString());
+        const loom::BibliographyBuilt built = loom::buildBibliography(project.root, out, o.options);
+        CHECK(built.change.outcome == loom::ChangeOutcome::Refused);
+        CHECK(built.change.code == "bib-out-project-file");
+        CHECK(built.change.message == "`" + out + "` is one of the project's own files, or in a folder Loom keeps them "
+                                      "in, so Loom won't write the bibliography there. Give `--out` a path of its own, "
+                                      "such as `TeX/refs.bib`.");
+        CHECK(loomtest::filesUnder(project.root) == files);
+        for (qsizetype i = 0; i < files.size() && i < qsizetype(before.size()); ++i)
+            CHECK(project.read(files[i]) == before[std::size_t(i)]);
+    }
 }
