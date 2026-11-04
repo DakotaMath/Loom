@@ -2,8 +2,9 @@
 
 // The statements and proofs of a project, read from `Statements/` and `Proofs/`, and the problems
 // that need more than one file to see (Specs/m1-core.md, "Statements", "Proofs", "IDs" and
-// "Validation"). Paper stubs join them with #8; check histories with #6.
+// "Validation"), with each proof's check history ("Checks"). Paper stubs join them with #8.
 
+#include "LoomCore/Checks.h"
 #include "LoomCore/Problem.h"
 #include "LoomCore/ProjectToml.h"
 #include "LoomCore/StatementsAndProofs.h"
@@ -38,13 +39,19 @@ struct VerboseFile {
     VerboseReading reading;
 };
 
+/// A check history file and what reading it gave.
+struct ChecksFile {
+    QString path;             ///< `Proofs/<tag>/<proof-id>.checks.toml`
+    QString proofId;          ///< The proof its file name gives.
+    ChecksReading reading;
+};
+
 /// Everything in `Statements/` and `Proofs/`, each list sorted by path.
 struct ProjectContents {
     std::vector<StatementFile> statements;
     std::vector<ProofFile> proofs;
     std::vector<VerboseFile> verbose;
-    /// The `<proof-id>.checks.toml` files, as project-relative paths. #6 reads them.
-    QStringList checksFiles;
+    std::vector<ChecksFile> checks;
     /// Problems found while listing the folders: `stray-file`, and `bad-path` for a file that
     /// resolves outside the project.
     std::vector<Problem> listingProblems;
@@ -53,6 +60,8 @@ struct ProjectContents {
     const StatementFile* statement(const QString& tag) const;
     /// The proof whose file name gives `id`, or null.
     const ProofFile* proof(const QString& id) const;
+    /// The check history of the proof `id`, or null if it has none yet.
+    const ChecksFile* checksOf(const QString& id) const;
     /// The tag that has `alias` among its aliases, or an empty string.
     QString tagWithAlias(const QString& alias) const;
 };
@@ -65,7 +74,7 @@ struct ContentsLoading {
     QString message;
 };
 
-/// Reads every statement, proof and verbose proof of a project (Specs/m1-core.md, "Statements"
+/// Reads every statement, proof, verbose proof and check history of a project (Specs/m1-core.md, "Statements"
 /// and "Proofs"). A missing `Statements/` or `Proofs/` folder is the same as an empty one.
 /// Rules for what may sit where: `Statements/` holds only `<tag>.tex`; `Proofs/` holds only
 /// folders named by a tag; `Proofs/<tag>/` holds only `<tag>.<letters>.tex`, `.verbose.tex` and
@@ -79,7 +88,8 @@ ContentsLoading loadContents(const QString& root);
 /// in references, `id-duplicate`, `alias-duplicate`, `ref-unknown`, `stated-using-self`,
 /// `stated-using-cycle`, `superseded-invalid`, `refuted-unknown`, `refuted-no-status`,
 /// `proof-folder-unknown`, `proves-mismatch`, `proof-of-no-status`, `premise-no-status`,
-/// `verbose-orphan`). Status, checks, papers and bodies are checked by later issues.
+/// `verbose-orphan`, `checks-orphan`), with each check history's own problems. Status, papers
+/// and bodies are checked by later issues.
 /// @param config   The project's `loom.toml`, for its tags.
 /// @param contents The statements and proofs.
 /// @returns The problems, sorted with sortProblems(). No side effects.

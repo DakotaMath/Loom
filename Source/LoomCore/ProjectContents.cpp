@@ -236,6 +236,11 @@ struct ContentsChecker {
                 add("verbose-orphan", file.path, 1,
                     QStringLiteral("`%1` is the verbose version of %2, which doesn't exist.").arg(file.path, file.proofId));
         }
+        for (const ChecksFile& file : contents.checks) {
+            if (!proofIds.contains(file.proofId))
+                add("checks-orphan", file.path, 1,
+                    QStringLiteral("`%1` holds checks of %2, which doesn't exist.").arg(file.path, file.proofId));
+        }
     }
 };
 
@@ -291,6 +296,12 @@ const ProofFile* ProjectContents::proof(const QString& id) const
     return it == proofs.end() ? nullptr : &*it;
 }
 
+const ChecksFile* ProjectContents::checksOf(const QString& id) const
+{
+    const auto it = std::find_if(checks.begin(), checks.end(), [&](const ChecksFile& c) { return c.proofId == id; });
+    return it == checks.end() ? nullptr : &*it;
+}
+
 QString ProjectContents::tagWithAlias(const QString& alias) const
 {
     for (const StatementFile& file : statements) {
@@ -336,7 +347,8 @@ ContentsLoading loadContents(const QString& root)
                 if (const std::optional<QByteArray> bytes = readFile(root, path, loading))
                     contents.verbose.push_back({path, name.chopped(12), readVerboseProof(*bytes, path)});
             } else if (!lettersOf(name, tag, u".checks.toml").isEmpty()) {
-                contents.checksFiles << path;
+                if (const std::optional<QByteArray> bytes = readFile(root, path, loading))
+                    contents.checks.push_back({path, name.chopped(12), readChecks(*bytes, path)});
             } else if (!lettersOf(name, tag, u".tex").isEmpty()) {
                 if (const std::optional<QByteArray> bytes = readFile(root, path, loading))
                     contents.proofs.push_back({path, tag, name.chopped(4), readProof(*bytes, path)});
@@ -357,6 +369,8 @@ std::vector<Problem> checkContents(const ProjectConfig& config, const ProjectCon
     for (const ProofFile& file : contents.proofs)
         checker.problems.insert(checker.problems.end(), file.reading.problems.begin(), file.reading.problems.end());
     for (const VerboseFile& file : contents.verbose)
+        checker.problems.insert(checker.problems.end(), file.reading.problems.begin(), file.reading.problems.end());
+    for (const ChecksFile& file : contents.checks)
         checker.problems.insert(checker.problems.end(), file.reading.problems.begin(), file.reading.problems.end());
     checker.statements();
     checker.circles();

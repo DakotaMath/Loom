@@ -64,7 +64,9 @@ TEST_CASE("A valid project reads without problems", "[contents]")
     CHECK(contents.proofs[0].folder == "4KX7");
     REQUIRE(contents.verbose.size() == 1);
     CHECK(contents.verbose[0].proofId == "4KX7.a");
-    CHECK(contents.checksFiles == QStringList{"Proofs/4KX7/4KX7.a.checks.toml"});
+    REQUIRE(contents.checks.size() == 1);
+    CHECK(contents.checks[0].path == "Proofs/4KX7/4KX7.a.checks.toml");
+    CHECK(contents.checks[0].proofId == "4KX7.a");
 
     SECTION("IDs typed by a person")
     {

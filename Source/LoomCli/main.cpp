@@ -1,7 +1,8 @@
 // The `loom` command (Specs/m1-core.md, "The `loom` command"). It knows `--version`,
-// `new-project`, and the statement and proof subcommands; the others arrive with their build
-// issues (#6 onwards).
+// `new-project`, the statement and proof subcommands and the check subcommands; the others
+// arrive with their build issues (#7 onwards).
 
+#include "CheckCommands.h"
 #include "Cli.h"
 #include "StatementCommands.h"
 
@@ -140,5 +141,11 @@ int main(int argc, char* argv[])
         return runNewProof(args, context);
     if (subcommand == u"edit-proof")
         return runEditProof(args, context);
+    if (subcommand == u"fingerprint")
+        return runFingerprint(args, context);
+    if (subcommand == u"add-check")
+        return runAddCheck(args, context);
+    if (subcommand == u"merge-checks")
+        return runMergeChecks(args, context);
     return printUsage();
 }

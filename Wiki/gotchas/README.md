@@ -26,6 +26,12 @@ Traps, dead ends and their fixes, in one folder per area (`qt`, `build`, `git`, 
 | Page | Summary |
 | --- | --- |
 | [toml++ writes table keys in alphabetical order](toml/tomlplusplus-sorts-keys.md) | A `toml::table` in toml++ is a `std::map`, so it forgets the order keys were read or inserted in and writes them alphabetically. Never write Loom's files with toml++'s formatter; use Loom's own writer, which puts fields in the order the spec lists. |
+
+### windows
+
+| Page | Summary |
+| --- | --- |
+| [On Windows, `_isatty()` says `NUL` is a terminal](windows/isatty-true-for-nul.md) | `_isatty(_fileno(stdin))` is true whenever input is a character device, and on Windows `NUL` is one, so `loom … < NUL` would pass a "only at a terminal" guard. To tell whether a person can type, ask for the console mode instead: `GetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), &mode)` succeeds only for a real console. `loom`'s `inputIsTerminal()` (`Source/LoomCli/Cli.cpp`) does this. |
 <!-- END GENERATED -->
 
 Up: [Wiki index](../INDEX.md)
