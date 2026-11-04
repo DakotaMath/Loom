@@ -87,7 +87,10 @@ struct ProjectContents {
     const StubFile* stub(const QString& tag) const;
     /// The paper in the folder `Papers/<folder>/`, or null.
     const PaperFile* paper(const QString& folder) const;
-    /// The paper whose folder, key or old key is `key`, or null.
+    /// The paper whose folder, key or old key is `key`, compared ignoring case (A3: keys are
+    /// folder names, and Windows folder names ignore case), or null. An exact match wins, so the
+    /// answer is the same on every system even where `paper-key-duplicate` already reports two
+    /// papers whose keys differ only in case.
     const PaperFile* paperWithKey(const QString& key) const;
     /// The proof whose file name gives `id`, or null.
     const ProofFile* proof(const QString& id) const;

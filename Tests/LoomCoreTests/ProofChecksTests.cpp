@@ -234,6 +234,42 @@ TEST_CASE("add-check refuses what the rules don't allow, writing nothing", "[pro
         CHECK_FALSE(QFileInfo::exists(project.root + u'/' + path));
 }
 
+TEST_CASE("add-check refuses a proof without a fingerprint, a history it can't rewrite, and a stale fingerprint from Dakota",
+          "[proof-checks]")
+{
+    const CheckedProject project;
+    loom::NewCheck dakota;
+    dakota.by = "dakota";
+    dakota.verdict = "pass";
+
+    SECTION("a premise that names nothing: no fingerprint, so no check")
+    {
+        project.proof("4KX7", "4KX7.b", "4KX7", "[\"ZZZZ\"]");
+        const loom::CheckAdded added = loom::addCheck(project.root, "4KX7.b", dakota, true, at(0));
+        CHECK(added.change.outcome == loom::ChangeOutcome::Refused);
+        CHECK(added.change.code == "no-fingerprint");
+        CHECK(added.change.message == "Loom can't compute the fingerprint of 4KX7.b: its premise `ZZZZ` isn't a statement in this project.");
+        CHECK_FALSE(QFileInfo::exists(project.root + "/Proofs/4KX7/4KX7.b.checks.toml"));
+    }
+    SECTION("an existing history that isn't TOML is never rewritten")
+    {
+        const QByteArray broken = "[[checks]\nby = \"dakota\"\n";
+        project.write("Proofs/4KX7/4KX7.a.checks.toml", broken);
+        const loom::CheckAdded added = loom::addCheck(project.root, "4KX7.a", dakota, true, at(0));
+        CHECK(added.change.outcome == loom::ChangeOutcome::Refused);
+        CHECK(added.change.code == "not-editable");
+        CHECK(project.read("Proofs/4KX7/4KX7.a.checks.toml") == broken);
+    }
+    SECTION("Dakota's optional fingerprint must be the current one too")
+    {
+        dakota.fingerprint = "3c8e1f0a92d4";
+        const loom::CheckAdded added = loom::addCheck(project.root, "4KX7.a", dakota, true, at(0));
+        CHECK(added.change.outcome == loom::ChangeOutcome::Refused);
+        CHECK(added.change.code == "proof-changed");
+        CHECK_FALSE(QFileInfo::exists(project.root + "/Proofs/4KX7/4KX7.a.checks.toml"));
+    }
+}
+
 TEST_CASE("Edits that would outdate checks need Dakota's confirmation", "[proof-checks][edits]")
 {
     const CheckedProject project;

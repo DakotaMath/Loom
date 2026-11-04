@@ -503,11 +503,11 @@ struct PaperReader {
     {
         if (field == u"arxiv_id" && !isArxivId(value))
             checker().add("bad-value", line,
-                QStringLiteral("`%1` can't be `%2`; it must be one of an arXiv identifier such as `2503.01234` or "
+                QStringLiteral("`%1` can't be `%2`; it must be an arXiv identifier such as `2503.01234` or "
                                "`math/0601001`, without `vN`.").arg(label, value));
         else if (field == u"primary_class" && !isArxivCategory(value))
             checker().add("bad-value", line,
-                QStringLiteral("`%1` can't be `%2`; it must be one of an arXiv category such as `math.AP` or `hep-th`.")
+                QStringLiteral("`%1` can't be `%2`; it must be an arXiv category such as `math.AP` or `hep-th`.")
                     .arg(label, value));
     }
 
@@ -811,6 +811,39 @@ QStringList expectedVersionFields(const QString& kind, const QString& workType)
     return {};
 }
 
+namespace {
+
+/// Reports old keys that are the paper's key, or another of its old keys, in another case
+/// (`alias-duplicate`). Keys compare ignoring case (A3), so `smithjones24` is SmithJones24's own
+/// key, and listing it would make lookups ambiguous. The key itself in the same spelling counts
+/// too; an exact repeat of an old key doesn't, since FieldReader::repeats() reports that.
+/// @param name The paper's name in messages: its key, else its folder or file.
+/// Side effects: records problems in `r`.
+void oldKeysInAnotherCase(FieldReader& r, const QString& key, const QStringList& aliases, const QString& name)
+{
+    for (qsizetype i = 0; i < aliases.size(); ++i) {
+        const int line = r.lines.of(QStringLiteral("aliases"), i);
+        if (!key.isEmpty() && aliases[i].compare(key, Qt::CaseInsensitive) == 0) {
+            r.checker.add("alias-duplicate", line,
+                QStringLiteral("`%1` is the key of %2 itself (keys compare ignoring case, A3), so it can't be one of its "
+                               "old keys.").arg(aliases[i], name));
+            continue;
+        }
+        if (aliases.indexOf(aliases[i]) < i)
+            continue; // An exact repeat: FieldReader::repeats() reports it.
+        for (qsizetype j = 0; j < i; ++j) {
+            if (aliases[j] != aliases[i] && aliases[j].compare(aliases[i], Qt::CaseInsensitive) == 0) {
+                r.checker.add("alias-duplicate", line,
+                    QStringLiteral("`%1` and `%2` are one old key of %3 (keys compare ignoring case, A3); keep one.")
+                        .arg(aliases[i], aliases[j], name));
+                break;
+            }
+        }
+    }
+}
+
+} // namespace
+
 PaperReading readPaper(const QByteArray& bytes, const QString& path, bool keyRequired)
 {
     PaperReading reading;
@@ -838,13 +871,15 @@ PaperReading readPaper(const QByteArray& bytes, const QString& path, bool keyReq
     if (relevance && *relevance < 1)
         r.checker.add("bad-value", r.lines.of(QStringLiteral("relevance")),
             QStringLiteral("`relevance` can't be `%1`; it must be a whole number from 1 up (1 is most relevant).").arg(*relevance));
-    r.repeats(QStringLiteral("tags"), p.tags);
-    r.repeats(QStringLiteral("aliases"), p.aliases);
-
     // Without a key, an entry is known by its folder; a draft by its file, since a draft's folder
     // (`Downloads`, or `.` for `loom new-paper draft.toml`) says nothing about the paper.
     const QString unkeyed = keyRequired ? folderName(path, 1) : QFileInfo(path).fileName();
-    PaperReader reader{r, p, p.key.isEmpty() ? unkeyed : p.key};
+    const QString name = p.key.isEmpty() ? unkeyed : p.key;
+    r.repeats(QStringLiteral("tags"), p.tags);
+    oldKeysInAnotherCase(r, p.key, p.aliases, name);
+    r.repeats(QStringLiteral("aliases"), p.aliases);
+
+    PaperReader reader{r, p, name};
     reader.work(*table);
     reader.versions(*table);
     reader.readings(*table);

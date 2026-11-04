@@ -84,7 +84,14 @@ struct BodyChecker {
     /// Every paper's current key (and folder), and each old key to its paper's current key.
     QSet<QString> keys;
     QHash<QString, QString> keyOfOldKey;
+    /// The same two, case-folded, to the current key: keys compare ignoring case (A3), so a
+    /// `\cite` in another case names the paper, but BibTeX wouldn't find it as written.
+    QHash<QString, QString> keyOfFoldedKey;
+    QHash<QString, QString> keyOfFoldedOldKey;
 
+    /// Indexes the project once, so that checking each body is a lookup, not a scan.
+    /// @param projectContents The files; kept by reference, and must outlive the checker.
+    /// No side effects beyond the checker itself.
     explicit BodyChecker(const ProjectContents& projectContents) : contents(projectContents)
     {
         const auto node = [&](const QString& tag, bool parsed, const QString& kind, const QStringList& aliases) {
@@ -116,9 +123,12 @@ struct BodyChecker {
             collectLabels(file.reading.document.body, file.reading.bodyLine);
 
         for (const PaperFile& file : contents.papers) {
+            const QString current = file.reading.parsed && !file.reading.document.key.isEmpty() ? file.reading.document.key
+                                                                                                 : file.folder;
             keys.insert(file.folder);
-            if (file.reading.parsed && !file.reading.document.key.isEmpty())
-                keys.insert(file.reading.document.key);
+            keys.insert(current);
+            if (!keyOfFoldedKey.contains(current.toCaseFolded()))
+                keyOfFoldedKey.insert(current.toCaseFolded(), current);
         }
         for (const PaperFile& file : contents.papers) {
             if (!file.reading.parsed)
@@ -127,6 +137,8 @@ struct BodyChecker {
             for (const QString& old : file.reading.document.aliases) {
                 if (!keys.contains(old) && !keyOfOldKey.contains(old))
                     keyOfOldKey.insert(old, current);
+                if (!keyOfFoldedOldKey.contains(old.toCaseFolded()))
+                    keyOfFoldedOldKey.insert(old.toCaseFolded(), current);
             }
         }
     }
@@ -175,9 +187,19 @@ struct BodyChecker {
             if (c.name == u"cite") {
                 for (const QString& part : c.argument.split(u',')) {
                     const QString key = part.trimmed();
+                    if (keys.contains(key))
+                        continue;
                     if (const QString current = keyOfOldKey.value(key); !current.isEmpty())
                         add(problems, "cite-alias", path, c.line,
                             QStringLiteral("`\\cite{%1}` uses an old key of %2. It still works; `%2` is its current key.").arg(key, current));
+                    else if (const QString spelt = keyOfFoldedKey.value(key.toCaseFolded()); !spelt.isEmpty())
+                        add(problems, "cite-alias", path, c.line,
+                            QStringLiteral("`\\cite{%1}` spells the key of %2 in another case. BibTeX matches keys exactly, so "
+                                           "write `%2`.").arg(key, spelt));
+                    else if (const QString old = keyOfFoldedOldKey.value(key.toCaseFolded()); !old.isEmpty())
+                        add(problems, "cite-alias", path, c.line,
+                            QStringLiteral("`\\cite{%1}` spells an old key of %2 in another case. BibTeX matches keys exactly, "
+                                           "so write `%2`.").arg(key, old));
                 }
                 continue;
             }

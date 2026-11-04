@@ -81,7 +81,9 @@ std::vector<Problem> checkStatuses(const ProjectContents& contents, const Projec
 /// `\paperref` to nothing: not a stub's tag or alias), `ref-not-listed` (a statement's `\ref` or
 /// `\paperref` to a statement or stub its `stated_using` doesn't list; a proof's, to one its
 /// `premises` don't list, except the statement it proves and statements without a status) and
-/// `cite-alias` (a `\cite` of a paper's old key); and the error `paperref-not-stub`, a
+/// `cite-alias` (a `\cite` of a paper's old key, or of its key or an old key spelt in another
+/// case: the same key by A3, but BibTeX matches keys exactly, so the warning names the
+/// spelling to write); and the error `paperref-not-stub`, a
 /// `\paperref` to a statement of the project rather than a paper stub (Specs/loom.md:
 /// `\paperref{<stub-id>}` cites a paper's result).
 /// Rules for reading LaTeX: a `%` not escaped by `\` starts a comment, which is skipped; a

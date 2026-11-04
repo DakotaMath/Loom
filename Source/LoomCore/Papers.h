@@ -195,7 +195,8 @@ bool isCited(const Stub& stub);
 /// (`bad-value`, A4); `cite`, readings and renumberings name existing versions (`cite-unknown`,
 /// `version-unknown`); `pdf` and local sources are inside `local/` (`pdf-path`), other sources
 /// are `https://` links (`field-source`); a date is one QDate can hold (`bad-value`); there are
-/// authors, or for a book editors (`authors-missing`).
+/// authors, or for a book editors (`authors-missing`); no old key is the key, or another old key,
+/// in another case (`alias-duplicate`, A3), and none is listed twice (`bad-value`).
 /// Problems that need the rest of the project (the folder name, other papers' keys, tags,
 /// sessions on disk) are found by checkContents().
 /// @param bytes       The file's content.

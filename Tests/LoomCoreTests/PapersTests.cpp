@@ -24,6 +24,8 @@ using P = std::tuple<QString, int, QString>; // code, line, message
 
 const QString paperPath = QStringLiteral("Papers/SmithJones24/paper.toml");
 
+/// Problems as (code, line, message), which a failing CHECK prints whole; the file is the same
+/// for every problem of one reading, so it's left out.
 std::vector<P> problemsOf(const std::vector<loom::Problem>& problems)
 {
     std::vector<P> out;
@@ -446,6 +448,26 @@ TEST_CASE("A stub needs its locators and its required fields", "[papers][stubs]"
     CHECK(problemsOf(loom::readStub("title = \"T\"\n", "Papers/SmithJones24/Statements/7RT2.toml").problems) == expected);
 }
 
+TEST_CASE("An old key can't be the paper's own key, or another old key, in another case (A3)", "[papers]")
+{
+    // Keys compare ignoring case everywhere (A3), so `smithjones24` is SmithJones24's key, not an
+    // old one, and `smithjones23` is the old key `SmithJones23` again. An exact repeat in
+    // `aliases` keeps its own `bad-value`.
+    QByteArray text = smithJones24();
+    REQUIRE(text.contains("aliases = [\"SmithJones23\"]\n"));
+    text.replace("aliases = [\"SmithJones23\"]\n",
+                 "aliases = [\"SmithJones23\", \"smithjones24\", \"smithjones23\", \"SmithJones24\", \"SmithJones23\"]\n");
+    CHECK(problemsOf(loom::readPaper(text, paperPath).problems) == std::vector<P>{
+        {"alias-duplicate", 2, "`smithjones24` is the key of SmithJones24 itself (keys compare ignoring case, A3), so it "
+                               "can't be one of its old keys."},
+        {"alias-duplicate", 2, "`smithjones23` and `SmithJones23` are one old key of SmithJones24 (keys compare ignoring "
+                               "case, A3); keep one."},
+        {"alias-duplicate", 2, "`SmithJones24` is the key of SmithJones24 itself (keys compare ignoring case, A3), so it "
+                               "can't be one of its old keys."},
+        {"bad-value", 2, "`aliases` can't list `SmithJones23` twice."},
+    });
+}
+
 TEST_CASE("arxiv_id is an arXiv identifier without its version (A4)", "[papers]")
 {
     // Specs/m1-core.md, "Papers", `[[versions]]`, A4: `YYMM.NNNN` from April 2007 to December
@@ -467,7 +489,7 @@ TEST_CASE("arxiv_id is an arXiv identifier without its version (A4)", "[papers]"
         const QString value = QString::fromLatin1(bad).replace(QStringLiteral("\\n"), QStringLiteral("\n"));
         INFO(bad);
         CHECK(problemsOf(withId(QString::fromLatin1(bad)).problems) == std::vector<P>{
-            {"bad-value", 19, "`arxiv-v1.arxiv_id` can't be `" + value + "`; it must be one of an arXiv identifier such as "
+            {"bad-value", 19, "`arxiv-v1.arxiv_id` can't be `" + value + "`; it must be an arXiv identifier such as "
                               "`2503.01234` or `math/0601001`, without `vN`."}});
     }
 }
@@ -488,7 +510,7 @@ TEST_CASE("primary_class is an arXiv category", "[papers]")
         const QString value = QString::fromLatin1(bad).replace(QStringLiteral("\\n"), QStringLiteral("\n"));
         INFO(bad);
         CHECK(problemsOf(withClass(QString::fromLatin1(bad)).problems) == std::vector<P>{
-            {"bad-value", 22, "`arxiv-v1.primary_class` can't be `" + value + "`; it must be one of an arXiv category such as "
+            {"bad-value", 22, "`arxiv-v1.primary_class` can't be `" + value + "`; it must be an arXiv category such as "
                               "`math.AP` or `hep-th`."}});
     }
 }
@@ -546,6 +568,88 @@ TEST_CASE("A date Qt can't hold, the year 0, is reported and the entry isn't rew
         {"bad-value", 9, "`locators.arxiv-v1.checked_against_pdf` can't be `0000-10-18`; it must be one of the dates from "
                          "0001-01-01 on."}});
     CHECK_FALSE(stubReading.lossless);
+}
+
+TEST_CASE("A CRLF paper.toml or stub reads as an LF one", "[papers]")
+{
+    QByteArray text = smithJones24();
+    text.replace("\n", "\r\n");
+    const loom::PaperReading reading = loom::readPaper(text, paperPath);
+    CHECK(problemsOf(reading.problems).empty());
+    CHECK(reading.lossless);
+    CHECK(loom::formatPaper(reading.document) == smithJones24());
+
+    QByteArray stub = stubToml("7RT2", "theorem", true);
+    const QByteArray lf = stub;
+    stub.replace("\n", "\r\n");
+    const loom::StubReading stubReading = loom::readStub(stub, "Papers/SmithJones24/Statements/7RT2.toml");
+    CHECK(problemsOf(stubReading.problems).empty());
+    CHECK(loom::formatStub(stubReading.document) == lf);
+}
+
+TEST_CASE("Non-ASCII names and a multi-line summary write back as they were read", "[papers]")
+{
+    QByteArray text = smithJones24();
+    text.replace("{ last = \"Jones\", first = \"Bob\" }", QString::fromUtf8("{ last = \"Ó Súilleabháin\", first = \"Siobhán\" }").toUtf8());
+    text.replace("summary = \"Proves energy decay for weak solutions of the model system with L^2 data.\"\n",
+                 "summary = \"\"\"\nProves energy decay.\nAlso: $\\\\|u\\\\|_2 \\\\le C$.\"\"\"\n");
+    const loom::PaperReading reading = loom::readPaper(text, paperPath);
+    CHECK(problemsOf(reading.problems).empty());
+    CHECK(reading.document.summary == "Proves energy decay.\nAlso: $\\|u\\|_2 \\le C$.");
+    CHECK(reading.document.work.authors->names()[1].last == QString::fromUtf8("Ó Súilleabháin"));
+    CHECK(loom::readPaper(loom::formatPaper(reading.document), paperPath).document.summary == reading.document.summary);
+    CHECK(loom::formatPaper(loom::readPaper(loom::formatPaper(reading.document), paperPath).document)
+          == loom::formatPaper(reading.document));
+    CHECK(loom::formatPaper(reading.document).contains(QString::fromUtf8("last = \"Ó Súilleabháin\", first = \"Siobhán\"").toUtf8()));
+}
+
+TEST_CASE("Tables that aren't tables, and names that aren't names", "[papers]")
+{
+    // Each is reported, and the entry isn't rewritten.
+    const QByteArray names = "{ last = \"Smith\", first = \"Alice\" }, { last = \"Jones\", first = \"Bob\" }";
+    const std::pair<QByteArray, QByteArray> cases[] = {
+        {names, "\"Smith\", { last = \"Jones\", first = \"Bob\" }"},
+        {names, "{ last = \"Smith\", first = \"Alice\", middle = \"B\" }, { last = \"Jones\", first = \"Bob\" }"},
+    };
+    for (const auto& [from, to] : cases) {
+        QByteArray text = smithJones24();
+        REQUIRE(text.contains(from));
+        text.replace(from, to);
+        INFO(text.toStdString());
+        const loom::PaperReading reading = loom::readPaper(text, paperPath);
+        CHECK_FALSE(reading.problems.empty());
+        CHECK_FALSE(reading.lossless);
+    }
+
+    const loom::PaperReading flat = loom::readPaper(
+        "key = \"Smith24\"\ncite = \"published\"\nrelevance = 1\ncreated = 2026-10-18\nwork = \"article\"\nversions = 3\n", paperPath);
+    CHECK(problemsOf(flat.problems) == std::vector<P>{
+        {"cite-unknown", 2, "`cite` names `published`, which isn't one of this paper's versions."},
+        {"wrong-type", 5, "`work` should be a table, `[work]`, not a string."},
+        {"wrong-type", 6, "`versions` should be a list of versions, each `[[versions]]`, not a whole number."},
+    });
+    CHECK_FALSE(flat.lossless);
+}
+
+TEST_CASE("A renumbering needs checked, and labels that are strings", "[papers]")
+{
+    QByteArray text = smithJones24();
+    REQUIRE(text.contains("published = \"(2.8)\"\nchecked = false\n"));
+    QByteArray unchecked = text;
+    unchecked.replace("published = \"(2.8)\"\nchecked = false\n", "published = \"(2.8)\"\n");
+    const std::vector<P> missing = problemsOf(loom::readPaper(unchecked, paperPath).problems);
+    REQUIRE(missing.size() == 1);
+    CHECK(std::get<0>(missing[0]) == "missing-field");
+
+    QByteArray number = text;
+    number.replace("published = \"(2.8)\"", "published = 28");
+    const loom::PaperReading reading = loom::readPaper(number, paperPath);
+    // The label that isn't a string is dropped, which leaves the entry with one label.
+    CHECK(problemsOf(reading.problems) == std::vector<P>{
+        {"bad-value", 46, "A `[[renumbering]]` entry needs the item's label in two or more versions."},
+        {"wrong-type", 48, "`renumbering.published` should be a string: the item's label in that version, not a whole number."},
+    });
+    CHECK_FALSE(reading.lossless);
 }
 
 TEST_CASE("A draft without a key is named by its file in messages", "[papers]")

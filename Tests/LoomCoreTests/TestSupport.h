@@ -11,13 +11,16 @@
 
 #include <catch2/catch_tostring.hpp>
 
-/// Shows QString and QStringList values in Catch2's failure messages, as UTF-8.
+/// Shows QString values in Catch2's failure messages, as UTF-8; without it Catch2 prints `{?}`.
 template <>
 struct Catch::StringMaker<QString> {
+    /// @returns The value in double quotes, so empty strings and edge spaces show. No side effects.
     static std::string convert(const QString& value) { return '"' + value.toStdString() + '"'; }
 };
+/// Shows QStringList values in Catch2's failure messages, as UTF-8.
 template <>
 struct Catch::StringMaker<QStringList> {
+    /// @returns The elements joined by `, ` in brackets. No side effects.
     static std::string convert(const QStringList& value) { return '[' + value.join(u", ").toStdString() + ']'; }
 };
 

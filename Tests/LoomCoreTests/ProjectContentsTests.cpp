@@ -184,6 +184,61 @@ TEST_CASE("A statement isn't refuted by one of its own proofs", "[contents]")
     });
 }
 
+TEST_CASE("Stubs share the tags and aliases of statements, and a definition stub isn't a premise", "[contents][papers]")
+{
+    // Specs/m1-core.md, "IDs": tags and aliases are unique across statements and stubs; D5:
+    // only provable kinds are premises, from a paper too.
+    const ProjectFixture project;
+    project.write("Papers/SmithJones24/paper.toml", loomtest::smithJones24());
+    project.write("Papers/SmithJones24/Sessions/2026-10-18/notes.md", "Notes.\n");
+    project.write("Papers/SmithJones24/Statements/4KX7.toml", loomtest::stubToml("4KX7", "theorem", true));
+    project.write("Papers/SmithJones24/Statements/7RT2.toml",
+                  loomtest::stubToml("7RT2", "theorem", true, "aliases = [\"thm:energy-decay\"]\n"));
+    project.write("Papers/SmithJones24/Statements/3WQ6.toml", loomtest::stubToml("3WQ6", "definition", true));
+    project.statement("4KX7", "theorem", "aliases = [\"thm:energy-decay\"]\n");
+    project.statement("5HN8", "lemma");
+    project.proof("5HN8", "5HN8.a", "5HN8", "[\"3WQ6\"]");
+
+    std::vector<std::pair<QString, QString>> found;
+    for (const P& problem : problemsOf(project))
+        found.emplace_back(std::get<0>(problem), std::get<1>(problem));
+    CHECK(found == std::vector<std::pair<QString, QString>>{
+        {"Papers/SmithJones24/Statements/4KX7.toml", "id-duplicate"},
+        {"Papers/SmithJones24/Statements/7RT2.toml", "alias-duplicate"},
+        {"Proofs/5HN8/5HN8.a.tex", "premise-no-status"},
+    });
+}
+
+TEST_CASE("A folder inside a proof folder and a hidden file in Statements/ are stray", "[contents]")
+{
+    const ProjectFixture project;
+    project.statement("4KX7", "theorem");
+    project.proof("4KX7", "4KX7.a", "4KX7", "[]");
+    project.write("Proofs/4KX7/old/4KX7.a.tex", "Old.\n");
+    project.write("Statements/.4KX7.tex.swp", "swap");
+    std::vector<std::pair<QString, QString>> found;
+    for (const P& problem : problemsOf(project))
+        found.emplace_back(std::get<0>(problem), std::get<1>(problem));
+    CHECK(found == std::vector<std::pair<QString, QString>>{
+        {"Proofs/4KX7/old", "stray-file"},
+        {"Statements/.4KX7.tex.swp", "stray-file"},
+    });
+}
+
+TEST_CASE("IDs typed by a person: Crockford's look-alikes and a stub's alias", "[contents][ids]")
+{
+    const ProjectFixture project;
+    project.statement("40K1", "lemma");
+    project.write("Papers/SmithJones24/paper.toml", loomtest::smithJones24());
+    project.write("Papers/SmithJones24/Statements/7RT2.toml",
+                  loomtest::stubToml("7RT2", "theorem", true, "aliases = [\"thm:smith-1.2\"]\n"));
+    const loom::ProjectContents contents = loom::loadContents(project.root).contents;
+    CHECK(loom::resolveStatement(contents, "4oKl") == "40K1");
+    CHECK(loom::resolveStatement(contents, "4OkI") == "40K1");
+    CHECK(loom::resolveStatement(contents, "7rt2") == "7RT2");
+    CHECK(loom::resolveStatement(contents, "thm:smith-1.2") == "7RT2");
+}
+
 TEST_CASE("A statement file that resolves outside the project isn't read", "[contents][paths]")
 {
     const ProjectFixture project;

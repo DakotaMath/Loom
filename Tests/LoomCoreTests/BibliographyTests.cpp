@@ -40,6 +40,8 @@ loom::Paper paperOf(const QByteArray& key, const QByteArray& type, const std::ve
     return reading.document;
 }
 
+/// A paper's BibTeX entry, for a paper whose fields are all verified: it fails the test if the
+/// entry is skipped or warns, so each exact-output test checks only the text.
 QString entryOf(const loom::Paper& paper)
 {
     const loom::BibEntry entry = loom::bibEntry(paper);
@@ -232,6 +234,57 @@ TEST_CASE("BibTeX: a % after a LaTeX line break \\\\ is escaped", "[bib]")
     CHECK(loom::escapeBibValue("A\\\\% B") == "A\\\\\\% B");
     CHECK(loom::escapeBibValue("A\\\\\\% B") == "A\\\\\\% B");
     CHECK(loom::escapeBibValue("Line\\\\& more") == "Line\\\\\\& more");
+}
+
+TEST_CASE("BibTeX: an entry whose cite names no version is skipped", "[bib]")
+{
+    loom::Paper paper = paperOf("Smith24", "article", {{"year", "2024"}});
+    paper.cite = "arxiv-v9";
+    const loom::BibEntry entry = loom::bibEntry(paper);
+    CHECK(entry.text.isEmpty());
+    CHECK(entry.error == "Smith24's `cite` names `arxiv-v9`, which isn't one of its versions, so its BibTeX entry was left out of refs.bib.");
+}
+
+TEST_CASE("BibTeX: a talk with a date but no venue", "[bib]")
+{
+    const loom::Paper paper = paperOf("Smith09", "talk", {{"date", "2009-03-02"}});
+    CHECK(entryOf(paper) == "@misc{Smith09,\n  author = {Smith, Alice},\n  title = {On $L^2$ decay},\n  note = {2009-03-02},\n"
+                            "  year = {2009},\n}\n");
+}
+
+TEST_CASE("BibTeX: display math between $$ pairs is math, not two empty inline maths", "[bib]")
+{
+    // Read as two `$` toggles, `$$` would leave the formula outside math, and escape its `%`.
+    CHECK(loom::escapeBibValue("$$a % b$$ and 50%") == "$$a % b$$ and 50\\%");
+    CHECK(loom::escapeBibValue("$$x & y$$") == "$$x & y$$");
+    // Two inline formulas side by side still close and open as written.
+    CHECK(loom::escapeBibValue("$a$$b$ & c") == "$a$$b$ \\& c");
+    CHECK(loom::escapeBibValue("\\$$x$ & y") == "\\$$x$ \\& y");
+}
+
+TEST_CASE("BibTeX: a value ending in a lone backslash skips its entry", "[bib]")
+{
+    // Written as `{J. Ex.\}`, the backslash would escape the closing brace for LaTeX.
+    const loom::Paper broken = paperOf("Smith24", "article", {{"journal", "\"J. Ex.\\\\\""}, {"year", "2024"}});
+    const loom::BibEntry entry = loom::bibEntry(broken);
+    CHECK(entry.text.isEmpty());
+    CHECK(entry.error == "Smith24's `journal` ends in a `\\` that would escape its closing brace, so its BibTeX entry "
+                         "was left out of refs.bib.");
+
+    // Two backslashes are a LaTeX line break, which is fine.
+    const loom::Paper fine = paperOf("Smith24", "article", {{"journal", "\"J. Ex.\\\\\\\\\""}, {"year", "2024"}});
+    CHECK(entryOf(fine).contains("  journal = {J. Ex.\\\\},\n"));
+}
+
+TEST_CASE("BibTeX: an unverified type isn't listed, since it isn't written as a field", "[bib]")
+{
+    QByteArray text = loomtest::smithJones24();
+    const QByteArray verifiedType = "type = { value = \"article\", source = \"https://doi.org/10.0000/jea.2024.17\", verified = 2026-11-03 }";
+    REQUIRE(text.contains(verifiedType));
+    text.replace(verifiedType, "type = { value = \"article\", source = \"https://doi.org/10.0000/jea.2024.17\", verified = false }");
+    const loom::BibEntry entry = loom::bibEntry(loom::readPaper(text, "Papers/SmithJones24/paper.toml").document);
+    CHECK(entry.error.isEmpty());
+    CHECK(entry.unverified.isEmpty());
 }
 
 TEST_CASE("BibTeX: entries in key order, and a warning naming each unverified field used", "[bib]")

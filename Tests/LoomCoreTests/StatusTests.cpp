@@ -286,6 +286,56 @@ TEST_CASE("Explanations of less common cases", "[status][explanations]")
     }
 }
 
+TEST_CASE("Explanations: a premise without a status", "[status][explanations]")
+{
+    // The premise is an error of its own (`premise-no-status`); status still says plainly what
+    // the proof rests on. (A premise that doesn't exist leaves no fingerprint, so no check of
+    // the proof can count, and it never gets as far as conditional.)
+    const ProjectFixture project;
+    project.statement("2M9Q", "definition");
+    project.statement("9D3F", "lemma");
+    project.proof("9D3F", "9D3F.a", "9D3F", "[\"2M9Q\"]");
+    makeChecked(project, "9D3F.a", 2);
+    const loom::ProjectGraph graph = graphOf(project.root);
+    CHECK(statusOf(graph, "9D3F") == Status::Conditional);
+    CHECK(explanationOf(graph, "9D3F")
+          == "9D3F conditional: 9D3F.a is complete and checked, but rests on 2M9Q, which is a definition and has no status.");
+}
+
+TEST_CASE("The deciding proof: `z` comes before `aa`", "[status][explanations]")
+{
+    // Specs/m1-core.md, "Tie-breaks": the lowest letter, `z` before `aa`, not byte order.
+    const ProjectFixture project;
+    project.statement("4KX7", "theorem");
+    project.proof("4KX7", "4KX7.aa", "4KX7", "[]");
+    project.proof("4KX7", "4KX7.z", "4KX7", "[]");
+    CHECK(graphOf(project.root).statement("4KX7")->decidingProof == "4KX7.z");
+}
+
+TEST_CASE("An empty project has no statements, and every count is 0", "[status]")
+{
+    const ProjectFixture project;
+    const loom::ProjectGraph graph = graphOf(project.root);
+    CHECK(graph.statements.empty());
+    CHECK(graph.proofs.empty());
+    for (const Status status : {Status::Proved, Status::Conditional, Status::Unchecked, Status::Open, Status::False})
+        CHECK(graph.count(status) == 0);
+}
+
+TEST_CASE("A proof filed under a definition or a stub changes no status", "[status]")
+{
+    // D5: only provable kinds have proofs; such a file is an error, and proves nothing.
+    const ProjectFixture project;
+    project.write("Papers/SmithJones24/paper.toml", loomtest::smithJones24());
+    project.write("Papers/SmithJones24/Statements/3WQ6.toml", loomtest::stubToml("3WQ6", "lemma", false));
+    project.statement("2M9Q", "definition");
+    project.proof("2M9Q", "2M9Q.a", "2M9Q", "[]");
+    project.proof("3WQ6", "3WQ6.a", "3WQ6", "[]");
+    const loom::ProjectGraph graph = graphOf(project.root);
+    CHECK(statusOf(graph, "2M9Q") == Status::None);
+    CHECK(statusOf(graph, "3WQ6") == Status::Extracted);
+}
+
 TEST_CASE("Levels rank complete, then sketch, then heuristic", "[status][levels]")
 {
     const ProjectFixture project;
@@ -318,6 +368,11 @@ TEST_CASE("The rules that come before proofs", "[status][rules]")
         project.statement("G5TZ", "proposition");
         project.proof("G5TZ", "G5TZ.a", "G5TZ", "[]");
         project.statement("F2NS", "lemma", "refuted_by = \"G5TZ.a\"\n");
+        CHECK(statusOf(graphOf(project.root), "F2NS") == Status::Open);
+    }
+    SECTION("refuted_on without refuted_by isn't false")
+    {
+        project.statement("F2NS", "lemma", "refuted_on = 2026-11-06\n");
         CHECK(statusOf(graphOf(project.root), "F2NS") == Status::Open);
     }
     SECTION("a refuted statement with a checked proof is false, and not proved")
@@ -389,6 +444,40 @@ TEST_CASE("A cycle of premises proves nothing on its own, and is an error", "[st
         CHECK(result.outcome == loom::ChangeOutcome::Refused);
         CHECK(result.code == "premise-cycle");
     }
+}
+
+TEST_CASE("Premise cycles: a self-loop, several cycles, and the order they are reported in", "[status][cycles]")
+{
+    // Specs/m1-core.md, "Cycles": each cycle once, from its smallest tag, on the first proof (in
+    // path order) of that statement that lists the next one. A proof using the statement it
+    // proves is `premise-self`, not a cycle.
+    const ProjectFixture project;
+    for (const char* tag : {"2M9Q", "3WQ6", "4KX7", "5HN8", "6BWT", "7RT2", "9D3F"})
+        project.statement(tag, "lemma");
+    project.proof("2M9Q", "2M9Q.a", "2M9Q", "[\"2M9Q\"]");          // self-loop
+    project.proof("9D3F", "9D3F.a", "9D3F", "[\"6BWT\"]");          // 6BWT → 7RT2 → 9D3F → 6BWT
+    project.proof("7RT2", "7RT2.a", "7RT2", "[\"9D3F\"]");
+    project.proof("6BWT", "6BWT.a", "6BWT", "[]");
+    project.proof("6BWT", "6BWT.b", "6BWT", "[\"7RT2\"]");
+    project.proof("6BWT", "6BWT.c", "6BWT", "[\"7RT2\"]");
+    project.proof("5HN8", "5HN8.a", "5HN8", "[\"3WQ6\"]");          // 3WQ6 → 4KX7 → 5HN8 → 3WQ6
+    project.proof("4KX7", "4KX7.a", "4KX7", "[\"5HN8\"]");
+    project.proof("3WQ6", "3WQ6.a", "3WQ6", "[\"4KX7\"]");
+
+    const loom::ProjectGraph graph = graphOf(project.root);
+    CHECK(graph.cycles == std::vector<QStringList>{{"3WQ6", "4KX7", "5HN8"}, {"6BWT", "7RT2", "9D3F"}});
+
+    const loom::OpenedProject opened = loom::openProject(project.root);
+    std::vector<std::tuple<QString, QString, int, QString>> found;
+    for (const loom::Problem& problem : loom::checkContents(opened.config, loom::loadContents(project.root).contents))
+        found.emplace_back(problem.code, problem.file, problem.line, problem.message);
+    CHECK(found == std::vector<std::tuple<QString, QString, int, QString>>{
+        {"premise-self", "Proofs/2M9Q/2M9Q.a.tex", 4, "2M9Q.a uses 2M9Q, the statement it proves, as a premise."},
+        {"premise-cycle", "Proofs/3WQ6/3WQ6.a.tex", 4,
+         "Premises go round in a circle: 3WQ6 → 4KX7 → 5HN8 → 3WQ6. A statement can't help prove itself."},
+        {"premise-cycle", "Proofs/6BWT/6BWT.b.tex", 4,
+         "Premises go round in a circle: 6BWT → 7RT2 → 9D3F → 6BWT. A statement can't help prove itself."},
+    });
 }
 
 TEST_CASE("Changing one proof or check recomputes everything downstream", "[status][recompute]")

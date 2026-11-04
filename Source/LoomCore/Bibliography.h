@@ -22,7 +22,8 @@ struct BibEntry {
     /// cited version's and `[work]`'s by name (`journal`, `title`), another version's as
     /// `<version>.<name>` (`arxiv-v2.arxiv_id`).
     QStringList unverified;
-    /// When the entry is skipped (a value with unbalanced braces, or `cite` naming no version), why.
+    /// When the entry is skipped (a value with unbalanced braces or ending in a lone `\`, or
+    /// `cite` naming no version), why.
     QString error;
 };
 
@@ -34,7 +35,9 @@ struct BibEntry {
 /// arXiv version's identifier without its version as `eprint`, with `archiveprefix`,
 /// `primaryclass` and `note = {arXiv:…}`; an arXiv-only paper is `@misc` with the identifier
 /// with its version. In values, `&`, `%` and `#` that aren't already escaped and aren't inside
-/// `$…$` are escaped with `\`; a value with unbalanced braces skips the entry.
+/// `$…$` are escaped with `\`; a value with unbalanced braces, or ending in a lone `\`, skips
+/// the entry. Every field written whose `verified` is `false` is listed; `type`, which picks the
+/// entry type but isn't written, isn't.
 /// @returns The entry, its unverified fields, or why it was skipped. No side effects.
 BibEntry bibEntry(const Paper& paper);
 
@@ -61,9 +64,15 @@ struct BibSource {
 Bibliography formatBibliography(const std::vector<BibSource>& papers);
 
 /// Escapes a BibTeX value: `&`, `%` and `#` that aren't already escaped and aren't inside `$…$`
-/// get a `\`. A character is already escaped when an odd number of backslashes comes before it;
-/// after an even number (`\\`, a LaTeX line break) it isn't. No side effects.
+/// or `$$…$$` get a `\`. A character is already escaped when an odd number of backslashes comes
+/// before it; after an even number (`\\`, a LaTeX line break) it isn't. `$$` outside inline
+/// math opens or closes display math as one delimiter. No side effects.
 QString escapeBibValue(const QString& value);
+
+/// Whether a value ends in an odd run of backslashes, whose last would escape the `}` that
+/// closes the BibTeX field (`{foo\}`). Such a value skips its entry, as unbalanced braces do.
+/// No side effects.
+bool endsInEscape(const QString& value);
 
 /// Whether a value's braces are balanced: no `}` before its `{`, and none left open. Every brace
 /// counts, `\{` and `\}` too, as BibTeX counts them (A6). No side effects.

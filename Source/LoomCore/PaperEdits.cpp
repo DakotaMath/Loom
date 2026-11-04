@@ -59,7 +59,8 @@ struct Rename {
 };
 
 /// Renames a paper in the model: its folder, key and aliases, and its stubs' paths (Specs/m1-core.md,
-/// "The key rule", step 5: "the folder is renamed, `key` changes, the old key is added to `aliases`").
+/// "The key rule", step 5: "the folder is renamed, `key` changes, the old key is added to `aliases`";
+/// unless only its case changes, since keys compare ignoring case, A3).
 /// @returns The rename to carry out, or nothing after setting `result` (the paper can't be rewritten).
 std::optional<Rename> renameInModel(const QString& root, ProjectContents& model, const QString& from, const QString& to,
                                     ChangeResult& result)
@@ -71,9 +72,13 @@ std::optional<Rename> renameInModel(const QString& root, ProjectContents& model,
     }
     Paper paper = file->reading.document;
     Rename rename{from, paper.key, to, {}};
-    if (!paper.key.isEmpty() && !paper.aliases.contains(paper.key))
+    // Keys compare ignoring case (A3), so a rename that only changes the key's case keeps no old
+    // key: `smithjones24` would be SmithJones24's own key, not an old one. For the same reason
+    // an old key equal to the new key in any case goes.
+    const bool sameKey = paper.key.compare(to, Qt::CaseInsensitive) == 0;
+    if (!paper.key.isEmpty() && !sameKey && !paper.aliases.contains(paper.key, Qt::CaseInsensitive))
         paper.aliases << paper.key;
-    paper.aliases.removeAll(to);
+    paper.aliases.removeIf([&](const QString& alias) { return alias.compare(to, Qt::CaseInsensitive) == 0; });
     paper.key = to;
     rename.bytes = formatPaper(paper);
     file->folder = to;
@@ -548,12 +553,22 @@ BibliographyBuilt buildBibliography(const QString& root, const QString& out, con
 
     std::vector<BibSource> papers;
     for (const PaperFile& file : session->contents.papers) {
-        if (file.reading.parsed && !file.reading.document.key.isEmpty()) {
-            papers.push_back({file.path, file.reading.document});
+        if (!file.reading.parsed || file.reading.document.key.isEmpty()) {
+            built.problems.push_back({Severity::Error, QStringLiteral("bib-entry-skipped"), file.path, 1,
+                QStringLiteral("Loom can't read %1 (run `loom validate`), so its BibTeX entry was left out of refs.bib.").arg(file.path)});
             continue;
         }
-        built.problems.push_back({Severity::Error, QStringLiteral("bib-entry-skipped"), file.path, 1,
-            QStringLiteral("Loom can't read %1 (run `loom validate`), so its BibTeX entry was left out of refs.bib.").arg(file.path)});
+        // An entry with errors of its own is skipped, as one with unbalanced braces is: a value
+        // Loom has reported as wrong (an `arxiv_id` with `vN`, say) would go into refs.bib as is.
+        const bool hasErrors = std::any_of(file.reading.problems.begin(), file.reading.problems.end(),
+                                           [](const Problem& problem) { return problem.severity == Severity::Error; });
+        if (hasErrors) {
+            built.problems.push_back({Severity::Error, QStringLiteral("bib-entry-skipped"), file.path, 1,
+                QStringLiteral("%1's paper.toml has errors (`loom validate` lists them), so its BibTeX entry was left out "
+                               "of refs.bib.").arg(file.reading.document.key)});
+            continue;
+        }
+        papers.push_back({file.path, file.reading.document});
     }
     Bibliography bib = formatBibliography(papers);
     built.problems.insert(built.problems.end(), bib.problems.begin(), bib.problems.end());
