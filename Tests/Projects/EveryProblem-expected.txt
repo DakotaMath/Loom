@@ -68,7 +68,6 @@ unknown-top-level Junk.txt:1: warning: Loom doesn't know `Junk.txt` at the top o
 paper-key-rule Papers/Brown20/paper.toml:1: warning: By the key rule this paper's key is `Brown20`, not `Brown21`. Run `loom rekey Brown21`.
 field-expected Papers/Garcia25/paper.toml:11: warning: Garcia25's published version has no `number`; articles usually have one.
 session-missing Papers/Garcia25/paper.toml:60: warning: Reading of 2026-11-04 links `Sessions/2026-11-04`, which doesn't exist.
-paper-key-rule Papers/Nobody19/paper.toml:1: warning: Can't make a key for this paper: it has no authors or editors.
 check-record-not-found Proofs/CK1A/CK1A.a.checks.toml:44: warning: Check 7 links `Records/2026-11/job-9999.md`, which doesn't exist.
 verbose-stale Proofs/K3MA/K3MA.a.verbose.tex:3: warning: The verbose version of K3MA.a was written from an older version of the proof.
 premise-false Proofs/PF1S/PF1S.a.tex:4: warning: PF1S.a uses RF4P, which is false.

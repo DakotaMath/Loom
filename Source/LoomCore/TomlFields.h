@@ -6,6 +6,7 @@
 
 #include "LoomCore/Problem.h"
 
+#include <QDate>
 #include <QString>
 
 #include <toml++/toml.hpp>
@@ -82,6 +83,14 @@ struct FieldChecker {
     /// Reports a value of the wrong type at the value's line.
     /// @param expected What it should be, e.g. `a date`.
     void wrongType(const QString& field, const QString& expected, const toml::node& node);
+
+    /// Converts a TOML date to a QDate. toml++ reads years 0000 to 9999 and QDate has no year 0,
+    /// so such a date is reported as `bad-value` at the value's line rather than dropped without
+    /// a word; the caller then marks the reading lossy, so the file isn't rewritten without it.
+    /// @param field The field's name in the message, e.g. `created`.
+    /// @param node  The value; it must be a date (`node.as_date()` not null).
+    /// @returns The date, or an invalid QDate after reporting it.
+    QDate date(const QString& field, const toml::node& node);
 
     /// Reads a string field of `table`, reporting it if it is missing, not a string, or empty
     /// when it mustn't be (reportEmpty()).

@@ -7,12 +7,16 @@ namespace loom {
 
 namespace {
 
-/// The arXiv version number of a version: its `arxiv_version`, else the N of `arxiv-v<N>`.
-qint64 arxivNumber(const PaperVersion& version)
+/// Authors or editors as BibTeX reads them (Specs/m1-core.md, "The bibliography", A5): `Last,
+/// First` joined by ` and `; a name whose `first` is empty is its surname in braces, `{Garcia
+/// Lopez}`, since BibTeX reads a name of several words without a comma as "First von Last".
+/// No side effects.
+QString bibNames(const std::vector<PersonName>& names)
 {
-    if (const PaperField* field = version.field(u"arxiv_version"); field && std::holds_alternative<qint64>(field->value))
-        return std::get<qint64>(field->value);
-    return version.id.mid(7).toLongLong();
+    QStringList out;
+    for (const PersonName& name : names)
+        out << (name.first.isEmpty() ? u'{' + name.last + u'}' : name.last + QStringLiteral(", ") + name.first);
+    return out.join(QStringLiteral(" and "));
 }
 
 /// Builds one entry's fields in order, noting the unverified fields it uses.
@@ -46,7 +50,8 @@ struct EntryBuilder {
         if (!field || field->text().isEmpty())
             return;
         used(*field, name);
-        text(bibName, field->text());
+        const bool names = std::holds_alternative<std::vector<PersonName>>(field->value);
+        text(bibName, names ? bibNames(field->names()) : field->text());
     }
 
     /// Adds a field of the cited version.
@@ -91,7 +96,7 @@ struct EntryBuilder {
     {
         const PaperVersion* newest = nullptr;
         for (const PaperVersion& v : paper.versions) {
-            if (v.kind == u"arxiv" && (!newest || arxivNumber(v) > arxivNumber(*newest)))
+            if (v.kind == u"arxiv" && (!newest || v.arxivNumber() > newest->arxivNumber()))
                 newest = &v;
         }
         if (!newest)
@@ -114,27 +119,29 @@ QString escapeBibValue(const QString& value)
     QString out;
     out.reserve(value.size());
     bool math = false;
-    for (qsizetype i = 0; i < value.size(); ++i) {
-        const QChar c = value[i];
-        const bool escaped = i > 0 && value[i - 1] == u'\\';
+    // The backslashes just before the character: an odd run escapes it, an even run is that many
+    // halves of LaTeX line breaks (`\\`), so `A\\% B` still needs its `%` escaped.
+    qsizetype backslashes = 0;
+    for (const QChar c : value) {
+        const bool escaped = backslashes % 2 == 1;
         if (c == u'$' && !escaped)
             math = !math;
         if ((c == u'&' || c == u'%' || c == u'#') && !escaped && !math)
             out += u'\\';
         out += c;
+        backslashes = c == u'\\' ? backslashes + 1 : 0;
     }
     return out;
 }
 
 bool bracesBalanced(const QString& value)
 {
+    // A6: BibTeX's parser counts every brace, `\{` and `\}` too, so this does.
     int depth = 0;
-    for (qsizetype i = 0; i < value.size(); ++i) {
-        if (i > 0 && value[i - 1] == u'\\')
-            continue;
-        if (value[i] == u'{')
+    for (const QChar c : value) {
+        if (c == u'{')
             ++depth;
-        else if (value[i] == u'}' && --depth < 0)
+        else if (c == u'}' && --depth < 0)
             return false;
     }
     return depth == 0;
@@ -169,7 +176,7 @@ BibEntry bibEntry(const Paper& paper)
             b.used(*id, QStringLiteral("arxiv_id"));
             if (const PaperField* number = cited->field(u"arxiv_version"))
                 b.used(*number, QStringLiteral("arxiv_version"));
-            identifier += u'v' + QString::number(arxivNumber(*cited));
+            identifier += u'v' + QString::number(cited->arxivNumber());
             b.text(QStringLiteral("eprint"), identifier);
             b.text(QStringLiteral("archiveprefix"), QStringLiteral("arXiv"));
             b.version(QStringLiteral("primaryclass"), u"primary_class");
@@ -253,17 +260,19 @@ BibEntry bibEntry(const Paper& paper)
     return entry;
 }
 
-Bibliography formatBibliography(const std::vector<Paper>& papers)
+Bibliography formatBibliography(const std::vector<BibSource>& sources)
 {
-    std::vector<const Paper*> sorted;
-    for (const Paper& paper : papers)
-        sorted.push_back(&paper);
-    std::sort(sorted.begin(), sorted.end(), [](const Paper* a, const Paper* b) { return a->key < b->key; });
+    std::vector<const BibSource*> sorted;
+    for (const BibSource& source : sources)
+        sorted.push_back(&source);
+    std::sort(sorted.begin(), sorted.end(), [](const BibSource* a, const BibSource* b) { return a->paper.key < b->paper.key; });
 
     Bibliography bib;
     QStringList entries;
-    for (const Paper* paper : sorted) {
-        const QString file = QStringLiteral("Papers/%1/paper.toml").arg(paper->key);
+    for (const BibSource* source : sorted) {
+        // The file that is there: a folder may disagree with its key (`paper-key-mismatch`).
+        const QString& file = source->path;
+        const Paper* paper = &source->paper;
         const BibEntry entry = bibEntry(*paper);
         if (!entry.error.isEmpty()) {
             bib.problems.push_back({Severity::Error, QStringLiteral("bib-entry-skipped"), file, 1, entry.error});

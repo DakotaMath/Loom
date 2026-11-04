@@ -255,9 +255,10 @@ TEST_CASE("Required fields of paper.toml, and a draft that leaves out key, cite 
     };
     CHECK(problemsOf(loom::readPaper(text, "Papers/Smith24/paper.toml").problems) == expected);
 
+    // A draft is named by its file, whatever folder it is in.
     const std::vector<P> draft = {
         {"missing-field", 1, "`versions` is missing; every paper needs one."},
-        {"authors-missing", 3, "Smith24 has no authors."},
+        {"authors-missing", 3, "paper.toml has no authors."},
     };
     CHECK(problemsOf(loom::readPaper(text, "Papers/Smith24/paper.toml", false).problems) == draft);
 }
@@ -443,4 +444,117 @@ TEST_CASE("A stub needs its locators and its required fields", "[papers][stubs]"
         {"missing-field", 1, "`locators` is missing; every stub needs one."},
     };
     CHECK(problemsOf(loom::readStub("title = \"T\"\n", "Papers/SmithJones24/Statements/7RT2.toml").problems) == expected);
+}
+
+TEST_CASE("arxiv_id is an arXiv identifier without its version (A4)", "[papers]")
+{
+    // Specs/m1-core.md, "Papers", `[[versions]]`, A4: `YYMM.NNNN` from April 2007 to December
+    // 2014, `YYMM.NNNNN` from January 2015, or old-style `archive/YYMMNNN` with an optional
+    // subject class; never with `vN`.
+    const auto withId = [](const QString& id) {
+        QByteArray text = smithJones24();
+        REQUIRE(text.contains("arxiv_id = { value = \"2401.99999\""));
+        text.replace("arxiv_id = { value = \"2401.99999\"", "arxiv_id = { value = \"" + id.toUtf8() + "\"");
+        return loom::readPaper(text, paperPath);
+    };
+    for (const char* good : {"2401.99999", "0704.0001", "1412.9999", "1501.00001", "math/0601001", "math.AP/0601001",
+                             "hep-th/9901001"}) {
+        INFO(good);
+        CHECK(problemsOf(withId(QString::fromLatin1(good)).problems).empty());
+    }
+    for (const char* bad : {"2401.99999v2", "arXiv:2401.99999", "0703.0001", "1501.0001", "1412.00001", "2413.00001",
+                            "2401.9999", "math/0601001v1", "Math/0601001", "math/060100", "math/0613001", "2401.99999\\n"}) {
+        const QString value = QString::fromLatin1(bad).replace(QStringLiteral("\\n"), QStringLiteral("\n"));
+        INFO(bad);
+        CHECK(problemsOf(withId(QString::fromLatin1(bad)).problems) == std::vector<P>{
+            {"bad-value", 19, "`arxiv-v1.arxiv_id` can't be `" + value + "`; it must be one of an arXiv identifier such as "
+                              "`2503.01234` or `math/0601001`, without `vN`."}});
+    }
+}
+
+TEST_CASE("primary_class is an arXiv category", "[papers]")
+{
+    const auto withClass = [](const QString& category) {
+        QByteArray text = smithJones24();
+        REQUIRE(text.contains("primary_class = { value = \"math.AP\""));
+        text.replace("primary_class = { value = \"math.AP\"", "primary_class = { value = \"" + category.toUtf8() + "\"");
+        return loom::readPaper(text, paperPath);
+    };
+    for (const char* good : {"math.AP", "math", "hep-th", "cs.LG", "cond-mat.mes-hall", "physics.flu-dyn"}) {
+        INFO(good);
+        CHECK(problemsOf(withClass(QString::fromLatin1(good)).problems).empty());
+    }
+    for (const char* bad : {"math AP", "MATH.AP", "math.", "math.A", "math.APX", ".AP", "math.AP\\n"}) {
+        const QString value = QString::fromLatin1(bad).replace(QStringLiteral("\\n"), QStringLiteral("\n"));
+        INFO(bad);
+        CHECK(problemsOf(withClass(QString::fromLatin1(bad)).problems) == std::vector<P>{
+            {"bad-value", 22, "`arxiv-v1.primary_class` can't be `" + value + "`; it must be one of an arXiv category such as "
+                              "`math.AP` or `hep-th`."}});
+    }
+}
+
+TEST_CASE("A source that is a link but not https:// says so", "[papers]")
+{
+    QByteArray text = smithJones24();
+    const QByteArray journal = "journal = { value = \"Journal of Example Analysis\", source = \"https://doi.org/10.0000/jea.2024.17\"";
+    REQUIRE(text.contains(journal));
+    text.replace(journal, "journal = { value = \"Journal of Example Analysis\", source = \"http://www.ams.org/mathscinet\"");
+    CHECK(problemsOf(loom::readPaper(text, paperPath).problems) == std::vector<P>{
+        {"field-source", 29, "`published.journal`'s source `http://www.ams.org/mathscinet` must be an `https://` link or a "
+                             "path inside this paper's `local/` folder."}});
+}
+
+TEST_CASE("Empty bibliographic values are missing values, and keep their source", "[papers]")
+{
+    // Specs/m1-core.md, "Front matter", A2: an empty value is a missing one.
+    QByteArray text = smithJones24();
+    REQUIRE(text.contains("doi = { value = \"10.0000/jea.2024.17\""));
+    text.replace("doi = { value = \"10.0000/jea.2024.17\"", "doi = { value = \"\"");
+    text.replace("mr = { value = \"MR0000001\"", "mr = { value = \"\"");
+    text.replace("primary_class = { value = \"math.AP\"", "primary_class = { value = \"\"");
+    const loom::PaperReading reading = loom::readPaper(text, paperPath);
+    CHECK(problemsOf(reading.problems) == std::vector<P>{
+        {"missing-field", 22, "`arxiv-v1.primary_class` is empty; give it a value or leave it out."},
+        {"missing-field", 34, "`published.doi` is empty; give it a value or leave it out."},
+        {"missing-field", 35, "`published.mr` is empty; give it a value or leave it out."},
+    });
+    CHECK(reading.lossless);
+    CHECK(loom::formatPaper(reading.document) == text);
+}
+
+TEST_CASE("A date Qt can't hold, the year 0, is reported and the entry isn't rewritten", "[papers]")
+{
+    // toml++ reads the year 0 and QDate has none, so without a word the date would be lost on a rewrite.
+    QByteArray text = smithJones24();
+    text.replace("posted = { value = 2023-01-15", "posted = { value = 0000-01-15");
+    text.replace("journal = { value = \"Journal of Example Analysis\", source = \"https://doi.org/10.0000/jea.2024.17\", verified = 2026-11-03 }",
+                 "journal = { value = \"Journal of Example Analysis\", source = \"https://doi.org/10.0000/jea.2024.17\", verified = 0000-01-01 }");
+    text.replace("checked = false", "checked = 0000-01-02");
+    const loom::PaperReading reading = loom::readPaper(text, paperPath);
+    CHECK(problemsOf(reading.problems) == std::vector<P>{
+        {"bad-value", 21, "`arxiv-v1.posted.value` can't be `0000-01-15`; it must be one of the dates from 0001-01-01 on."},
+        {"bad-value", 29, "`published.journal.verified` can't be `0000-01-01`; it must be one of the dates from 0001-01-01 on."},
+        {"bad-value", 49, "`renumbering.checked` can't be `0000-01-02`; it must be one of the dates from 0001-01-01 on."},
+        {"field-expected", 16, "SmithJones24's arXiv version arxiv-v1 has no `posted`; arXiv versions usually have one."},
+    });
+    CHECK_FALSE(reading.lossless);
+
+    QByteArray stub = stubToml("7RT2", "theorem", true);
+    stub.replace("checked_against_pdf = 2026-10-18", "checked_against_pdf = 0000-10-18");
+    const loom::StubReading stubReading = loom::readStub(stub, "Papers/SmithJones24/Statements/7RT2.toml");
+    CHECK(problemsOf(stubReading.problems) == std::vector<P>{
+        {"bad-value", 9, "`locators.arxiv-v1.checked_against_pdf` can't be `0000-10-18`; it must be one of the dates from "
+                         "0001-01-01 on."}});
+    CHECK_FALSE(stubReading.lossless);
+}
+
+TEST_CASE("A draft without a key is named by its file in messages", "[papers]")
+{
+    // `loom new-paper Downloads/draft.toml`: the draft's folder says nothing about the paper.
+    const QByteArray text = "relevance = 1\n\n[work]\ntype = " + f("\"article\"") + "\ntitle = " + f("\"T\"") + "\n";
+    const std::vector<P> expected = {
+        {"missing-field", 1, "`versions` is missing; every paper needs one."},
+        {"authors-missing", 3, "draft.toml has no authors."},
+    };
+    CHECK(problemsOf(loom::readPaper(text, "C:/Users/someone/Downloads/draft.toml", false).problems) == expected);
 }
