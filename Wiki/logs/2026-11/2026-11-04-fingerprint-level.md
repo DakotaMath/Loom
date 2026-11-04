@@ -8,7 +8,7 @@ tags: [m1, fix, checks, fingerprints]
 > **Summary:** Did Dakota's decision from the M1 final review: a proof's `level` is now in its fingerprint (`loom-fingerprint-v2`, a `level` section after the header), so changing the level of a checked proof outdates its checks and `edit-proof --level` needs `--outdate-checks`, as a body change does. All 270 `ctest` tests pass on Windows.
 
 **Session model:** Opus 5.5
-**Issues and PRs:** no issue (Dakota's decision in the M1 final review); the PR from `m1/fingerprint-level`
+**Issues and PRs:** no issue (Dakota's decision in the M1 final review); #29
 
 ## Done
 - Spec (`Specs/m1-core.md`, marked A18): the fingerprint recipe gains `level\n<length>\n<level>\n` after a `loom-fingerprint-v2\n` header; `level` leaves "What isn't in it", with the reason; D3, the Proofs `level` row and the `edit-proof` row say a level change of a checked proof outdates its checks, and that `failed` on a checked proof needs both of Dakota's clicks.
