@@ -9,7 +9,7 @@ tags: [m1, formats, validation, status, checks, ids, papers, cli, toolchain]
 > **Summary:** Everything `LoomCore` and the `loom` command do in M1, precisely enough to build without guessing: the folder `loom new-project` creates, `loom.toml`, the `+++` TOML front matter, statements, proofs, IDs, check histories and their fingerprints, the status rules with a worked example, paper entries, stubs, the key rule and the BibTeX it produces, every check `loom validate` makes with its message, every `loom` subcommand, and the toolchain (MSVC, CMake, Qt 6, toml++, Catch2) with the CI matrix. Departures from `Specs/loom.md` are listed in one place.
 
 **Last verified:** 2026-11-03 · commit e5b68aa
-**Status:** Approved by Dakota on 2026-11-03
+**Status:** Approved by Dakota on 2026-11-03; amendments A1–A7 (from the M1 review) answered by Dakota on 2026-11-04
 **Milestone:** M1
 
 ## Scope
@@ -32,6 +32,19 @@ The design is approved; these are the places this spec makes it more precise in 
 | D9 | Issue #8: renaming a key "updates every reference" | Renaming a key rewrites the paper's own files and keeps the old key as an alias; it does **not** rewrite `\cite{Old}` in statement and proof bodies, which keep working through the alias | Rewriting a body changes its fingerprint and would quietly outdate every check of every proof that cites the paper |
 | D10 | Agents give `pass`, `needs-changes`, `fail`; Dakota gives `accept`, `reject` | Both give `pass`, `needs-changes`, `fail`. Dakota's `needs-changes` carries a `changes` message, which becomes a task (from M4) | Dakota's decision on the PR: one set of verdicts, and the changes he asks for go straight onto the task list |
 
+## Amendments from the M1 review
+The M1 code review (`Reviews/M1/` on branch `m1/review`) found places where the spec was silent or the code needed a rule to be fixed against. Dakota answered them on 2026-11-04; each is marked in the text where it applies.
+
+| # | Question | Answer |
+| --- | --- | --- |
+| A1 | Where the commit guard goes when git runs hooks from elsewhere (`core.hooksPath`), or the folder isn't a Loom project at the top of its repository | Refuse and write nothing; never write hooks outside the repository's own git directory (The project folder) |
+| A2 | Is an empty string in a required or naming field an error? | Yes: `missing-field`, "`{field}` is empty" (Front matter) |
+| A3 | Do keys that differ only in case collide? | Yes, everywhere keys are compared; `new-paper` never replaces an existing folder (Papers, the key rule) |
+| A4 | Which `arxiv_id` forms are valid? | `YYMM.NNNN`, `YYMM.NNNNN` and old-style, never with `vN`; else `bad-value` (Papers) |
+| A5 | How a name with an empty `first` is written in BibTeX | The surname in braces, `{Last}` (The bibliography) |
+| A6 | Do `\{` and `\}` count toward brace balance? | Yes, as in BibTeX (The bibliography) |
+| A7 | Must committed checks keep their order? | Yes, relative to each other; `check-changed` says "moved" (Checks, rule 1) |
+
 ## Decisions this spec makes
 | Decision | Choice | Why |
 | --- | --- | --- |
@@ -49,7 +62,7 @@ A project is a folder with `loom.toml` at its top. Every `loom` command finds th
 
 **What `loom new-project <folder> --name <name> [--idea <text>]` does, in order:**
 1. Refuses if `<folder>` exists and isn't empty: *"`C:\Temp\Demo` isn't empty. Loom creates projects only in a new or empty folder."* Creates `<folder>` if it doesn't exist (its parent must).
-2. Checks, before writing anything, that `git` and `git lfs` run and that git knows the user's name and email. If not, it stops with one of: *"Loom needs git, and `git` didn't run. Install Git for Windows and try again."*, *"Loom needs Git LFS, and `git lfs` didn't run. Git for Windows includes it; reinstall Git with LFS ticked."*, *"Git doesn't know your name and email yet, so Loom can't make the first commit. Run `git config --global user.name \"…\"` and `git config --global user.email …`, then try again."*
+2. Checks, before writing anything, that `git` and `git lfs` run and that git knows the user's name and email. If not, it stops with one of: *"Loom needs git, and `git` didn't run. Install Git for Windows and try again."*, *"Loom needs Git LFS, and `git lfs` didn't run. Git for Windows includes it; reinstall Git with LFS ticked."*, *"Git doesn't know your name and email yet, so Loom can't make the first commit. Run `git config --global user.name \"…\"` and `git config --global user.email …`, then try again."* It also stops, with `install-hooks`' `hooks-path-outside` message, if the user's global git config sets `core.hooksPath`, since both `git lfs install --local` and the commit guard would then write their hooks into that shared folder (A1).
 3. Writes the files below from the project kit (`Templates/project/`, compiled into `loom` as a Qt resource so `loom` is one self-contained program).
 4. Runs `git init -b main`, then `git lfs install --local` (hooks for this repo only; the user's global git config is never touched), then `loom install-hooks` (below).
 5. Stages everything and commits with the message `Create project <name>`, through the pre-commit hook like any commit.
@@ -100,6 +113,8 @@ Papers/*/local/
 - writes `.git/hooks/pre-commit`: a `sh` script (Git for Windows runs hooks with its own `sh`) that runs `loom validate --staged`, trying `loom` on `PATH` first and then the absolute path of the `loom` that installed the hook. If neither runs, the commit is refused: *"Loom's checks couldn't run because `loom` wasn't found. Put Loom on PATH, or run `loom install-hooks` again."*
 - sets, in the repo's own `.git/config`: `merge.loom-checks.name = Loom check history` and `merge.loom-checks.driver = loom merge-checks %O %A %B`.
 - An existing `pre-commit` hook that Loom didn't write is renamed `pre-commit.before-loom`, and Loom says so.
+- **Only for a Loom project at the top of its own repository** (A1). It refuses, writing nothing, when the folder has no `loom.toml` (exit 3, as for any command outside a project), or when it isn't the repository's top level (`git rev-parse --show-toplevel`): *"`{folder}` isn't the top of its git repository, so its hooks belong to another project. Run `loom install-hooks` in a Loom project."* (exit 3, code `hooks-not-top-level`).
+- **Only inside the repository's own git directory** (A1). If git runs hooks from somewhere else (`core.hooksPath` is set, locally or globally), it refuses, writing nothing: *"Git runs hooks from `{folder}` (`core.hooksPath`), outside this project, so Loom can't install its commit guard there. Run `git config --local core.hooksPath .git/hooks` here, then `loom install-hooks` again."* (exit 3, code `hooks-path-outside`). A hook in `.git/hooks` that git never runs would look like a guard and not be one.
 
 ### `loom.toml`
 Plain TOML (no front matter).
@@ -152,6 +167,7 @@ Every statement, proof and verbose proof is a text file with TOML front matter, 
 - **The body is kept byte for byte.** When Loom changes front matter, it re-parses the file, changes the data and writes `+++`, the front matter in canonical form, `+++`, then the body bytes it read, untouched (apart from CRLF becoming LF, above). When Loom creates a file from a `--body` it adds a final newline if the text has none.
 - **Canonical form:** the fields in the order of this spec's tables, one per line as `key = value`; strings as basic strings (`"…"`, escaping `"`, `\` and control characters, so no string ever spans lines); arrays inline (`["7RT2", "9D3F"]`); dates as `2026-11-03`; optional fields left out when empty or absent. Comments in front matter are dropped on rewrite, since front matter is data: prose belongs in the body.
 - **Unknown fields are errors,** so a misspelt field is caught rather than ignored.
+- **Empty values are missing values** (A2). In every file Loom reads (front matter, `loom.toml`, `paper.toml`, stubs, check histories), a required field, or an optional field whose value names something (an ID, a tag, a key, a path, a date, a fingerprint), that is present but empty (`""`) is `missing-field`, worded "`{field}` is empty". An optional field with no value is left out, never written empty. Free-text optional fields (such as a version's `differences`), and fields the tables say may be empty (an author's `first`), are unaffected.
 - **Writes are atomic:** through `QSaveFile` (write a temporary file, then rename), so a crash never leaves half a file. A `loom` command that writes takes the lock `.loom/write.lock` first and waits up to 10 seconds for it.
 
 ### Statements
@@ -286,7 +302,7 @@ as a separate lemma or start the induction at k = 1 and treat k = 0 by hand.
 | `fail` | The argument is wrong | The proof stops supporting its statement. Loom doesn't set `level = "failed"` itself; that's Dakota's click, since he may repair the proof instead |
 
 **Rules.**
-1. **Append-only.** No entry is ever edited, removed or reordered. Validation compares the file with its version in `HEAD`: every committed entry must still be there, unchanged.
+1. **Append-only.** No entry is ever edited, removed or reordered. Validation compares the file with its version in `HEAD`: every committed entry must still be there, unchanged and in the same order relative to the other committed entries (A7); new entries may sit between them, as a merge interleaves by date.
 2. **Date order.** Entries are in non-decreasing `date` order. Ties are allowed; then the later entry in the file is the newer.
 3. **Who.** Every agent check has a `record`. Every `needs-changes` by Dakota has `changes`.
 4. **Matching.** A check *matches* when its `fingerprint` equals the proof's current fingerprint. Checks that don't match stay in the history and count for nothing.
@@ -454,7 +470,7 @@ Top level:
 - `authors` and `editors`: arrays of `{ last = "…", first = "…" }`, `last` including any particle as printed (`"van der Berg"`, `"de Giorgi"`). `first` may be empty. At least one author, or for a book with no authors, at least one editor.
 
 **`[[versions]]`:** each has `id`, `kind`, `pdf` (optional path inside `local/`), `differences` (optional string), and fields from the table for its kind and the work's type.
-- `kind = "arxiv"`: `id` is `arxiv-v<N>`, and `arxiv_version` must equal N. Fields: `arxiv_id` (`YYMM.NNNNN`, or an old-style `math/0601001`), `arxiv_version`, `posted` (date), `primary_class` (e.g. `math.AP`), `page_count`.
+- `kind = "arxiv"`: `id` is `arxiv-v<N>`, and `arxiv_version` must equal N. Fields: `arxiv_id` (A4: `YYMM.NNNN` for April 2007 to December 2014, `YYMM.NNNNN` from January 2015, or old-style `archive/YYMMNNN`, optionally with a subject class, such as `math/0601001` or `math.AP/0601001`; never with a version suffix `vN`, which belongs in `arxiv_version`; anything else is `bad-value`, its allowed values given as "an arXiv identifier such as `2503.01234` or `math/0601001`, without `vN`"), `arxiv_version`, `posted` (date), `primary_class` (e.g. `math.AP`), `page_count`.
 - `kind = "published"`: `id` is `published` (at most one), or `ed<N>` (N ≥ 2) for a book's later editions. Fields by the work's type:
 
 | Type | Expected fields | Optional fields |
@@ -498,7 +514,7 @@ A stub is **cited** when its locator for `extracted_from` has `checked_against_p
 1. **Each surname** (`last`) becomes ASCII CamelCase: decompose it (Unicode NFKD) and drop the combining marks (`é` → `e`, `ő` → `o`); replace the letters that don't decompose (`ß` → `ss`, `æ` → `ae`, `Æ` → `Ae`, `ø` → `o`, `Ø` → `O`, `œ` → `oe`, `Œ` → `Oe`, `ł` → `l`, `Ł` → `L`, `đ`/`ð` → `d`, `Đ`/`Ð` → `D`, `þ` → `th`, `Þ` → `Th`, `ı` → `i`); split at spaces, hyphens and apostrophes; capitalise the first letter of each part and leave the rest as written; join; drop everything that isn't an ASCII letter. If nothing is left, the key can't be made: *"Can't make a key from the surname `…`: write it in Latin letters, as the paper prints it."*
 2. **One to three authors:** every CamelCase surname, in order. **Four or more:** the first CamelCase surname, then the first two letters of each other's CamelCase surname (one letter if the surname has only one).
 3. **The year:** the `year` of the `published` version if there is one; else the year of `posted` of the arXiv version with the lowest `arxiv_version`; else (talks, lecture notes, other) the year of `date`. Its last two digits are appended. With no year anywhere: *"Can't make a key for this paper: it has no year. Add a published year, an arXiv posting date, or a date."*
-4. **Shared keys:** when a new paper's key equals an existing paper's key (or alias), both get letters. The first time, the letters go by posting order (the earliest of the arXiv `posted` dates, else the published year; then title): `SmithJones24a`, `SmithJones24b`, and the existing paper is renamed (below). After that, a lettered key never changes: a later paper with the same base takes the next unused letter, whatever its date.
+4. **Shared keys:** when a new paper's key equals an existing paper's key (or alias), both get letters. Keys are compared **ignoring case** here and everywhere else (A3), since a key is a folder name and Windows folder names ignore case: `MacDonald20` and `Macdonald20` are the same key. The first time, the letters go by posting order (the earliest of the arXiv `posted` dates, else the published year; then title): `SmithJones24a`, `SmithJones24b`, and the existing paper is renamed (below). After that, a lettered key never changes: a later paper with the same base takes the next unused letter, whatever its date.
 5. **Renaming** (`loom rekey`, and when the year changes because a preprint was published in a later year): the folder is renamed, `key` changes, the old key is added to `aliases`. Nothing else in the project names a paper by key except `\cite{…}` in bodies, which isn't rewritten (D9); old keys keep working through the alias, and validation warns that they could be updated.
 
 | Authors (last names) | Year source | Key |
@@ -519,7 +535,7 @@ A stub is **cited** when its locator for `extracted_from` has `checked_against_p
 | Smith, Jones (preprint 2023, published 2024) | | `SmithJones23` while a preprint; renamed `SmithJones24` with alias `SmithJones23` |
 | Smith, Jones: two papers, posted 2023-05 and 2024-01, both published 2024 | | `SmithJones24a` (posted 2023-05), `SmithJones24b` |
 
-**The bibliography** (`loom build-bib`) writes one BibTeX entry per paper, for the version in `cite`, in key order, UTF-8. Fields come out in the order shown, two-space indented, `field = {value},`, and only when they have a value. Authors and editors are `Last, First` joined by ` and `. In values, `&`, `%` and `#` that aren't already escaped and aren't inside `$…$` are escaped with `\`; a value with unbalanced braces is an error and its entry is skipped. Every field written whose `verified` is `false` is listed in a warning (*"refs.bib uses unverified fields: SmithJones24 journal, volume"*); the file is still written. Output goes to `.loom/build/refs.bib` unless `--out` says otherwise.
+**The bibliography** (`loom build-bib`) writes one BibTeX entry per paper, for the version in `cite`, in key order, UTF-8. Fields come out in the order shown, two-space indented, `field = {value},`, and only when they have a value. Authors and editors are `Last, First` joined by ` and `; a name whose `first` is empty is written as its surname in braces, `{Garcia Lopez}`, so BibTeX keeps a surname of several words whole (A5). In values, `&`, `%` and `#` that aren't already escaped and aren't inside `$…$` are escaped with `\`; a value with unbalanced braces is an error and its entry is skipped. Braces are counted as BibTeX counts them: every `{` and `}`, whether or not a `\` comes before it (A6). Every field written whose `verified` is `false` is listed in a warning (*"refs.bib uses unverified fields: SmithJones24 journal, volume"*); the file is still written. Output goes to `.loom/build/refs.bib` unless `--out` says otherwise.
 
 Published article (`cite = "published"`), with arXiv versions:
 ```bibtex
@@ -579,7 +595,7 @@ Other types, cited version `published`:
 | `front-matter-unclosed` | error | The front matter starting on line 1 is never closed by a `+++` line. |
 | `body-empty` | error | {id} has no text below its front matter. |
 | `unknown-field` | error | `{field}` isn't a field of {a statement / a proof / …}. Is it misspelt? The fields are: {list}. |
-| `missing-field` | error | `{field}` is missing; every {thing} needs one. |
+| `missing-field` | error | `{field}` is missing; every {thing} needs one. When present but empty (A2): `{field}` is empty; every {thing} needs one. |
 | `wrong-type` | error | `{field}` should be {a date / a list of tags / …}, not {what it is}. |
 | `bad-value` | error | `{field}` can't be `{value}`; it must be one of {allowed values}. |
 | `bad-path` | error | `{path}` must be a path inside the project, written with `/`, without `..`. |
@@ -657,7 +673,7 @@ Other types, cited version `published`:
 | `check-record-not-found` | warning | Check {n} links `{path}`, which doesn't exist. |
 | `check-order` | error | Check {n} is dated before check {n−1}. Checks are kept in date order. |
 | `check-duplicate` | error | Checks {n} and {m} are the same entry twice. |
-| `check-changed` | error | A check committed earlier ({by}, {date}) was changed or removed. Checks are never edited; add a new one instead. |
+| `check-changed` | error | A check committed earlier ({by}, {date}) was changed, moved or removed. Checks are never edited or reordered; add a new one instead. |
 
 **Papers and stubs**
 
@@ -665,7 +681,7 @@ Other types, cited version `published`:
 | --- | --- | --- |
 | `paper-key-mismatch` | error | The key is `{key}` but the folder is `{folder}`; they must match. |
 | `paper-key-rule` | warning | By the key rule this paper's key is `{expected}`, not `{key}`. Run `loom rekey {key}`. |
-| `paper-key-duplicate` | error | `{key}` is the key or an old key of more than one paper. |
+| `paper-key-duplicate` | error | `{key}` is the key or an old key of more than one paper. (Compared ignoring case, A3.) |
 | `field-shape` | error | `{field}` must be `{ value = …, source = "…", verified = … }`. |
 | `field-source` | error | `{field}` has no source. Every field says where it came from. |
 | `field-verified` | error | `{field}`'s `verified` must be a date or `false`. |
@@ -713,7 +729,7 @@ Other types, cited version `published`:
 | `refute` | `<id> --by <proof-id>` *(Dakota)* | Sets `refuted_by` and `refuted_on` (today) | The new status |
 | `status` | `[<id>]` | Computes status | One line per statement (`ID  status  title`) and the counts by status; with an ID, the explanation sentence. JSON below |
 | `graph` | `--json` | | The graph (below) |
-| `new-paper` | `<draft.toml>` | Reads a draft `paper.toml` without `key` (or with a `key` that is checked against the rule), computes the key, creates `Papers/<Key>/paper.toml` in canonical form (`cite` defaulted if absent, `created` today), renaming a paper that now shares its key | The key; `{"key", "path", "renamed": [{from, to}]}` |
+| `new-paper` | `<draft.toml>` | Reads a draft `paper.toml` without `key` (or with a `key` that is checked against the rule), computes the key, creates `Papers/<Key>/paper.toml` in canonical form (`cite` defaulted if absent, `created` today), renaming a paper that now shares its key. Never replaces a file: if `Papers/<Key>/` already exists (compared ignoring case), whatever is in it, it refuses and writes nothing: *"`Papers/{Key}/` already exists. Fix or remove what's there first; `loom validate` shows its problems."* (A3, code `paper-exists`) | The key; `{"key", "path", "renamed": [{from, to}]}` |
 | `new-stub` | `<key> --kind <kind> --gist <text> --version <version-id> --at <locator> --by <dakota\|agent:model> [--title …] [--stated-using <id>]… [--paper-premise <id>]…` | Creates a stub with a new tag, its locator `checked_against_pdf = false` | The new tag |
 | `rekey` | `<key>` | Renames the paper to the key the rule gives (see the key rule) | `old → new`, or "already right" |
 | `build-bib` | `[--out <path>]` | Writes the bibliography | The path and any warnings |
@@ -806,6 +822,9 @@ Each linked or compiled-in dependency gets its decision page in `Wiki/decisions/
 - **A paper whose surname has no Latin letters** (`last = "张"`): no key; the message asks for the surname as the paper prints it in Latin letters.
 - **A book with editors and no authors:** the key and `author` field use the editors (`editor` in BibTeX).
 - **Shared keys, third paper:** takes the next unused letter; existing lettered keys never change.
+- **Keys that differ only in case** (`MacDonald20`, `Macdonald20`): the same key (A3), so they get letters, and two such folders are `paper-key-duplicate`.
+- **`new-paper` onto a folder that exists** (an entry that doesn't parse, or whose `key` disagrees with its folder): refused, `paper-exists`; the old file is never replaced.
+- **`core.hooksPath` set:** `install-hooks` and `new-project` refuse rather than write hooks outside the project (A1).
 - **`\cite` of an old key:** works through the alias; `cite-alias` warns.
 - **`loom new-project` without git identity:** stops before writing anything.
 - **Two `loom` commands at once in one checkout:** the second waits up to 10 seconds for `.loom/write.lock`, then exits 3: *"Another loom command is changing this project. Try again when it has finished."*
