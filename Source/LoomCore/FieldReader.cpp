@@ -53,20 +53,20 @@ std::optional<QString> FieldReader::string(const toml::table& table, const char*
     const QString field = QString::fromLatin1(key);
     const toml::node* node = table.get(key);
     if (!node) {
-        if (need != Need::Optional)
+        if (need == Need::Required)
             checker.missingField(field, missingLine, thing);
         return std::nullopt;
     }
     lines.fields.insert(field, checker.line(*node));
-    const QString expected = need == Need::RequiredNonEmpty ? QStringLiteral("a non-empty string") : QStringLiteral("a string");
     const toml::value<std::string>* value = node->as_string();
     if (!value) {
-        checker.wrongType(field, expected, *node);
+        checker.wrongType(field, QStringLiteral("a string"), *node);
         lost = true;
         return std::nullopt;
     }
-    if (value->get().empty() && need == Need::RequiredNonEmpty)
-        checker.wrongType(field, expected, *node);
+    // An empty value carries nothing, so leaving it out on a rewrite loses nothing: not `lost`.
+    if (checker.reportEmpty(field, *node, thing, need))
+        return std::nullopt;
     return fromUtf8(value->get());
 }
 
@@ -113,14 +113,25 @@ QDate FieldReader::date(const toml::table& table, const char* key, bool required
         return {};
     }
     lines.fields.insert(field, checker.line(*node));
+    if (checker.reportEmpty(field, *node, thing, required ? Need::Required : Need::Naming))
+        return {};
     const toml::value<toml::date>* value = node->as_date();
     if (!value) {
         checker.wrongType(field, QStringLiteral("a date"), *node);
         lost = true;
         return {};
     }
+    // toml++ reads years 0000 to 9999, and QDate has no year 0. Such a date would otherwise be
+    // dropped without a word, and lost on the next rewrite.
     const toml::date date = value->get();
-    return QDate(date.year, date.month, date.day);
+    const QDate out(date.year, date.month, date.day);
+    if (!out.isValid()) {
+        const QString text = QString::asprintf("%04d-%02d-%02d", int(date.year), int(date.month), int(date.day));
+        checker.add("bad-value", checker.line(*node),
+            QStringLiteral("`%1` can't be `%2`; it must be one of the dates from 0001-01-01 on.").arg(field, text));
+        lost = true;
+    }
+    return out;
 }
 
 std::optional<qint64> FieldReader::integer(const toml::table& table, const char* key, bool required, int missingLine)

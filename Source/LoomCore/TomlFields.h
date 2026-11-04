@@ -27,8 +27,16 @@ int lineOf(const toml::source_region& region);
 /// What a TOML value is, for the `wrong-type` message ("…, not {what it is}"), e.g. `a whole number`.
 QString describeToml(const toml::node& node);
 
-/// Whether a string field may be absent or empty.
-enum class Need { Optional, Required, RequiredNonEmpty };
+/// Whether a string field may be absent or empty. An empty value counts as a missing one
+/// (Specs/m1-core.md, "Front matter", A2: "Empty values are missing values"), except in free text.
+enum class Need {
+    /// Free text: may be absent, and may be empty (a version's `differences`, an author's `first`).
+    Optional,
+    /// Optional, but it names something (an ID, a tag, a key, a path): absent, or not empty.
+    Naming,
+    /// Must be present and not empty.
+    Required,
+};
 
 /// Collects the problems found in one file's TOML, with the spec's messages.
 struct FieldChecker {
@@ -58,14 +66,27 @@ struct FieldChecker {
     /// Reports a missing required field at `line` (a file line), e.g. "every statement needs one".
     void missingField(const QString& field, int line, const QString& thing);
 
+    /// Reports a field that is present but empty, as `missing-field` (Specs/m1-core.md,
+    /// "Front matter", A2: "`{field}` is empty"). The spec's wording, "every {thing} needs one",
+    /// is for a required field; an optional one says it can be left out instead.
+    /// @param line     The file line of the empty value.
+    /// @param thing    What the table is, e.g. `statement`.
+    /// @param required Whether every `thing` needs the field.
+    void emptyField(const QString& field, int line, const QString& thing, bool required);
+
+    /// Reports `node` if it is an empty string where `need` doesn't allow one (emptyField()).
+    /// The one rule for empty values that every reader of a string field goes through.
+    /// @returns True if it was reported, so the caller treats the field as having no value.
+    bool reportEmpty(const QString& field, const toml::node& node, const QString& thing, Need need);
+
     /// Reports a value of the wrong type at the value's line.
     /// @param expected What it should be, e.g. `a date`.
     void wrongType(const QString& field, const QString& expected, const toml::node& node);
 
     /// Reads a string field of `table`, reporting it if it is missing, not a string, or empty
-    /// when it mustn't be.
+    /// when it mustn't be (reportEmpty()).
     /// @param tableLine The file line to name if the field is missing.
-    /// @returns The value, or nothing if absent or wrong.
+    /// @returns The value, or nothing if absent, wrong or empty when it mustn't be.
     std::optional<QString> stringField(const toml::table& table, std::string_view key, const QString& field,
                                        int tableLine, const QString& thing, Need need);
 };

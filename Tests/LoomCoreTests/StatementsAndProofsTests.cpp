@@ -261,8 +261,6 @@ TEST_CASE("Statement problems", "[statements]")
             {"wrong-type", 7, "`stated_using` should be a list of tags, not a list holding a whole number."}});
         CHECK(statementProblems(statementWith("origin = 3\n")) == std::vector<P>{
             {"wrong-type", 5, "`origin` should be a string, not a whole number."}});
-        CHECK(statementProblems("+++\nid = \"4KX7\"\nkind = \"theorem\"\ntitle = \"\"\ncreated = 2026-11-03\n+++\nBody\n") == std::vector<P>{
-            {"wrong-type", 4, "`title` should be a non-empty string, not an empty string."}});
         CHECK(statementProblems("+++\nid = \"4KX7\"\nkind = \"theorem\"\ntitle = \"Two\\nlines\"\ncreated = 2026-11-03\n+++\nBody\n") == std::vector<P>{
             {"wrong-type", 4, "`title` should be a string on one line, not a string with line breaks."}});
         CHECK(statementProblems("+++\nid = 4\nkind = \"theorem\"\ntitle = \"T\"\ncreated = 2026-11-03\n+++\nBody\n") == std::vector<P>{
@@ -275,7 +273,7 @@ TEST_CASE("Statement problems", "[statements]")
         CHECK(statementProblems("+++\nid = \"4KX7\"\nkind = \"axiom\"\ntitle = \"T\"\ncreated = 2026-11-03\n+++\nBody\n") == std::vector<P>{
             {"bad-value", 3, "`kind` can't be `axiom`; it must be one of `definition`, `lemma`, `proposition`, `theorem`, "
                              "`corollary`, `conjecture`, `question`, `remark`, `example`."}});
-        for (const char* origin : {"spec:", "import:", "news", ""})
+        for (const char* origin : {"spec:", "import:", "news"})
             CHECK(statementProblems(statementWith("origin = \"" + QByteArray(origin) + "\"\n")) == std::vector<P>{
                 {"bad-value", 5, QStringLiteral("`origin` can't be `%1`; it must be one of `new`, `spec:<spec-id>`, `import:<path>`.").arg(origin)}});
         for (const char* origin : {"new", "spec:S-004", "import:Notes/old.tex"})
@@ -371,4 +369,72 @@ TEST_CASE("Verbose proof problems", "[proofs]")
         {"missing-field", 1, "`created` is missing; every verbose proof needs one."}});
     CHECK(problems("+++\nproof = \"4KX7.a\"\nfingerprint = \"3c8e1f0a92d4\"\ncreated = 2026-11-05\n+++\n") == std::vector<P>{
         {"body-empty", 6, "4KX7.a.verbose has no text below its front matter."}});
+}
+
+TEST_CASE("Empty values are missing values", "[statements][proofs]")
+{
+    // Specs/m1-core.md, "Front matter", A2: a required field, or an optional one that names
+    // something, that is present but empty is `missing-field`, worded "`{field}` is empty".
+    SECTION("statements")
+    {
+        CHECK(statementProblems("+++\nid = \"\"\nkind = \"\"\ntitle = \"\"\ncreated = 2026-11-03\n+++\nBody\n") == std::vector<P>{
+            {"missing-field", 2, "`id` is empty; every statement needs one."},
+            {"missing-field", 3, "`kind` is empty; every statement needs one."},
+            {"missing-field", 4, "`title` is empty; every statement needs one."}});
+        CHECK(statementProblems(statementWith("origin = \"\"\n")) == std::vector<P>{
+            {"missing-field", 5, "`origin` is empty; give it a value or leave it out."}});
+        CHECK(statementProblems(statementWith("superseded_by = \"\"\n")) == std::vector<P>{
+            {"missing-field", 5, "`superseded_by` is empty; give it a value or leave it out."}});
+        CHECK(statementProblems(statementWith("verified = \"\"\n")) == std::vector<P>{
+            {"missing-field", 5, "`verified` is empty; give it a value or leave it out."}});
+        CHECK(statementProblems("+++\nid = \"4KX7\"\nkind = \"theorem\"\ntitle = \"T\"\ncreated = \"\"\n+++\nBody\n") == std::vector<P>{
+            {"missing-field", 5, "`created` is empty; every statement needs one."}});
+    }
+
+    SECTION("a refutation by nothing is an error")
+    {
+        // Before A2 this passed validation, and status ignored the refutation.
+        CHECK(statementProblems(statementWith("refuted_by = \"\"\nrefuted_on = 2026-11-06\n")) == std::vector<P>{
+            {"missing-field", 5, "`refuted_by` is empty; give it a value or leave it out."}});
+        CHECK(statementProblems(statementWith("refuted_by = \"G5TZ.a\"\nrefuted_on = \"\"\n")) == std::vector<P>{
+            {"missing-field", 6, "`refuted_on` is empty; give it a value or leave it out."}});
+    }
+
+    SECTION("proofs")
+    {
+        CHECK(proofProblems("+++\nid = \"\"\nproves = \"\"\npremises = []\nlevel = \"\"\ncreated = 2026-11-03\n+++\nBody\n") == std::vector<P>{
+            {"missing-field", 2, "`id` is empty; every proof needs one."},
+            {"missing-field", 3, "`proves` is empty; every proof needs one."},
+            {"missing-field", 5, "`level` is empty; every proof needs one."}});
+    }
+
+    SECTION("verbose proofs")
+    {
+        CHECK(summary(loom::readVerboseProof("+++\nproof = \"\"\nfingerprint = \"\"\ncreated = 2026-11-05\n+++\nSteps\n", verbosePath).problems,
+                      verbosePath) == std::vector<P>{
+            {"missing-field", 2, "`proof` is empty; every verbose proof needs one."},
+            {"missing-field", 3, "`fingerprint` is empty; every verbose proof needs one."}});
+    }
+}
+
+TEST_CASE("A value ending in a line break doesn't pass a rule", "[statements][proofs]")
+{
+    // Qt's `$` also matches before a final line break, so each rule must be anchored at the very end.
+    CHECK(statementProblems(statementWith("origin = \"new\\n\"\n")) == std::vector<P>{
+        {"bad-value", 5, "`origin` can't be `new\n`; it must be one of `new`, `spec:<spec-id>`, `import:<path>`."}});
+    CHECK(summary(loom::readVerboseProof("+++\nproof = \"4KX7.a\"\nfingerprint = \"3c8e1f0a92d4\\n\"\ncreated = 2026-11-05\n+++\nSteps\n",
+                                         verbosePath).problems, verbosePath) == std::vector<P>{
+        {"wrong-type", 3, "`fingerprint` should be 12 characters from 0–9 and a–f, not `3c8e1f0a92d4\n`."}});
+}
+
+TEST_CASE("A date Qt can't hold is reported, and the file isn't rewritten", "[statements]")
+{
+    // toml++ accepts the year 0, which QDate has no room for. Read as it was, the date was
+    // dropped without a word, and the next rewrite would have lost it.
+    const loom::StatementReading reading = loom::readStatement(
+        "+++\nid = \"4KX7\"\nkind = \"theorem\"\ntitle = \"T\"\ncreated = 0000-01-01\n+++\nBody\n", statementPath);
+    CHECK(summary(reading.problems, statementPath) == std::vector<P>{
+        {"bad-value", 5, "`created` can't be `0000-01-01`; it must be one of the dates from 0001-01-01 on."}});
+    CHECK(reading.parsed);
+    CHECK_FALSE(reading.lossless);
 }

@@ -180,7 +180,7 @@ struct PaperReader {
             r.lost = r.lost || checker().problems.size() != before;
             const int line = checker().line(element);
             const std::optional<QString> last =
-                checker().stringField(*table, "last", field + QStringLiteral(".last"), line, QStringLiteral("name"), Need::RequiredNonEmpty);
+                checker().stringField(*table, "last", field + QStringLiteral(".last"), line, QStringLiteral("name"), Need::Required);
             const std::optional<QString> first =
                 checker().stringField(*table, "first", field + QStringLiteral(".first"), line, QStringLiteral("name"), Need::Optional);
             if (!last || (table->contains("first") && !first)) {
@@ -311,10 +311,16 @@ struct PaperReader {
         w.authors = read("authors", ValueKind::Names, false);
         w.editors = read("editors", ValueKind::Names, false);
 
-        if (w.type && !workTypes.contains(w.typeName()))
+        // Both are required, so an empty one is a missing one (Specs/m1-core.md, "Front matter", A2).
+        const QString paperThing = QStringLiteral("paper");
+        if (w.type && w.typeName().isEmpty())
+            checker().emptyField(QStringLiteral("work.type"), w.type->line, paperThing, true);
+        else if (w.type && !workTypes.contains(w.typeName()))
             checker().add("bad-value", w.type->line,
                 QStringLiteral("`work.type` can't be `%1`; it must be one of %2.").arg(w.typeName(), quotedList(workTypes)));
-        if (w.title && w.title->text().trimmed().isEmpty())
+        if (w.title && w.title->text().isEmpty())
+            checker().emptyField(QStringLiteral("work.title"), w.title->line, paperThing, true);
+        else if (w.title && w.title->text().trimmed().isEmpty())
             checker().add("wrong-type", w.title->line, QStringLiteral("`work.title` should be a non-empty string, not an empty string."));
 
         // At least one author, or for a book with no authors, at least one editor.
@@ -339,7 +345,7 @@ struct PaperReader {
         FieldReader local(checker().file, QStringLiteral("version"), 0);
         v.id = local.string(table, "id", Need::Required, v.line).value_or(QString());
         v.kind = local.string(table, "kind", Need::Required, v.line).value_or(QString());
-        v.pdf = local.string(table, "pdf", Need::Optional).value_or(QString());
+        v.pdf = local.string(table, "pdf", Need::Naming).value_or(QString());
         v.differences = local.string(table, "differences", Need::Optional).value_or(QString());
         r.lost = r.lost || local.lost;
         checker().problems.insert(checker().problems.end(), local.checker.problems.begin(), local.checker.problems.end());
@@ -349,8 +355,9 @@ struct PaperReader {
         if (!v.kind.isEmpty() && v.kind != u"arxiv" && v.kind != u"published")
             checker().add("bad-value", local.lines.of(QStringLiteral("kind")),
                 QStringLiteral("`kind` can't be `%1`; it must be one of `arxiv`, `published`.").arg(v.kind));
-        static const QRegularExpression arxivId(QStringLiteral("^arxiv-v([1-9][0-9]*)$"));
-        static const QRegularExpression editionId(QStringLiteral("^ed([2-9]|[1-9][0-9]+)$"));
+        // Anchored at the very end: Qt's `$` also matches before a final line break.
+        static const QRegularExpression arxivId(QRegularExpression::anchoredPattern(QStringLiteral("arxiv-v([1-9][0-9]*)")));
+        static const QRegularExpression editionId(QRegularExpression::anchoredPattern(QStringLiteral("ed([2-9]|[1-9][0-9]+)")));
         if (!v.id.isEmpty()) {
             if (v.kind == u"arxiv" && !arxivId.match(v.id).hasMatch())
                 checker().add("version-id", idLine,
@@ -448,7 +455,9 @@ struct PaperReader {
             r.lost = true;
             return;
         }
-        static const QRegularExpression sessionRule(QStringLiteral("^Sessions/[0-9]{4}-[0-9]{2}-[0-9]{2}$"));
+        // Anchored at the very end: Qt's `$` also matches before a final line break.
+        static const QRegularExpression sessionRule(
+            QRegularExpression::anchoredPattern(QStringLiteral("Sessions/[0-9]{4}-[0-9]{2}-[0-9]{2}")));
         for (const toml::node& element : *array) {
             const toml::table& table = *element.as_table();
             ReadingEntry e;
@@ -457,9 +466,9 @@ struct PaperReader {
             local.unknownFields(table, {"version", "level", "what", "date", "session"}, readingFieldList);
             e.version = local.string(table, "version", Need::Required, e.line).value_or(QString());
             e.level = local.string(table, "level", Need::Required, e.line).value_or(QString());
-            e.what = local.string(table, "what", Need::RequiredNonEmpty, e.line).value_or(QString());
+            e.what = local.string(table, "what", Need::Required, e.line).value_or(QString());
             e.date = local.date(table, "date", true, e.line);
-            e.session = local.string(table, "session", Need::Optional).value_or(QString());
+            e.session = local.string(table, "session", Need::Naming).value_or(QString());
             if (!e.level.isEmpty() && !readingLevels.contains(e.level))
                 local.badValue(QStringLiteral("level"), e.level, quotedList(readingLevels));
             if (!e.session.isEmpty() && !sessionRule.match(e.session).hasMatch())
@@ -720,9 +729,9 @@ PaperReading readPaper(const QByteArray& bytes, const QString& path, bool keyReq
     Paper& p = reading.document;
     r.unknownFields(*table, {"key", "aliases", "cite", "relevance", "relevance_why", "tags", "summary", "created", "verified",
                              "work", "versions", "reading", "renumbering"}, paperFieldList);
-    p.key = r.string(*table, "key", keyRequired ? Need::RequiredNonEmpty : Need::Optional).value_or(QString());
+    p.key = r.string(*table, "key", keyRequired ? Need::Required : Need::Naming).value_or(QString());
     p.aliases = r.list(*table, "aliases", QStringLiteral("a list of old keys"), false).value_or(QStringList());
-    p.cite = r.string(*table, "cite", keyRequired ? Need::RequiredNonEmpty : Need::Optional).value_or(QString());
+    p.cite = r.string(*table, "cite", keyRequired ? Need::Required : Need::Naming).value_or(QString());
     const std::optional<qint64> relevance = r.integer(*table, "relevance", true);
     p.relevance = relevance.value_or(0);
     p.relevanceWhy = r.string(*table, "relevance_why", Need::Optional).value_or(QString());
@@ -781,7 +790,7 @@ StubReading readStub(const QByteArray& bytes, const QString& path)
     s.statedUsing = r.list(*table, "stated_using", QStringLiteral("a list of tags"), false).value_or(QStringList());
     s.paperPremises = r.list(*table, "paper_premises", QStringLiteral("a list of tags"), false).value_or(QStringList());
     s.aliases = r.list(*table, "aliases", QStringLiteral("a list of aliases"), false).value_or(QStringList());
-    s.extractedFrom = r.string(*table, "extracted_from", Need::RequiredNonEmpty).value_or(QString());
+    s.extractedFrom = r.string(*table, "extracted_from", Need::Required).value_or(QString());
     s.extractedBy = r.string(*table, "extracted_by", Need::Required).value_or(QString());
     s.created = r.date(*table, "created", true);
 
@@ -828,8 +837,11 @@ StubReading readStub(const QByteArray& bytes, const QString& path)
             locator.version = version;
             locator.line = line;
             const toml::node* at = entry->get("at");
-            if (!at || (at->is_string() && at->as_string()->get().empty()))
+            if (!at)
                 r.checker.add("missing-field", line, QStringLiteral("`%1.at` is missing; every locator says where the result is.").arg(field));
+            else if (at->is_string() && at->as_string()->get().empty()) // Specs/m1-core.md, "Front matter", A2.
+                r.checker.add("missing-field", r.checker.line(*at),
+                    QStringLiteral("`%1.at` is empty; every locator says where the result is.").arg(field));
             else if (!at->is_string()) {
                 r.checker.wrongType(field + QStringLiteral(".at"), QStringLiteral("a string"), *at);
                 r.lost = true;

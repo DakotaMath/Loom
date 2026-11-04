@@ -52,6 +52,7 @@ ref-alias Statements/RA1S.tex:5: error: `def:old` is an old name of D3FN. Write 
 refuted-incomplete Statements/RF1C.tex:5: error: RF1C has `refuted_by` but not `refuted_on`. Refuting a statement needs both: the proof and the date Dakota accepted it.
 refuted-unknown Statements/RF2N.tex:5: error: RF2N is refuted by `ZZZZ.a`, which isn't a proof in this project.
 refuted-no-status Statements/RF3N.tex:5: error: RF3N is a definition; only lemmas, propositions, theorems, corollaries and conjectures can be refuted.
+missing-field Statements/RF5E.tex:5: error: `refuted_by` is empty; give it a value or leave it out.
 toml-syntax Statements/S1NX.tex:4: error: This isn't valid TOML: Error while parsing string: unescaped control characters other than TAB (U+0009) are explicitly prohibited.
 stated-using-self Statements/S5F1.tex:5: error: S5F1 can't be stated using itself.
 stated-using-cycle Statements/SC1A.tex:5: error: `stated_using` goes round in a circle: SC1A → SC1B → SC1A.

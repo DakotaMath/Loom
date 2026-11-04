@@ -47,14 +47,19 @@ struct FieldReader {
 
     /// Reads a string field. A missing required field is reported at `missingLine` (by default
     /// line 1: the opening `+++` of front matter, or the top of a plain file). An empty string
-    /// where a non-empty one is needed is reported but kept, so rewriting loses nothing.
+    /// where `need` doesn't allow one is `missing-field` (FieldChecker::reportEmpty()).
+    /// @returns The value; nothing if absent, not a string (which sets `lost`), or empty where
+    ///          it mustn't be (which doesn't: an empty value loses nothing when left out).
     std::optional<QString> string(const toml::table& table, const char* key, Need need, int missingLine = 1);
 
     /// Reads a list of strings, reporting elements that aren't strings (and dropping them).
     /// @param expected What the list should be, e.g. `a list of tags`.
     std::optional<QStringList> list(const toml::table& table, const char* key, const QString& expected, bool required);
 
-    /// Reads a date field (a local date, `2026-11-03`).
+    /// Reads a date field (a local date, `2026-11-03`). An empty string is `missing-field`, as
+    /// for a string field that names something. A date QDate can't hold (the year 0) is
+    /// `bad-value` and sets `lost`, so the file isn't rewritten without it.
+    /// @returns The date; an invalid QDate if absent, empty, not a date, or the year 0.
     QDate date(const toml::table& table, const char* key, bool required, int missingLine = 1);
 
     /// Reads a whole-number field.

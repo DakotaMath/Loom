@@ -29,7 +29,12 @@ struct EntryReader {
     QString name;
     bool lost = false;
 
-    /// Reads a string field. A missing required field is reported at the entry's header.
+    /// Reads a string field. A missing required field is reported at the entry's header. Every
+    /// string field here needs text: an empty one is `missing-field` (Specs/m1-core.md, "Front
+    /// matter", A2), except `changes`, which is free text and keeps its `wrong-type`; a blank
+    /// one is `wrong-type`. Either is kept as written, so rewriting loses nothing.
+    /// @param required Whether every check needs the field (`by`, `fingerprint`, `verdict`).
+    /// @returns The value as written; empty if absent or not a string.
     QString string(const char* key, bool required)
     {
         const QString field = QString::fromLatin1(key);
@@ -46,7 +51,9 @@ struct EntryReader {
             lost = true;
             return {};
         }
-        // Kept as written, so rewriting loses nothing; every string field here needs text.
+        const Need need = field == u"changes" ? Need::Optional : required ? Need::Required : Need::Naming;
+        if (checker.reportEmpty(field, *node, QStringLiteral("check"), need))
+            return {}; // An empty value is kept as empty.
         if (value->get().empty())
             checker.wrongType(field, QStringLiteral("a non-empty string"), *node);
         else if (isBlankBody(QByteArray::fromStdString(value->get())))
@@ -65,6 +72,12 @@ struct EntryReader {
             return {};
         }
         lines.fields.insert(field, checker.line(*node));
+        if (checker.reportEmpty(field, *node, QStringLiteral("check"), Need::Required)) {
+            // Dropped, as any `date` Loom can't read is: rewriting would change the entry, and
+            // entries are never changed (Specs/m1-core.md, "Checks").
+            lost = true;
+            return {};
+        }
         const toml::value<toml::date_time>* value = node->as_date_time();
         if (!value || !value->get().offset || value->get().time.nanosecond != 0) {
             checker.add("wrong-type", checker.line(*node),
@@ -156,7 +169,8 @@ bool sameCheck(const Check& a, const Check& b)
 
 bool isCheckAuthor(const QString& by)
 {
-    static const QRegularExpression agent(QStringLiteral("^agent:[a-z0-9][a-z0-9.-]*$"));
+    // Anchored at the very end: Qt's `$` also matches before a final line break.
+    static const QRegularExpression agent(QRegularExpression::anchoredPattern(QStringLiteral("agent:[a-z0-9][a-z0-9.-]*")));
     return by == u"dakota" || agent.match(by).hasMatch();
 }
 

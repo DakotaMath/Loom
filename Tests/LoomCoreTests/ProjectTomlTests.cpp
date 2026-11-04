@@ -206,7 +206,7 @@ TEST_CASE("loom.toml problems: syntax and fields", "[loom.toml]")
         CHECK(summary(project.read("format = \"1\"\nname = \"\"\ncreated = \"2026-11-03\"\nidea = 3\n\n[tex]\npreamble = \"TeX/preamble.tex\"\n").problems) ==
               std::vector<P>{
                   {"wrong-type", 1, "`format` should be a whole number, not a string."},
-                  {"wrong-type", 2, "`name` should be a non-empty string, not an empty string."},
+                  {"missing-field", 2, "`name` is empty; every project needs one."},
                   {"wrong-type", 3, "`created` should be a date, not a string."},
                   {"wrong-type", 4, "`idea` should be a string, not a whole number."},
                   {"wrong-type", 7, "`tex.preamble` should be a list of paths, not a string."},
@@ -315,6 +315,34 @@ TEST_CASE("loom.toml problems: tags", "[loom.toml]")
         CHECK(only(project.read(withTopLevel("tags = 3"))) ==
               P{"wrong-type", 4, "`tags` should be a list of tables, not a whole number."});
     }
+
+    SECTION("empty values are missing values")
+    {
+        // Specs/m1-core.md, "Front matter", A2.
+        const loom::ProjectTomlReading reading = project.read(withTags("\n[[tags]]\nid = \"\"\nkind = \"\"\ntitle = \"\"\n"));
+        CHECK(summary(reading.problems) == std::vector<P>{
+            {"missing-field", 9, "`id` is empty; every tag needs one."},
+            {"missing-field", 10, "`kind` is empty; every tag needs one."},
+            {"missing-field", 11, "`title` is empty; every tag needs one."},
+        });
+        CHECK(reading.config.tags.empty());
+        CHECK(only(project.read(withTopLevel("").replace("created = 2026-11-03", "created = \"\""))) ==
+              P{"missing-field", 3, "`created` is empty; every project needs one."});
+    }
+
+    SECTION("a tag ending in a line break")
+    {
+        // Qt's `$` also matches before a final line break, so the rule must be anchored at the very end.
+        CHECK(only(project.read(withTags("\n[[tags]]\nid = \"energy\\n\"\nkind = \"technique\"\ntitle = \"Energy\"\n"))) ==
+              P{"tag-syntax", 9, "`energy\n` isn't a valid tag name: use lowercase letters, digits and single hyphens, like `energy-estimates`."});
+    }
+}
+
+TEST_CASE("loom.toml that isn't UTF-8", "[loom.toml]")
+{
+    const TempProject project;
+    CHECK(only(project.read("format = 1\nname = \"\xff\"\n")) ==
+          std::tuple<QString, int, QString>{"not-utf8", 1, "This file isn't valid UTF-8 (the first bad byte is at offset 19). Save it as UTF-8."});
 }
 
 TEST_CASE("Opening a project", "[loom.toml]")
