@@ -15,6 +15,7 @@ Traps, dead ends and their fixes, in one folder per area (`qt`, `build`, `git`, 
 | --- | --- |
 | [CMake's `CMAKE_MATCH_<n>` doesn't leave the function that matched](cmake/cmake-match-inside-function.md) | `if(x MATCHES …)` sets `CMAKE_MATCH_1` and the rest only in the current scope, so a helper `function()` that does the match leaves the caller's `CMAKE_MATCH_1` empty. In a CMake test script, capture groups at the top level with `string(REGEX REPLACE …)` (or match there), not through a helper function. |
 | [CMake's `execute_process` garbles `loom`'s UTF-8 output on Windows](cmake/execute-process-encoding.md) | On Windows, `execute_process` decodes a program's output in the console's code page, so the UTF-8 `→` that `loom` writes reaches a CMake test script as `ΓåÆ` and an exact comparison fails. Pass `ENCODING UTF-8` to every `execute_process` that reads `loom`'s output. |
+| [CMake's `file(WRITE)` writes CRLF on Windows](cmake/file-write-crlf-on-windows.md) | On Windows, `file(WRITE)` and `file(APPEND)` turn every `\n` into `\r\n`, so a test file written as `"a\r\n"` holds `a\r\r\n`. Write plain `\n` when you want the platform's line ending, or use `file(CONFIGURE OUTPUT … CONTENT … NEWLINE_STYLE UNIX)` when the bytes must be exactly LF. |
 
 ### git
 
