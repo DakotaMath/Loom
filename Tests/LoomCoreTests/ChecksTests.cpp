@@ -280,6 +280,38 @@ TEST_CASE("Problems a check history shows on its own", "[checks]")
     }
 }
 
+TEST_CASE("Empty values in a check history are missing values", "[checks]")
+{
+    // Specs/m1-core.md, "Front matter", A2. `changes` is free text, so it keeps its own rule.
+    const QByteArray bytes =
+        "[[checks]]\n"         // 1
+        "by = \"\"\n"          // 2
+        "date = \"\"\n"        // 3
+        "fingerprint = \"\"\n" // 4
+        "verdict = \"\"\n"     // 5
+        "record = \"\"\n"      // 6
+        "note = \"\"\n";       // 7
+    CHECK(describe(loom::readChecks(bytes, "x.checks.toml").problems) == QStringList{
+        "missing-field 2 `by` is empty; every check needs one.",
+        "missing-field 3 `date` is empty; every check needs one.",
+        "missing-field 4 `fingerprint` is empty; every check needs one.",
+        "missing-field 5 `verdict` is empty; every check needs one.",
+        "missing-field 6 `record` is empty; give it a value or leave it out.",
+        "missing-field 7 `note` is empty; give it a value or leave it out."});
+}
+
+TEST_CASE("A check's author can't end in a line break", "[checks]")
+{
+    // Qt's `$` also matches before a final line break, so the rule must be anchored at the very end.
+    CHECK_FALSE(loom::isCheckAuthor(QStringLiteral("agent:claude\n")));
+    CHECK_FALSE(loom::isCheckAuthor(QStringLiteral("dakota\n")));
+    CHECK(loom::isCheckAuthor(QStringLiteral("agent:claude-opus-5-5")));
+    const QByteArray bytes = "[[checks]]\nby = \"agent:claude\\n\"\ndate = 2026-11-04T10:12:44-06:00\nfingerprint = \"3c8e1f0a92d4\"\n"
+                             "verdict = \"pass\"\nrecord = \"Records/2026-11/job-0142.md\"\n";
+    CHECK(describe(loom::readChecks(bytes, "x.checks.toml").problems) == QStringList{
+        "check-by 2 Check 1: `by` must be `dakota` or `agent:<model>`, not `agent:claude\n`."});
+}
+
 TEST_CASE("Merging two check lists", "[checks][merge]")
 {
     const loom::Check a1 = agent("pass", true, 1);

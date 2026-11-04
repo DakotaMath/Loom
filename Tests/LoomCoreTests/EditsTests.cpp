@@ -416,7 +416,7 @@ TEST_CASE("new-tag adds a [[tags]] table and keeps the rest of loom.toml", "[edi
         CHECK(loom::addTag(project.root, "energy-estimates", "technique", "Again", o.options).code == "tag-duplicate");
         CHECK(loom::addTag(project.root, "Energy", "technique", "E", o.options).code == "tag-syntax");
         CHECK(loom::addTag(project.root, "decay", "lemma", "E", o.options).code == "bad-value");
-        CHECK(loom::addTag(project.root, "decay", "other", "", o.options).code == "wrong-type");
+        CHECK(loom::addTag(project.root, "decay", "other", "", o.options).code == "missing-field"); // A2: empty is missing.
         CHECK(project.read("loom.toml") == now);
     }
 }

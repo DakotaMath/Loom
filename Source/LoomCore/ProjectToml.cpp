@@ -1,5 +1,6 @@
 #include "LoomCore/ProjectToml.h"
 
+#include "LoomCore/FieldReader.h"
 #include "LoomCore/ProjectFiles.h"
 #include "LoomCore/TomlFields.h"
 #include "LoomCore/TomlWriter.h"
@@ -97,7 +98,8 @@ void readTags(FieldChecker& checker, const toml::table& root, ProjectConfig& con
         return;
     }
 
-    static const QRegularExpression tagSyntax(QStringLiteral("^[a-z0-9]+(-[a-z0-9]+)*$"));
+    // Anchored at the very end: Qt's `$` also matches before a final line break.
+    static const QRegularExpression tagSyntax(QRegularExpression::anchoredPattern(QStringLiteral("[a-z0-9]+(-[a-z0-9]+)*")));
     const QString thing = QStringLiteral("tag");
     QSet<QString> seen;
     for (const toml::node& entry : *tags) {
@@ -112,7 +114,7 @@ void readTags(FieldChecker& checker, const toml::table& root, ProjectConfig& con
 
         const std::optional<QString> id = checker.stringField(*tag, "id", QStringLiteral("id"), line, thing, Need::Required);
         const std::optional<QString> kind = checker.stringField(*tag, "kind", QStringLiteral("kind"), line, thing, Need::Required);
-        const std::optional<QString> title = checker.stringField(*tag, "title", QStringLiteral("title"), line, thing, Need::RequiredNonEmpty);
+        const std::optional<QString> title = checker.stringField(*tag, "title", QStringLiteral("title"), line, thing, Need::Required);
 
         bool good = id && kind && title;
         if (id) {
@@ -144,17 +146,13 @@ ProjectTomlReading readProjectToml(const QByteArray& bytes, const QString& root)
     ProjectTomlReading reading;
     FieldChecker checker = makeChecker();
 
-    toml::table table;
-    try {
-        table = toml::parse(std::string_view(bytes.constData(), static_cast<std::size_t>(bytes.size())), std::string_view("loom.toml"));
-    } catch (const toml::parse_error& error) {
-        QString description = fromUtf8(error.description());
-        while (description.endsWith(u'.'))
-            description.chop(1);
-        checker.add("toml-syntax", lineOf(error.source()), QStringLiteral("This isn't valid TOML: %1.").arg(description));
+    // The same UTF-8 check as every other file (`not-utf8`), then TOML (`toml-syntax`).
+    std::optional<toml::table> parsed = parsePlainToml(bytes, checker);
+    if (!parsed) {
         reading.problems = std::move(checker.problems);
         return reading;
     }
+    const toml::table& table = *parsed;
 
     ProjectConfig& config = reading.config;
     const QString project = QStringLiteral("project");
@@ -184,7 +182,7 @@ ProjectTomlReading readProjectToml(const QByteArray& bytes, const QString& root)
     checker.unknownFields(table, {"format", "name", "idea", "created", "tex", "tags"}, QString(),
                           QStringLiteral("loom.toml"), projectFieldList);
 
-    if (const std::optional<QString> name = checker.stringField(table, "name", QStringLiteral("name"), 1, project, Need::RequiredNonEmpty))
+    if (const std::optional<QString> name = checker.stringField(table, "name", QStringLiteral("name"), 1, project, Need::Required))
         config.name = *name;
     if (const std::optional<QString> idea = checker.stringField(table, "idea", QStringLiteral("idea"), 1, project, Need::Optional))
         config.idea = *idea;
@@ -193,7 +191,7 @@ ProjectTomlReading readProjectToml(const QByteArray& bytes, const QString& root)
         if (const toml::value<toml::date>* value = node->as_date()) {
             const toml::date date = value->get();
             config.created = QDate(date.year, date.month, date.day);
-        } else {
+        } else if (!checker.reportEmpty(QStringLiteral("created"), *node, project, Need::Required)) {
             checker.wrongType(QStringLiteral("created"), QStringLiteral("a date"), *node);
         }
     } else {

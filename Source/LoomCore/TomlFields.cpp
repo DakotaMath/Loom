@@ -54,6 +54,24 @@ void FieldChecker::missingField(const QString& field, int line, const QString& t
     add("missing-field", line, QStringLiteral("`%1` is missing; every %2 needs one.").arg(field, thing));
 }
 
+void FieldChecker::emptyField(const QString& field, int line, const QString& thing, bool required)
+{
+    add("missing-field", line,
+        required ? QStringLiteral("`%1` is empty; every %2 needs one.").arg(field, thing)
+                 : QStringLiteral("`%1` is empty; give it a value or leave it out.").arg(field));
+}
+
+bool FieldChecker::reportEmpty(const QString& field, const toml::node& node, const QString& thing, Need need)
+{
+    // Specs/m1-core.md, "Front matter", A2: an empty value in a required field, or in an
+    // optional one that names something, is a missing value. Free text may be empty.
+    const toml::value<std::string>* value = node.as_string();
+    if (need == Need::Optional || !value || !value->get().empty())
+        return false;
+    emptyField(field, line(node), thing, need == Need::Required);
+    return true;
+}
+
 void FieldChecker::wrongType(const QString& field, const QString& expected, const toml::node& node)
 {
     add("wrong-type", line(node), QStringLiteral("`%1` should be %2, not %3.").arg(field, expected, describeToml(node)));
@@ -64,15 +82,17 @@ std::optional<QString> FieldChecker::stringField(const toml::table& table, std::
 {
     const toml::node* node = table.get(key);
     if (!node) {
-        if (need != Need::Optional)
+        if (need == Need::Required)
             missingField(field, tableLine, thing);
         return std::nullopt;
     }
     const toml::value<std::string>* value = node->as_string();
-    if (!value || (need == Need::RequiredNonEmpty && value->get().empty())) {
-        wrongType(field, need == Need::RequiredNonEmpty ? QStringLiteral("a non-empty string") : QStringLiteral("a string"), *node);
+    if (!value) {
+        wrongType(field, QStringLiteral("a string"), *node);
         return std::nullopt;
     }
+    if (reportEmpty(field, *node, thing, need))
+        return std::nullopt;
     return fromUtf8(value->get());
 }
 

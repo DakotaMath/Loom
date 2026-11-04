@@ -262,6 +262,79 @@ TEST_CASE("Required fields of paper.toml, and a draft that leaves out key, cite 
     CHECK(problemsOf(loom::readPaper(text, "Papers/Smith24/paper.toml", false).problems) == draft);
 }
 
+TEST_CASE("Empty values in paper.toml are missing values", "[papers]")
+{
+    // Specs/m1-core.md, "Front matter", A2. `differences` is free text, and a name's `first` may
+    // be empty, so neither is reported.
+    const QByteArray x = "source = \"https://x.org\", verified = false";
+    const QByteArray text =
+        "key = \"\"\n"                                                                 // 1
+        "cite = \"\"\n"                                                                // 2
+        "relevance = 1\n"                                                              // 3
+        "created = 2026-11-03\n"                                                       // 4
+        "\n[work]\n"                                                                   // 5, 6
+        "type = { value = \"\", " + x + " }\n"                                         // 7
+        "title = { value = \"\", " + x + " }\n"                                        // 8
+        "authors = { value = [{ last = \"Smith\", first = \"\" }, { last = \"\", first = \"B\" }], " + x + " }\n" // 9
+        "\n[[versions]]\n"                                                             // 10, 11
+        "id = \"\"\n"                                                                  // 12
+        "kind = \"\"\n"                                                                // 13
+        "pdf = \"\"\n"                                                                 // 14
+        "differences = \"\"\n"                                                         // 15
+        "\n[[reading]]\n"                                                              // 16, 17
+        "version = \"\"\n"                                                             // 18
+        "level = \"\"\n"                                                               // 19
+        "what = \"\"\n"                                                                // 20
+        "date = 2026-11-03\n"                                                          // 21
+        "session = \"\"\n";                                                            // 22
+    const std::vector<P> expected = {
+        {"missing-field", 1, "`key` is empty; every paper needs one."},
+        {"missing-field", 2, "`cite` is empty; every paper needs one."},
+        {"missing-field", 7, "`work.type` is empty; every paper needs one."},
+        {"missing-field", 8, "`work.title` is empty; every paper needs one."},
+        {"missing-field", 9, "`work.authors.last` is empty; every name needs one."},
+        {"missing-field", 12, "`id` is empty; every version needs one."},
+        {"missing-field", 13, "`kind` is empty; every version needs one."},
+        {"missing-field", 14, "`pdf` is empty; give it a value or leave it out."},
+        {"missing-field", 18, "`version` is empty; every reading needs one."},
+        {"missing-field", 19, "`level` is empty; every reading needs one."},
+        {"missing-field", 20, "`what` is empty; every reading needs one."},
+        {"missing-field", 22, "`session` is empty; give it a value or leave it out."},
+    };
+    CHECK(problemsOf(loom::readPaper(text, "Papers/Smith24/paper.toml").problems) == expected);
+
+    // A draft may leave out `key` and `cite`, but not give them empty.
+    std::vector<P> draft = expected;
+    std::get<2>(draft[0]) = "`key` is empty; give it a value or leave it out.";
+    std::get<2>(draft[1]) = "`cite` is empty; give it a value or leave it out.";
+    CHECK(problemsOf(loom::readPaper(text, "Papers/Smith24/paper.toml", false).problems) == draft);
+}
+
+TEST_CASE("A version id or session ending in a line break doesn't pass its rule", "[papers]")
+{
+    // Qt's `$` also matches before a final line break, so each rule must be anchored at the very end.
+    const auto has = [](const loom::PaperReading& reading, const P& problem) {
+        const std::vector<P> problems = problemsOf(reading.problems);
+        return std::find(problems.begin(), problems.end(), problem) != problems.end();
+    };
+
+    QByteArray session = smithJones24();
+    REQUIRE(session.contains("session = \"Sessions/2026-10-18\""));
+    session.replace("session = \"Sessions/2026-10-18\"", "session = \"Sessions/2026-10-18\\n\"");
+    CHECK(problemsOf(loom::readPaper(session, paperPath).problems) == std::vector<P>{
+        {"bad-value", 44, "`session` can't be `Sessions/2026-10-18\n`; it must be one of `Sessions/<YYYY-MM-DD>`."}});
+
+    QByteArray arxiv = smithJones24();
+    REQUIRE(arxiv.contains("id = \"arxiv-v1\""));
+    arxiv.replace("id = \"arxiv-v1\"", "id = \"arxiv-v1\\n\"");
+    CHECK(has(loom::readPaper(arxiv, paperPath),
+              P{"version-id", 17, "`arxiv-v1\n` isn't a valid version id for an arxiv version: use arxiv-v<N>."}));
+
+    const QByteArray edition = entryOf("book", {{"year", "2001"}}) + "\n[[versions]]\nid = \"ed2\\n\"\nkind = \"published\"\n";
+    CHECK(has(loom::readPaper(edition, "Papers/Smith24/paper.toml"),
+              P{"version-id", 17, "`ed2\n` isn't a valid version id for a published version: use published or ed<N>."}));
+}
+
 TEST_CASE("paper.toml that isn't TOML or UTF-8", "[papers]")
 {
     const loom::PaperReading broken = loom::readPaper("key = \n", paperPath);
@@ -326,6 +399,36 @@ TEST_CASE("Stub problems, with their lines", "[papers][stubs]")
     };
     CHECK(problemsOf(reading.problems) == expected);
     CHECK_FALSE(reading.lossless);
+}
+
+TEST_CASE("Empty values in a stub are missing values", "[papers][stubs]")
+{
+    // Specs/m1-core.md, "Front matter", A2. An empty `gist` keeps its own code, `stub-gist-empty`.
+    const QByteArray text =
+        "id = \"\"\n"                                                // 1
+        "kind = \"\"\n"                                              // 2
+        "gist = \"G\"\n"                                             // 3
+        "extracted_from = \"\"\n"                                    // 4
+        "extracted_by = \"\"\n"                                      // 5
+        "created = 2026-10-18\n"                                     // 6
+        "\n[locators]\n"                                             // 7, 8
+        "arxiv-v1 = { at = \"\", checked_against_pdf = false }\n";   // 9
+    CHECK(problemsOf(loom::readStub(text, "Papers/SmithJones24/Statements/7RT2.toml").problems) == std::vector<P>{
+        {"missing-field", 1, "`id` is empty; every stub needs one."},
+        {"missing-field", 2, "`kind` is empty; every stub needs one."},
+        {"missing-field", 4, "`extracted_from` is empty; every stub needs one."},
+        {"missing-field", 5, "`extracted_by` is empty; every stub needs one."},
+        {"missing-field", 9, "`locators.arxiv-v1.at` is empty; every locator says where the result is."},
+    });
+}
+
+TEST_CASE("A stub's extracted_by can't end in a line break", "[papers][stubs]")
+{
+    QByteArray text = stubToml("7RT2", "theorem", false);
+    REQUIRE(text.contains("extracted_by = \"agent:claude-opus-5-5\""));
+    text.replace("extracted_by = \"agent:claude-opus-5-5\"", "extracted_by = \"agent:claude-opus-5-5\\n\"");
+    CHECK(problemsOf(loom::readStub(text, "Papers/SmithJones24/Statements/7RT2.toml").problems) == std::vector<P>{
+        {"bad-value", 5, "`extracted_by` can't be `agent:claude-opus-5-5\n`; it must be one of `dakota`, `agent:<model>`."}});
 }
 
 TEST_CASE("A stub needs its locators and its required fields", "[papers][stubs]")

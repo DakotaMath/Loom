@@ -125,14 +125,14 @@ StatementReading readStatement(const QByteArray& bytes, const QString& path)
                                   "refuted_by", "refuted_on", "created", "verified"}, statementFieldList);
     s.id = reader.string(*table, "id", Need::Required).value_or(QString());
     s.kind = reader.string(*table, "kind", Need::Required).value_or(QString());
-    s.title = reader.string(*table, "title", Need::RequiredNonEmpty).value_or(QString());
+    s.title = reader.string(*table, "title", Need::Required).value_or(QString());
     s.tags = reader.list(*table, "tags", QStringLiteral("a list of tags"), false).value_or(QStringList());
     s.statedUsing = reader.list(*table, "stated_using", QStringLiteral("a list of tags"), false).value_or(QStringList());
     s.aliases = reader.list(*table, "aliases", QStringLiteral("a list of aliases"), false).value_or(QStringList());
-    const std::optional<QString> origin = reader.string(*table, "origin", Need::Optional);
+    const std::optional<QString> origin = reader.string(*table, "origin", Need::Naming);
     s.origin = origin.value_or(QString());
-    s.supersededBy = reader.string(*table, "superseded_by", Need::Optional).value_or(QString());
-    s.refutedBy = reader.string(*table, "refuted_by", Need::Optional).value_or(QString());
+    s.supersededBy = reader.string(*table, "superseded_by", Need::Naming).value_or(QString());
+    s.refutedBy = reader.string(*table, "refuted_by", Need::Naming).value_or(QString());
     s.refutedOn = reader.date(*table, "refuted_on", false);
     s.created = reader.date(*table, "created", true);
     s.verified = reader.date(*table, "verified", false);
@@ -153,7 +153,8 @@ StatementReading readStatement(const QByteArray& bytes, const QString& path)
     reader.repeats(QStringLiteral("stated_using"), s.statedUsing);
     reader.repeats(QStringLiteral("aliases"), s.aliases);
     reader.aliases(s.aliases);
-    static const QRegularExpression originRule(QStringLiteral("^(new|spec:.+|import:.+)$"),
+    // Anchored at the very end: Qt's `$` also matches before a final line break.
+    static const QRegularExpression originRule(QRegularExpression::anchoredPattern(QStringLiteral("new|spec:.+|import:.+")),
                                                QRegularExpression::DotMatchesEverythingOption);
     if (origin && !originRule.match(s.origin).hasMatch())
         reader.badValue(QStringLiteral("origin"), s.origin, QStringLiteral("`new`, `spec:<spec-id>`, `import:<path>`"));
@@ -239,8 +240,9 @@ VerboseReading readVerboseProof(const QByteArray& bytes, const QString& path)
 
     if (!v.proof.isEmpty() && v.proof != proofId)
         reader.badValue(QStringLiteral("proof"), v.proof, u'`' + proofId + u'`');
-    // The fingerprint's form (Specs/m1-core.md, D2: 12 hex characters of SHA-256, lowercase).
-    static const QRegularExpression fingerprintRule(QStringLiteral("^[0-9a-f]{12}$"));
+    // The fingerprint's form (Specs/m1-core.md, D2: 12 hex characters of SHA-256, lowercase),
+    // anchored at the very end: Qt's `$` also matches before a final line break.
+    static const QRegularExpression fingerprintRule(QRegularExpression::anchoredPattern(QStringLiteral("[0-9a-f]{12}")));
     if (!v.fingerprint.isEmpty() && !fingerprintRule.match(v.fingerprint).hasMatch())
         reader.checker.add("wrong-type", reader.lines.of(QStringLiteral("fingerprint")),
             QStringLiteral("`fingerprint` should be 12 characters from 0–9 and a–f, not `%1`.").arg(v.fingerprint));
