@@ -148,6 +148,22 @@ TEST_CASE("Shared keys: a third paper takes the next letter, and lettered keys n
 
     // An old key counts as used: the next letter is after the highest anyone has had.
     CHECK(loom::assignKey(third, {{"SmithJones24a", {"SmithJones24d"}, nullptr}}).key == "SmithJones24e");
+
+    // An unlettered paper beside lettered ones is renamed to the next letter first.
+    const loom::KeyAssignment fourth =
+        loom::assignKey(third, {{"SmithJones24", {}, nullptr}, {"SmithJones24a", {}, nullptr}});
+    CHECK(fourth.key == "SmithJones24c");
+    REQUIRE(fourth.renames.size() == 1);
+    CHECK(fourth.renames[0] == std::pair<QString, QString>("SmithJones24", "SmithJones24b"));
+}
+
+TEST_CASE("Shared keys: no key once every letter is taken", "[keys]")
+{
+    const loom::Paper paper = paperBy({"Smith"}, 2024);
+    const loom::KeyAssignment full = loom::assignKey(paper, {{"Smith24z", {}, nullptr}});
+    CHECK(full.key.isEmpty());
+    CHECK(full.renames.empty());
+    CHECK(full.problem == "Can't make a key for this paper: every letter after `Smith24` is taken.");
 }
 
 TEST_CASE("A key that is only another paper's old key is not taken", "[keys]")
@@ -165,4 +181,39 @@ TEST_CASE("Which keys fit a base", "[keys]")
     CHECK_FALSE(loom::keyFitsBase("SmithJones24B", "SmithJones24"));
     CHECK_FALSE(loom::keyFitsBase("SmithJones24ab", "SmithJones24"));
     CHECK_FALSE(loom::keyFitsBase("SmithJones23", "SmithJones24"));
+}
+
+TEST_CASE("Keys that differ only in case are the same key (A3)", "[keys]")
+{
+    // A key is a folder name, and Windows folder names ignore case.
+    const loom::Paper earlier = paperBy({"MacDonald"}, 2020, QDate(2019, 5, 1));
+    const loom::Paper later = paperBy({"Macdonald"}, 2020, QDate(2020, 2, 1));
+    const loom::KeyAssignment assigned = loom::assignKey(later, {{"MacDonald20", {}, &earlier}});
+    CHECK(assigned.key == "Macdonald20b");
+    REQUIRE(assigned.renames.size() == 1);
+    // The paper renamed keeps its own spelling of the base.
+    CHECK(assigned.renames[0] == std::pair<QString, QString>("MacDonald20", "MacDonald20a"));
+
+    // Lettered keys and old keys count whatever their case.
+    CHECK(loom::assignKey(later, {{"MacDonald20a", {}, nullptr}}).key == "Macdonald20b");
+    CHECK(loom::assignKey(later, {{"Smith20", {"MACDONALD20C"}, nullptr}}).key == "Macdonald20d");
+    // A key only another paper's old key is, ignoring case, is not taken.
+    const loom::KeyAssignment old = loom::assignKey(later, {{"Smith21", {"macdonald20"}, nullptr}});
+    CHECK(old.key == "Macdonald20a");
+    CHECK(old.renames.empty());
+}
+
+TEST_CASE("An unlettered key beside a lettered one of its base doesn't follow the rule (step 4)", "[keys]")
+{
+    // Once a base is shared, every paper with it carries a letter.
+    CHECK(loom::keyFollowsRule("SmithJones24", "SmithJones24", {}));
+    CHECK(loom::keyFollowsRule("SmithJones24", "SmithJones24", {{"Smith23", {}, nullptr}}));
+    CHECK_FALSE(loom::keyFollowsRule("SmithJones24", "SmithJones24", {{"SmithJones24a", {}, nullptr}}));
+    CHECK_FALSE(loom::keyFollowsRule("SmithJones24", "SmithJones24", {{"Smith23", {"smithjones24c"}, nullptr}}));
+    CHECK(loom::keyFollowsRule("SmithJones24b", "SmithJones24", {{"SmithJones24a", {}, nullptr}}));
+    CHECK_FALSE(loom::keyFollowsRule("SmithJones23", "SmithJones24", {}));
+
+    // The key it should have is the next letter, as assignKey() gives it.
+    const loom::Paper paper = paperBy({"Smith", "Jones"}, 2024);
+    CHECK(loom::assignKey(paper, {{"SmithJones24a", {}, nullptr}}).key == "SmithJones24b");
 }

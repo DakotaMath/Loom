@@ -77,6 +77,18 @@ void FieldChecker::wrongType(const QString& field, const QString& expected, cons
     add("wrong-type", line(node), QStringLiteral("`%1` should be %2, not %3.").arg(field, expected, describeToml(node)));
 }
 
+QDate FieldChecker::date(const QString& field, const toml::node& node)
+{
+    const toml::date value = node.as_date()->get();
+    const QDate out(value.year, value.month, value.day);
+    if (!out.isValid()) {
+        const QString text = QString::asprintf("%04d-%02d-%02d", int(value.year), int(value.month), int(value.day));
+        add("bad-value", line(node),
+            QStringLiteral("`%1` can't be `%2`; it must be one of the dates from 0001-01-01 on.").arg(field, text));
+    }
+    return out;
+}
+
 std::optional<QString> FieldChecker::stringField(const toml::table& table, std::string_view key, const QString& field,
                                                  int tableLine, const QString& thing, Need need)
 {

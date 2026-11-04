@@ -57,12 +57,21 @@ std::optional<int> yearOf(const PaperField* field)
     return std::nullopt;
 }
 
-/// The arXiv version number of a version: its `arxiv_version`, else the N of `arxiv-v<N>`.
-qint64 arxivNumber(const PaperVersion& version)
+/// Whether two keys are the same key: equal ignoring case (A3), since a key is a folder name and
+/// Windows folder names ignore case. No side effects.
+bool sameKey(const QString& a, const QString& b)
 {
-    if (const PaperField* field = version.field(u"arxiv_version"); field && std::holds_alternative<qint64>(field->value))
-        return std::get<qint64>(field->value);
-    return version.id.mid(7).toLongLong();
+    return a.compare(b, Qt::CaseInsensitive) == 0;
+}
+
+/// The letter of `name` if it is `base` and one letter, compared ignoring case (A3), in lower
+/// case; else 0. `MacDonald20B` is the base `Macdonald20` with the letter `b`. No side effects.
+char letterAfter(const QString& name, const QString& base)
+{
+    if (name.size() != base.size() + 1 || !name.startsWith(base, Qt::CaseInsensitive))
+        return 0;
+    const QChar letter = name.back().toLower();
+    return letter >= u'a' && letter <= u'z' ? char(letter.unicode()) : 0;
 }
 
 /// The date posting order goes by: the earliest arXiv `posted`, else 1 January of the published year.
@@ -126,7 +135,7 @@ std::optional<int> keyYear(const Paper& paper)
     }
     const PaperVersion* lowest = nullptr;
     for (const PaperVersion& version : paper.versions) {
-        if (version.kind == u"arxiv" && version.field(u"posted") && (!lowest || arxivNumber(version) < arxivNumber(*lowest)))
+        if (version.kind == u"arxiv" && version.field(u"posted") && (!lowest || version.arxivNumber() < lowest->arxivNumber()))
             lowest = &version;
     }
     if (lowest) {
@@ -173,6 +182,25 @@ bool keyFitsBase(const QString& key, const QString& base)
     return key.size() == base.size() + 1 && key.startsWith(base) && key.back() >= u'a' && key.back() <= u'z';
 }
 
+bool keyFollowsRule(const QString& key, const QString& base, const std::vector<KeyedPaper>& others)
+{
+    if (!keyFitsBase(key, base))
+        return false;
+    if (key != base)
+        return true;
+    // Step 4: a bare base beside a lettered one means the base is shared, so this paper needs a
+    // letter too.
+    for (const KeyedPaper& other : others) {
+        if (letterAfter(other.key, base) != 0)
+            return false;
+        for (const QString& alias : other.aliases) {
+            if (letterAfter(alias, base) != 0)
+                return false;
+        }
+    }
+    return true;
+}
+
 bool postedBefore(const Paper& a, const Paper& b)
 {
     const QDate da = postingDate(a);
@@ -195,7 +223,8 @@ KeyAssignment assignKey(const Paper& paper, const std::vector<KeyedPaper>& other
         return result;
     }
 
-    // The letters already used with this base, as keys or old keys, and who holds the base itself.
+    // The letters already used with this base, as keys or old keys, and who holds the base itself;
+    // all compared ignoring case (A3).
     char highest = 0;
     bool baseTaken = false;
     const KeyedPaper* exact = nullptr;
@@ -203,12 +232,12 @@ KeyAssignment assignKey(const Paper& paper, const std::vector<KeyedPaper>& other
         QStringList names = other.aliases;
         names.prepend(other.key);
         for (const QString& name : names) {
-            if (name == base.key)
+            if (sameKey(name, base.key))
                 baseTaken = true;
-            else if (keyFitsBase(name, base.key))
-                highest = std::max(highest, char(name.back().unicode()));
+            else
+                highest = std::max(highest, letterAfter(name, base.key));
         }
-        if (other.key == base.key)
+        if (sameKey(other.key, base.key))
             exact = &other;
     }
     if (!baseTaken && highest == 0) {
@@ -216,11 +245,13 @@ KeyAssignment assignKey(const Paper& paper, const std::vector<KeyedPaper>& other
         return result;
     }
 
+    // This paper's key, and the other's: each keeps its own spelling of the base.
     const auto lettered = [&](char letter) { return base.key + QChar::fromLatin1(letter); };
+    const auto otherLettered = [&](char letter) { return exact->key + QChar::fromLatin1(letter); };
     if (exact && highest == 0) {
         // The first time: both get letters in posting order.
         const bool mineFirst = exact->paper && postedBefore(paper, *exact->paper);
-        result.renames.push_back({exact->key, lettered(mineFirst ? 'b' : 'a')});
+        result.renames.push_back({exact->key, otherLettered(mineFirst ? 'b' : 'a')});
         result.key = lettered(mineFirst ? 'a' : 'b');
         return result;
     }
@@ -230,7 +261,7 @@ KeyAssignment assignKey(const Paper& paper, const std::vector<KeyedPaper>& other
             result.problem = QStringLiteral("Can't make a key for this paper: every letter after `%1` is taken.").arg(base.key);
             return result;
         }
-        result.renames.push_back({exact->key, lettered(next)});
+        result.renames.push_back({exact->key, otherLettered(next)});
         ++next;
     }
     if (next > 'z') {

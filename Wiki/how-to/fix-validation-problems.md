@@ -7,7 +7,7 @@ tags: [validate, problems, pre-commit, checks, m1]
 
 > **Summary:** Run `loom validate` (or read what the refused commit printed), find each problem's code in the tables below, and fix the file and line it names; errors block a commit, warnings don't. With `--json` every problem carries its `code`. After a clone, run `loom install-hooks` so commits are checked.
 
-**Last verified:** 2026-11-04 · commit 414d5b1
+**Last verified:** 2026-11-04 · commit be0d3a7
 
 ## Before you start
 - A Loom project (a folder with `loom.toml`), and `loom` on `PATH`.
@@ -112,16 +112,16 @@ tags: [validate, problems, pre-commit, checks, m1]
 | Code | Sev. | What it means | How to fix |
 | --- | --- | --- | --- |
 | `paper-key-mismatch` | error | `key` in `paper.toml` isn't the folder's name. | `loom rekey <key>` renames both together. |
-| `paper-key-rule` | warning | The key isn't what the key rule gives (the authors or the year changed). | `loom rekey <key>`. The old key stays as an alias, so `\cite` keeps working. |
-| `paper-key-duplicate` | error | Two papers share a key or an old key. | Rekey one of them; `loom new-paper` letters shared keys (`SmithJones24a`, `…b`) itself. |
+| `paper-key-rule` | warning | The key isn't what the key rule gives (the authors or the year changed), or it is unlettered while another paper has the same base with a letter (`SmithJones24` beside `SmithJones24a`: a shared base is always lettered). Also when no key can be made: the paper has no year, or a surname has no Latin letters. | `loom rekey <key>`. The old key stays as an alias, so `\cite` keeps working. With no key to make, add the year, or write the surname in Latin letters as the paper prints it. |
+| `paper-key-duplicate` | error | Two papers share a key or an old key. Keys that differ only in case (`MacDonald20`, `Macdonald20`) are the same key: they're folder names, and Windows ignores case in those. | Rekey one of them; `loom new-paper` letters shared keys (`SmithJones24a`, `…b`) itself. |
 | `field-shape` | error | A bibliographic value isn't `{ value = …, source = "…", verified = … }`. | Write it in that shape, with where it came from. |
-| `field-source` | error | A field has no `source`. | Add the URL or the path inside `local/` it was read from. |
+| `field-source` | error | A field has no `source`, or its source is a link that isn't `https://` (an old `http://` MathSciNet link). | Add the URL or the path inside `local/` it was read from; give an `https://` link. |
 | `field-verified` | error | `verified` isn't a date or `false`. | Agents write `false`; a date is Dakota's click. |
 | `field-not-for-type` | error | A field that this version's kind and the work's type don't have. | Remove it, or fix the work's `type`. |
 | `field-expected` | warning | A field this type of work usually has is missing. | Add it if the work has one; ignore it if not (many series have no volume). |
 | `version-id` | error | A version's `id` doesn't fit its kind: `arxiv-v<N>`, `published` or `ed<N>`. | Rename the version, and the places that name it (`cite`, readings, stub locators). |
 | `version-duplicate` | error | Two versions have the same `id`. | Rename or merge them. |
-| `arxiv-version-mismatch` | error | `arxiv-v<N>`'s `arxiv_version` isn't N. | Make them agree. |
+| `arxiv-version-mismatch` | error | `arxiv-v<N>`'s `arxiv_version` isn't N. | Make them agree. An `arxiv_id` with its version on the end (`2401.99999v2`) is `bad-value`: the version goes in `arxiv_version`, the identifier without it. |
 | `cite-unknown` | error | `cite` names a version the paper doesn't have. | Point it at one of the paper's versions. |
 | `version-unknown` | error | A reading or a stub names a version the paper doesn't have. | Fix the version, or add it to the paper. |
 | `session-missing` | warning | A reading links a session folder that doesn't exist. | Commit the session, or fix the link. |

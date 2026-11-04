@@ -52,7 +52,8 @@ struct PaperField {
     int line = 1;
 
     /// The value as text, for BibTeX and messages: strings as they are, numbers in decimal,
-    /// dates as `2026-11-03`, names as `Last, First` joined by ` and `. No side effects.
+    /// dates as `2026-11-03`, names as `Last, First` joined by ` and ` (a name with an empty
+    /// `first` as `Last`). BibTeX writes names its own way: see bibEntry(). No side effects.
     QString text() const;
     /// The value's list of names, or an empty list if it isn't one. No side effects.
     std::vector<PersonName> names() const;
@@ -79,6 +80,10 @@ struct PaperVersion {
     const PaperField* field(QStringView name) const;
     /// The value of the field called `name` as text, or an empty string. No side effects.
     QString text(QStringView name) const;
+    /// The arXiv version number of an arXiv version: its `arxiv_version`, else the N of its id
+    /// `arxiv-v<N>`; 0 when it has neither. The one rule for which arXiv version is newest, for
+    /// `cite`'s default, the key's year and the bibliography's `eprint`. No side effects.
+    qint64 arxivNumber() const;
 };
 
 /// `[work]`: what is true of the paper whichever version. Absent fields are empty optionals.
@@ -101,6 +106,8 @@ struct ReadingEntry {
     QDate date;
     QString session;           ///< Optional: `Sessions/<YYYY-MM-DD>`.
     int line = 1;              ///< The line of its `[[reading]]` header.
+    /// The line of each field, for the problems found after reading (`version-unknown`,
+    /// `session-missing`).
     FieldLines lines;
 };
 
@@ -183,23 +190,29 @@ bool isCited(const Stub& stub);
 /// `field-verified`) with a value of its field's type; version IDs follow their kind
 /// (`version-id`, `version-duplicate`, `arxiv-version-mismatch`); each version holds only the
 /// fields of its kind and the work's type (`field-not-for-type`) and lacks none it expects
-/// (`field-expected`, a warning); `cite`, readings and renumberings name existing versions
-/// (`cite-unknown`, `version-unknown`); `pdf` and local sources are inside `local/` (`pdf-path`);
-/// there are authors, or for a book editors (`authors-missing`).
+/// (`field-expected`, a warning); a string field's value isn't empty (`missing-field`, A2); an
+/// arXiv version's `arxiv_id` is an identifier without `vN` and its `primary_class` a category
+/// (`bad-value`, A4); `cite`, readings and renumberings name existing versions (`cite-unknown`,
+/// `version-unknown`); `pdf` and local sources are inside `local/` (`pdf-path`), other sources
+/// are `https://` links (`field-source`); a date is one QDate can hold (`bad-value`); there are
+/// authors, or for a book editors (`authors-missing`).
 /// Problems that need the rest of the project (the folder name, other papers' keys, tags,
 /// sessions on disk) are found by checkContents().
 /// @param bytes       The file's content.
-/// @param path        Its project-relative path, `Papers/<Key>/paper.toml`.
+/// @param path        Its project-relative path, `Papers/<Key>/paper.toml`; for a draft, its path
+///                    as typed.
 /// @param keyRequired False for a draft given to `loom new-paper`, which may leave `key` out.
-/// @returns The fields and problems; `document.key` is used in messages, or the folder's name
-///          when the key is missing. No side effects.
+/// @returns The fields and problems; `document.key` is used in messages, or when the key is
+///          missing the folder's name (a draft's file name, since its folder says nothing about
+///          the paper). No side effects.
 PaperReading readPaper(const QByteArray& bytes, const QString& path, bool keyRequired = true);
 
 /// Reads a stub.
 /// Rules: the fields of the spec's table; `id` a tag equal to the file name; `kind` a statement
 /// kind; `gist` not empty (`stub-gist-empty`); `extracted_by` `dakota` or `agent:<model>`;
 /// `[locators]` holding one `{ at, checked_against_pdf }` per version and one for
-/// `extracted_from` (`stub-locator-missing`). Whether the versions exist is checked by
+/// `extracted_from` (`stub-locator-missing`); dates QDate can hold (`bad-value`, which makes the
+/// reading lossy). Whether the versions exist is checked by
 /// checkContents(), which knows the paper.
 /// @param bytes The file's content.
 /// @param path  Its project-relative path, `Papers/<Key>/Statements/<name>.toml`.

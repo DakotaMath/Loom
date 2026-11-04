@@ -31,6 +31,11 @@ struct PaperChange {
     /// Every paper renamed, in the order done: for `rekey`, the paper itself last; for
     /// `new-paper`, an existing paper that now shares its key and was lettered.
     std::vector<PaperRenamed> renamed;
+    /// For `new-paper`: the draft's fields whose date was Dakota's click and was written as
+    /// `false` (or, for the top-level `verified`, left out), in file order: `verified`,
+    /// `work.title`, `arxiv-v1.posted`, `renumbering.checked`, … Empty when the draft set none.
+    /// The command should say so, since the draft asked for them.
+    QStringList unclicked;
 };
 
 /// `loom new-paper <draft.toml>`: creates `Papers/<Key>/paper.toml` from a draft (Specs/m1-core.md,
@@ -38,11 +43,15 @@ struct PaperChange {
 /// `created`. Loom computes the key by the key rule (a `key` in the draft must be that key),
 /// defaults `cite` (`published` if there is a published version, else the newest arXiv version),
 /// sets `created` to today if absent, and writes the entry in canonical form. A paper that now
-/// shares the key is renamed, both getting letters (the key rule, step 4).
+/// shares the key is renamed, both getting letters (the key rule, step 4). Setting `verified` or
+/// `checked` to a date is Dakota's click, which `new-paper` isn't, so every such date in the
+/// draft is written as `false` (the top-level `verified` left out) and listed in `unclicked`
+/// (open spec question S16; this is its obvious reading).
 /// Refuses: a draft with errors of its own; a paper with no key by the rule; a draft key that
-/// isn't the rule's; `paper-exists` when anything named `Papers/<Key>` is already there,
-/// compared ignoring case (A3: it is never replaced); anything that would add an error to the
-/// project. If a write fails part way, the renames already done are undone.
+/// isn't the rule's; `paper-exists` when anything named `Papers/<Key>`, or where a paper it
+/// renames would go, is already there, compared ignoring case (A3: it is never replaced);
+/// anything that would add an error to the project. If a write fails part way, the renames
+/// already done are undone.
 /// @param draft     The draft's bytes.
 /// @param draftName The draft's name, for its problems (e.g. its path as typed).
 /// @returns The result and the renames. Side effects: renames paper folders; writes the entry.
@@ -70,8 +79,11 @@ ChangeResult createStub(const QString& root, const NewStub& request, const Chang
 /// `loom rekey <key>`: renames a paper to the key the rule gives (Specs/m1-core.md, "The key
 /// rule", step 5): the folder is renamed, `key` changes, and the old key is added to `aliases`.
 /// `\cite{…}` in bodies isn't rewritten (D9): old keys keep working through the alias. A key that
-/// already fits the rule (its base, or its base and a letter) is left alone. If a write fails
-/// part way, the renames already done are undone.
+/// already follows the rule (keyFollowsRule(): its base, or its base and a letter, and lettered
+/// when another paper has its base with a letter) is left alone; one whose folder disagrees has
+/// its folder renamed to match. Refuses (`paper-exists`), before renaming anything, when
+/// something is already where a rename goes, compared ignoring case (A3). If a write fails part
+/// way, the renames already done are undone.
 /// @param typed The paper's key or old key.
 /// @returns The result; `renamed` is empty when the key was already right. Side effects: renames
 ///          paper folders and rewrites their `paper.toml`.

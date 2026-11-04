@@ -61,6 +61,9 @@ struct TypeFields {
     QStringList optional;
 };
 
+/// The fields a published version of a work of `type` expects and may have.
+/// @param type The work's type, e.g. `article`.
+/// @returns Its lists, in the spec's order; both empty for a type Loom doesn't know. No side effects.
 TypeFields publishedFields(const QString& type)
 {
     if (type == u"article")
@@ -140,6 +143,51 @@ QString versionPhrase(const PaperVersion& version)
 bool isLocalPath(const QString& path)
 {
     return path.startsWith(u"local/") && isProjectPath(path) && path.size() > 6;
+}
+
+/// Whether `text` is shaped like a link, `<scheme>://…` (`http://`, `ftp://`), rather than a path.
+/// No side effects.
+bool looksLikeLink(const QString& text)
+{
+    static const QRegularExpression link(QStringLiteral("^[A-Za-z][A-Za-z0-9+.-]*://"));
+    return link.match(text).hasMatch();
+}
+
+/// Whether `id` is an arXiv identifier as `arxiv_id` holds it (Specs/m1-core.md, "Papers",
+/// `[[versions]]`, A4).
+/// Rule: `YYMM.NNNN` for April 2007 to December 2014; `YYMM.NNNNN` from January 2015; or
+/// old-style `archive/YYMMNNN`, the archive lowercase words joined by `-` and optionally a subject
+/// class, `math.AP/0601001`; MM a month; never a version suffix `vN`, which is `arxiv_version`'s.
+/// No side effects.
+bool isArxivId(const QString& id)
+{
+    // Anchored at the very end: Qt's `$` also matches before a final line break.
+    static const QRegularExpression modern(QRegularExpression::anchoredPattern(QStringLiteral("([0-9]{2})([0-9]{2})\\.([0-9]{4,5})")));
+    static const QRegularExpression oldStyle(
+        QRegularExpression::anchoredPattern(QStringLiteral("[a-z]+(-[a-z]+)*(\\.[A-Z]{2})?/[0-9]{2}([0-9]{2})[0-9]{3}")));
+    if (const QRegularExpressionMatch match = modern.match(id); match.hasMatch()) {
+        const int yymm = match.captured(1).toInt() * 100 + match.captured(2).toInt();
+        const int month = match.captured(2).toInt();
+        if (month < 1 || month > 12)
+            return false;
+        return match.captured(3).size() == 4 ? yymm >= 704 && yymm <= 1412 : yymm >= 1501;
+    }
+    if (const QRegularExpressionMatch match = oldStyle.match(id); match.hasMatch()) {
+        const int month = match.captured(3).toInt();
+        return month >= 1 && month <= 12;
+    }
+    return false;
+}
+
+/// Whether `category` is an arXiv category as `primary_class` holds it: an archive (lowercase
+/// words joined by `-`, `hep-th`), optionally followed by `.` and a subject class, either two
+/// capitals (`math.AP`) or lowercase words joined by `-` (`cond-mat.mes-hall`). The spec gives
+/// only the example `math.AP`; this reading admits every category arXiv lists. No side effects.
+bool isArxivCategory(const QString& category)
+{
+    static const QRegularExpression rule(
+        QRegularExpression::anchoredPattern(QStringLiteral("[a-z]+(-[a-z]+)*(\\.([A-Z]{2}|[a-z]+(-[a-z]+)*))?")));
+    return rule.match(category).hasMatch();
 }
 
 /// Reads a paper entry, table by table.
@@ -229,10 +277,18 @@ struct PaperReader {
                 return wrong(field, kind, value);
             break;
         case ValueKind::Date:
-            if (const toml::value<toml::date>* date = value.as_date())
-                out.value = QDate(date->get().year, date->get().month, date->get().day);
-            else
+            if (value.as_date()) {
+                // A date QDate can't hold (the year 0) is reported; the field is dropped, so the
+                // entry mustn't be rewritten without it.
+                const QDate date = checker().date(field + QStringLiteral(".value"), value);
+                if (!date.isValid()) {
+                    r.lost = true;
+                    return std::nullopt;
+                }
+                out.value = date;
+            } else {
                 return wrong(field, kind, value);
+            }
             break;
         case ValueKind::Names: {
             std::optional<std::vector<PersonName>> list = names(value, field);
@@ -254,13 +310,19 @@ struct PaperReader {
         out.source = source ? fromUtf8(source->as_string()->get()) : QString();
         if (out.source.trimmed().isEmpty())
             checker().add("field-source", line, QStringLiteral("`%1` has no source. Every field says where it came from.").arg(field));
+        else if (!out.source.startsWith(u"https://") && looksLikeLink(out.source))
+            // A link, just not an `https://` one (old MathSciNet and journal links are `http://`):
+            // telling the user to move it into `local/` would send them the wrong way.
+            checker().add("field-source", line,
+                QStringLiteral("`%1`'s source `%2` must be an `https://` link or a path inside this paper's `local/` folder.")
+                    .arg(field, out.source));
         else if (!out.source.startsWith(u"https://") && !isLocalPath(out.source))
             pdfPath(out.source, line);
 
         const toml::node* verified = table->get("verified");
         if (verified && verified->as_date()) {
-            const toml::date date = verified->as_date()->get();
-            out.verified = QDate(date.year, date.month, date.day);
+            out.verified = checker().date(field + QStringLiteral(".verified"), *verified);
+            r.lost = r.lost || !out.verified.isValid();
         } else if (!verified || !verified->as_boolean() || verified->as_boolean()->get()) {
             checker().add("field-verified", line, QStringLiteral("`%1`'s `verified` must be a date or `false`.").arg(field));
             r.lost = r.lost || verified;
@@ -398,8 +460,16 @@ struct PaperReader {
                 r.lost = true;
                 continue;
             }
-            if (std::optional<PaperField> value = field(node, label, valueKindOf(fieldName)))
-                v.fields.push_back({fieldName, std::move(*value)});
+            std::optional<PaperField> value = field(node, label, valueKindOf(fieldName));
+            if (!value)
+                continue;
+            // A2: an empty value is a missing one. The field is kept, so a rewrite keeps its source.
+            const QString text = value->text();
+            if (std::holds_alternative<QString>(value->value) && text.isEmpty())
+                checker().emptyField(label, value->line, QString(), false);
+            else if (v.kind == u"arxiv")
+                arxivForm(fieldName, label, text, value->line);
+            v.fields.push_back({fieldName, std::move(*value)});
         }
         std::stable_sort(v.fields.begin(), v.fields.end(), [](const NamedField& a, const NamedField& b) { return a.field.line < b.field.line; });
 
@@ -422,6 +492,23 @@ struct PaperReader {
             }
         }
         paper.versions.push_back(std::move(v));
+    }
+
+    /// Checks the form of an arXiv version's `arxiv_id` and `primary_class` (A4), which the
+    /// bibliography writes as `eprint` and `primaryclass`. Other fields aren't checked here.
+    /// @param field The field's name, e.g. `arxiv_id`.
+    /// @param label Its name in messages, e.g. `arxiv-v1.arxiv_id`.
+    /// Side effects: records `bad-value` at `line`.
+    void arxivForm(const QString& field, const QString& label, const QString& value, int line)
+    {
+        if (field == u"arxiv_id" && !isArxivId(value))
+            checker().add("bad-value", line,
+                QStringLiteral("`%1` can't be `%2`; it must be one of an arXiv identifier such as `2503.01234` or "
+                               "`math/0601001`, without `vN`.").arg(label, value));
+        else if (field == u"primary_class" && !isArxivCategory(value))
+            checker().add("bad-value", line,
+                QStringLiteral("`%1` can't be `%2`; it must be one of an arXiv category such as `math.AP` or `hep-th`.")
+                    .arg(label, value));
     }
 
     /// Reads `[[versions]]`: at least one is needed.
@@ -520,8 +607,9 @@ struct PaperReader {
             const toml::node* checked = table.get("checked");
             if (!checked) {
                 checker().missingField(QStringLiteral("renumbering.checked"), e.line, QStringLiteral("renumbering"));
-            } else if (const toml::value<toml::date>* date = checked->as_date()) {
-                e.checked = QDate(date->get().year, date->get().month, date->get().day);
+            } else if (checked->as_date()) {
+                e.checked = checker().date(QStringLiteral("renumbering.checked"), *checked);
+                r.lost = r.lost || !e.checked.isValid();
             } else if (!checked->as_boolean() || checked->as_boolean()->get()) {
                 checker().wrongType(QStringLiteral("renumbering.checked"), QStringLiteral("a date or `false`"), *checked);
                 r.lost = true;
@@ -652,6 +740,13 @@ QString PaperVersion::text(QStringView name) const
     return f ? f->text() : QString();
 }
 
+qint64 PaperVersion::arxivNumber() const
+{
+    if (const PaperField* number = field(u"arxiv_version"); number && std::holds_alternative<qint64>(number->value))
+        return std::get<qint64>(number->value);
+    return id.startsWith(u"arxiv-v") ? id.mid(7).toLongLong() : 0;
+}
+
 QString PaperWork::typeName() const
 {
     return type ? type->text() : QString();
@@ -746,8 +841,10 @@ PaperReading readPaper(const QByteArray& bytes, const QString& path, bool keyReq
     r.repeats(QStringLiteral("tags"), p.tags);
     r.repeats(QStringLiteral("aliases"), p.aliases);
 
-    const QString folder = folderName(path, 1);
-    PaperReader reader{r, p, p.key.isEmpty() ? folder : p.key};
+    // Without a key, an entry is known by its folder; a draft by its file, since a draft's folder
+    // (`Downloads`, or `.` for `loom new-paper draft.toml`) says nothing about the paper.
+    const QString unkeyed = keyRequired ? folderName(path, 1) : QFileInfo(path).fileName();
+    PaperReader reader{r, p, p.key.isEmpty() ? unkeyed : p.key};
     reader.work(*table);
     reader.versions(*table);
     reader.readings(*table);
@@ -851,8 +948,9 @@ StubReading readStub(const QByteArray& bytes, const QString& path)
             const toml::node* checked = entry->get("checked_against_pdf");
             if (!checked) {
                 r.checker.missingField(field + QStringLiteral(".checked_against_pdf"), line, QStringLiteral("locator"));
-            } else if (const toml::value<toml::date>* date = checked->as_date()) {
-                locator.checkedAgainstPdf = QDate(date->get().year, date->get().month, date->get().day);
+            } else if (checked->as_date()) {
+                locator.checkedAgainstPdf = r.checker.date(field + QStringLiteral(".checked_against_pdf"), *checked);
+                r.lost = r.lost || !locator.checkedAgainstPdf.isValid();
             } else if (!checked->as_boolean() || checked->as_boolean()->get()) {
                 r.checker.wrongType(field + QStringLiteral(".checked_against_pdf"), QStringLiteral("a date or `false`"), *checked);
                 r.lost = true;
