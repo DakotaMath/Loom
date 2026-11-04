@@ -63,7 +63,7 @@ TEST_CASE("A byte-order mark is skipped with a warning", "[front-matter]")
 
 TEST_CASE("The first line must be exactly +++", "[front-matter]")
 {
-    for (const QByteArray text : {QByteArray(""), QByteArray("id = \"4KX7\"\n"), QByteArray("++++\n+++\n"),
+    for (const QByteArray& text : {QByteArray(""), QByteArray("id = \"4KX7\"\n"), QByteArray("++++\n+++\n"),
                                   QByteArray(" +++\n+++\n"), QByteArray("+++ \n+++\n")}) {
         const loom::FrontMatterSplit split = loom::splitFrontMatter(text, path);
         CHECK_FALSE(split.found);
@@ -76,7 +76,7 @@ TEST_CASE("The first line must be exactly +++", "[front-matter]")
 
 TEST_CASE("Front matter that is never closed", "[front-matter]")
 {
-    for (const QByteArray text : {QByteArray("+++"), QByteArray("+++\n"), QByteArray("+++\nid = \"4KX7\"\n++ +\nBody\n")}) {
+    for (const QByteArray& text : {QByteArray("+++"), QByteArray("+++\n"), QByteArray("+++\nid = \"4KX7\"\n++ +\nBody\n")}) {
         const loom::FrontMatterSplit split = loom::splitFrontMatter(text, path);
         CHECK_FALSE(split.found);
         REQUIRE(split.problems.size() == 1);
