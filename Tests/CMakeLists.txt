@@ -32,8 +32,16 @@ add_test(NAME loom.checks
         "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/ChecksCli"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/CMake/ChecksCli.cmake")
 set_tests_properties(loom.checks PROPERTIES PASS_REGULAR_EXPRESSION "checks CLI: passed")
+# The paper subcommands (Tests/CMake/PapersCli.cmake).
+add_test(NAME loom.papers
+    COMMAND "${CMAKE_COMMAND}"
+        "-DLOOM=$<TARGET_FILE:loom>"
+        "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/PapersCli"
+        "-DDATA=${CMAKE_CURRENT_SOURCE_DIR}/CMake/PapersCli"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/CMake/PapersCli.cmake")
+set_tests_properties(loom.papers PROPERTIES PASS_REGULAR_EXPRESSION "papers CLI: passed")
 if(WIN32)
-    set_tests_properties(loom.version loom.version-json loom.no-arguments-is-usage-error loom.new-project loom.statements loom.checks
+    set_tests_properties(loom.version loom.version-json loom.no-arguments-is-usage-error loom.new-project loom.statements loom.checks loom.papers
         PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${LOOM_QT_BIN_DIR}")
 endif()
 

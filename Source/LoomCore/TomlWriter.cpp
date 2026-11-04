@@ -1,5 +1,6 @@
 #include "LoomCore/TomlWriter.h"
 
+#include <algorithm>
 #include <cstdlib>
 
 namespace loom {
@@ -63,6 +64,14 @@ QString tomlOffsetDateTime(const QDateTime& dateTime)
         return text + u'Z';
     const int minutes = std::abs(offset) / 60;
     return text + (offset < 0 ? u'-' : u'+') + QStringLiteral("%1:%2").arg(minutes / 60, 2, 10, u'0').arg(minutes % 60, 2, 10, u'0');
+}
+
+QString tomlKey(const QString& key)
+{
+    const bool bare = !key.isEmpty() && std::all_of(key.begin(), key.end(), [](QChar c) {
+        return (c >= u'a' && c <= u'z') || (c >= u'A' && c <= u'Z') || (c >= u'0' && c <= u'9') || c == u'_' || c == u'-';
+    });
+    return bare ? key : tomlBasicString(key);
 }
 
 QString tomlDate(const QDate& date)

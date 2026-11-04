@@ -28,7 +28,12 @@ std::optional<QString> proofFingerprint(const ProjectContents& contents, const Q
     input.statementBody = statement->reading.document.body;
     input.proofBody = proof->reading.document.body;
     for (const QString& tag : proof->reading.document.premises) {
-        // Paper stubs (written `premise <tag>\n0\n\n`, with no body) come with #8.
+        // A paper stub has no body: its content is the paper, which doesn't change under us, and
+        // its gist is our wording (Specs/m1-core.md, "The fingerprint": `premise <tag>\n0\n\n`).
+        if (contents.stub(tag) && !contents.statement(tag)) {
+            input.premises.push_back({tag, std::nullopt});
+            continue;
+        }
         const StatementFile* premise = contents.statement(tag);
         if (!premise)
             return fail(QStringLiteral("its premise `%1` isn't a statement in this project.").arg(tag));

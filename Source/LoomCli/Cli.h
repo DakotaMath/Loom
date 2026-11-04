@@ -11,6 +11,7 @@
 
 #include <cstdio>
 #include <optional>
+#include <utility>
 
 namespace loom {
 struct ChangeResult;
@@ -75,14 +76,28 @@ struct Args {
 };
 
 /// Reads a subcommand's arguments.
-/// @param name The subcommand, for messages.
+/// @param name           The subcommand, for messages.
+/// @param positionalName What the one positional argument is, for the usage message, e.g.
+///                       `a paper's key`; empty means `an ID`.
 /// @returns The arguments, or nothing with `error` set to what's wrong. No side effects.
-std::optional<Args> parseArgs(const QStringList& args, const QString& name, const ArgSpec& spec, QString& error);
+std::optional<Args> parseArgs(const QStringList& args, const QString& name, const ArgSpec& spec, QString& error,
+                              const QString& positionalName = {});
 
 /// Finds the project folder (Specs/m1-core.md, "The project folder": the current folder or the
 /// nearest parent holding `loom.toml`, unless `--project` names one).
 /// @returns The folder, or nothing with `message` set. No side effects.
 std::optional<QString> findProject(const Context& context, QString& message);
+
+/// Reads a subcommand's arguments and finds the project, the first steps of most subcommands.
+/// @param exitCode       Set when it fails, after the problem is reported.
+/// @param positionalName As for parseArgs().
+/// @returns The arguments and the project folder, or nothing.
+std::optional<std::pair<Args, QString>> start(const QStringList& args, const QString& name, const ArgSpec& spec,
+                                              const Context& context, int& exitCode, const QString& positionalName = {});
+
+/// Checks that the options in `required` were given.
+/// @returns An empty string, or the usage problem. No side effects.
+QString missing(const Args& args, const QString& name, const QStringList& required);
 
 /// "A, B and C". No side effects.
 QString listed(const QStringList& items);

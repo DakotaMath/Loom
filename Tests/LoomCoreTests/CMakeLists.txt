@@ -1,6 +1,7 @@
 # LoomCoreTests: Catch2 tests for LoomCore. catch_discover_tests registers each TEST_CASE with
 # CTest by running the program to list them, which on Windows needs Qt's DLLs on the PATH.
 add_executable(LoomCoreTests
+    BibliographyTests.cpp
     ChecksTests.cpp
     CyclesTests.cpp
     EditsTests.cpp
@@ -8,6 +9,10 @@ add_executable(LoomCoreTests
     FrontMatterTests.cpp
     IdsTests.cpp
     NewProjectTests.cpp
+    PaperEditsTests.cpp
+    PaperFixture.h
+    PaperKeysTests.cpp
+    PapersTests.cpp
     ProjectContentsTests.cpp
     ProjectFilesTests.cpp
     ProjectFixture.h

@@ -6,37 +6,6 @@ namespace cli {
 
 namespace {
 
-/// Reads the arguments and finds the project, the first steps of every subcommand here.
-/// @param exitCode Set when it fails, after the problem is reported.
-/// @returns The arguments and the project folder, or nothing.
-std::optional<std::pair<Args, QString>> start(const QStringList& args, const QString& name, const ArgSpec& spec,
-                                              const Context& context, int& exitCode)
-{
-    QString error;
-    std::optional<Args> parsed = parseArgs(args, name, spec, error);
-    if (!parsed) {
-        exitCode = usageError(error, context.json);
-        return std::nullopt;
-    }
-    std::optional<QString> root = findProject(context, error);
-    if (!root) {
-        exitCode = fail(exitCantWork, QStringLiteral("not-a-project"), error, context.json);
-        return std::nullopt;
-    }
-    return std::pair{std::move(*parsed), *root};
-}
-
-/// Checks that the options in `required` were given.
-/// @returns An empty string, or the usage problem.
-QString missing(const Args& args, const QString& name, const QStringList& required)
-{
-    for (const QString& option : required) {
-        if (!args.value(option))
-            return QStringLiteral("`loom %1` needs `%2`.").arg(name, option);
-    }
-    return {};
-}
-
 /// Checks that exactly one of `--body` and `--body-file` was given.
 QString oneBody(const Args& args, const QString& name)
 {

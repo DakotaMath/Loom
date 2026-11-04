@@ -14,7 +14,8 @@
 namespace loom {
 
 /// A proof's current fingerprint (Specs/m1-core.md, "The fingerprint"), from the bodies of the
-/// proof, the statement it proves and each premise statement, as they are in `contents`.
+/// proof, the statement it proves and each premise statement, as they are in `contents`; a
+/// premise that is a paper stub counts with no body.
 /// @param id      The proof's ID.
 /// @param problem Set, when there is no fingerprint, to why: in plain English, ready to print.
 /// @returns The fingerprint, or nothing if the proof, the statement it proves or a premise isn't

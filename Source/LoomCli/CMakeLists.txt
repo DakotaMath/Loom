@@ -4,6 +4,8 @@ add_executable(loom
     CheckCommands.h
     Cli.cpp
     Cli.h
+    PaperCommands.cpp
+    PaperCommands.h
     StatementCommands.cpp
     StatementCommands.h
     main.cpp)

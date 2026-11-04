@@ -1,9 +1,10 @@
 // The `loom` command (Specs/m1-core.md, "The `loom` command"). It knows `--version`,
-// `new-project`, the statement and proof subcommands and the check subcommands; the others
-// arrive with their build issues (#7 onwards).
+// `new-project`, the statement and proof subcommands, the check subcommands and the paper
+// subcommands; the others arrive with their build issues (#7, #9).
 
 #include "CheckCommands.h"
 #include "Cli.h"
+#include "PaperCommands.h"
 #include "StatementCommands.h"
 
 #include "LoomCore/NewProject.h"
@@ -147,5 +148,13 @@ int main(int argc, char* argv[])
         return runAddCheck(args, context);
     if (subcommand == u"merge-checks")
         return runMergeChecks(args, context);
+    if (subcommand == u"new-paper")
+        return runNewPaper(args, context);
+    if (subcommand == u"new-stub")
+        return runNewStub(args, context);
+    if (subcommand == u"rekey")
+        return runRekey(args, context);
+    if (subcommand == u"build-bib")
+        return runBuildBib(args, context);
     return printUsage();
 }

@@ -25,6 +25,7 @@ Traps, dead ends and their fixes, in one folder per area (`qt`, `build`, `git`, 
 
 | Page | Summary |
 | --- | --- |
+| [toml++ says an empty array isn't an array of tables](toml/tomlplusplus-empty-array-not-array-of-tables.md) | In toml++ v3, `array::is_array_of_tables()` (and `is_homogeneous()`) return `false` for an empty array, so `versions = []` fails a check written as "must be an array of tables" with a confusing `wrong-type` message. Test `array->empty()` first, and treat an empty list as "none" (`missing-field` where one is required). |
 | [toml++ writes table keys in alphabetical order](toml/tomlplusplus-sorts-keys.md) | A `toml::table` in toml++ is a `std::map`, so it forgets the order keys were read or inserted in and writes them alphabetically. Never write Loom's files with toml++'s formatter; use Loom's own writer, which puts fields in the order the spec lists. |
 
 ### windows

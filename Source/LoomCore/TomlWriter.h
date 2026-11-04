@@ -40,6 +40,11 @@ QString tomlMultilineStringAsIs(const QString& text);
 /// @returns The TOML text. No side effects.
 QString tomlOffsetDateTime(const QDateTime& dateTime);
 
+/// Writes a TOML key: bare if it is only ASCII letters, digits, `_` and `-` (TOML 1.0, "Keys"),
+/// else as a basic string. So a version ID such as `arxiv-v1` is written as it reads.
+/// @returns The TOML text. No side effects.
+QString tomlKey(const QString& key);
+
 /// Writes a TOML local date, e.g. `2026-11-03`.
 /// @param date A valid date.
 /// @returns The TOML text. No side effects.
