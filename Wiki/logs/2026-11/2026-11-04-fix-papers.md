@@ -8,7 +8,7 @@ tags: [m1, review, papers, bibliography]
 > **Summary:** Fixed batch 3 of the M1 review: keys compare ignoring case (A3), step 4 of the key rule is checked and `rekey` repairs it, `arxiv_id` and `primary_class` have their form checked (A4), BibTeX names and braces follow A5 and A6, and `new-paper` no longer writes Dakota's clicks; each fix's test failed on `main` first, and all 209 `ctest` tests pass on Windows.
 
 **Session model:** Opus 5.5
-**Issues and PRs:** no issue (batch 3 of `Reviews/M1` on `m1/review`); PR on branch `m1/fix-papers`
+**Issues and PRs:** no issue (batch 3 of `Reviews/M1` on `m1/review`); PR #25
 
 ## Done
 - **Keys (A3, step 4):** `assignKey` compares keys and old keys ignoring case, and a renamed paper keeps its own spelling of the base. New `keyFollowsRule()`: an unlettered base beside a lettered one breaks step 4. Validation's `paper-key-rule` and `loom rekey` both use it. `paper-key-duplicate` compares case-folded. `paper-key-rule` stays quiet when the paper has no authors or editors, since `authors-missing` already reports it.
