@@ -8,7 +8,7 @@ tags: [m1, review, cli, dakota]
 > **Summary:** Fixed batch 6a of the M1 review: `--outdate-checks` now outdates only the proofs Dakota confirmed, setting `level = "failed"` is his click (S7), `refute` checks its IDs before asking, `new-paper` says which dates it set to false, a git timeout is told apart from a missing git, `new-project` has its own `core.hooksPath` message, and `build-bib --out` resolves links and short names; each fix's test failed on `main` first, and all 225 `ctest` tests pass on Windows.
 
 **Session model:** Opus 5.5
-**Issues and PRs:** no issue (batch 6a of `Reviews/M1` on `m1/review`); PR to come
+**Issues and PRs:** no issue (batch 6a of `Reviews/M1` on `m1/review`); PR #26
 
 ## Done
 - **The `--outdate-checks` race:** `StatementEdit::outdateChecks` and `ProofEdit::outdateChecks` are now the list of proofs Dakota confirmed. `editStatement`/`editProof` refuse with `outdates-checks`, writing nothing, when the edit would outdate a different set. `loom` passes the list it showed in the prompt.
