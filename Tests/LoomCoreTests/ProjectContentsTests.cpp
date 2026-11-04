@@ -3,6 +3,7 @@
 
 #include "LoomCore/ProjectContents.h"
 
+#include "PaperFixture.h"
 #include "ProjectFixture.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -136,6 +137,50 @@ TEST_CASE("Problems that need several files", "[contents]")
         {"Statements/R2HW.tex", "refuted-unknown", 5, "R2HW is refuted by `4KX7.z`, which isn't a proof in this project."},
         {"Statements/R2HW.tex", "refuted-no-status", 5, "R2HW is a question; " + onlyProvable + " can be refuted."},
         {"Statements/README.md", "stray-file", 1, "`Statements/README.md` doesn't belong in Statements/: it holds only statements, each as `<tag>.tex`."},
+    });
+}
+
+TEST_CASE("Tags in use: every statement, stub, alias and proof folder", "[contents][ids]")
+{
+    // Specs/m1-core.md, "IDs", "Generation" and "Permanent": a new tag mustn't adopt what a
+    // proof folder holds, whatever it holds.
+    const ProjectFixture project;
+    project.statement("4KX7", "theorem", "aliases = [\"thm:energy-decay\"]\n");
+    project.write("Papers/SmithJones24/paper.toml", loomtest::smithJones24());
+    project.write("Papers/SmithJones24/Statements/7RT2.toml", loomtest::stubToml("7RT2", "theorem", true));
+    project.proof("5HN8", "5HN8.a", "5HN8", "[]");                   // A proof without its statement.
+    project.write("Proofs/9D3F/9D3F.a.checks.toml", "");              // Only a check history.
+    project.write("Proofs/6BWT/notes.txt", "notes");                  // Only a stray file.
+    project.write("Proofs/8CJA/8CJA.a.verbose.tex", "+++\n+++\n");    // Only a verbose proof.
+    project.write("Proofs/notes/x.tex", "Not a tag.");
+
+    const QSet<QString> used = loom::tagsInUse(loom::loadContents(project.root).contents);
+    CHECK(used == QSet<QString>{"4KX7", "thm:energy-decay", "7RT2", "5HN8", "9D3F", "6BWT", "8CJA"});
+}
+
+TEST_CASE("superseded_by names a statement, not a paper stub", "[contents]")
+{
+    // Specs/m1-core.md, "Statements": `superseded_by` is "the tag of another statement".
+    const ProjectFixture project;
+    project.write("Papers/SmithJones24/paper.toml", loomtest::smithJones24());
+    project.write("Papers/SmithJones24/Statements/7RT2.toml", loomtest::stubToml("7RT2", "theorem", true));
+    project.write("Papers/SmithJones24/Sessions/2026-10-18/notes.md", "Notes.\n"); // The session its reading links.
+    project.statement("N7ZE", "lemma", "superseded_by = \"7RT2\"\n");
+    CHECK(problemsOf(project) == std::vector<P>{
+        {"Statements/N7ZE.tex", "superseded-invalid", 5,
+         "N7ZE is superseded by 7RT2, which is a result from SmithJones24, not a statement of this project."},
+    });
+}
+
+TEST_CASE("A statement isn't refuted by one of its own proofs", "[contents]")
+{
+    const ProjectFixture project;
+    project.statement("4KX7", "theorem", "refuted_by = \"4KX7.a\"\nrefuted_on = 2026-11-06\n");
+    project.proof("4KX7", "4KX7.a", "4KX7", "[]");
+    CHECK(problemsOf(project) == std::vector<P>{
+        {"Statements/4KX7.tex", "refuted-self", 5,
+         "4KX7 is refuted by `4KX7.a`, which is one of its own proofs. A statement is refuted by a proof of "
+         "another statement, such as its negation."},
     });
 }
 

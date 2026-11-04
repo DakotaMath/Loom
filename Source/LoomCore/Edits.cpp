@@ -510,6 +510,11 @@ ChangeResult refuteStatement(const QString& root, const QString& typed, const QS
     const std::optional<QString> proof = resolveProof(contents, typedProof);
     if (!proof)
         return refused(QStringLiteral("ref-unknown"), QStringLiteral("`%1` isn't a proof in this project.").arg(typedProof));
+    // Validation's `refuted-self` would refuse it too; saying so here names the mistake plainly.
+    if (const std::optional<ProofIdParts> parts = splitProofId(*proof); parts && parts->tag == *tag)
+        return refused(QStringLiteral("refuted-self"),
+            QStringLiteral("%1 is a proof of %2 itself, so it can't refute it. A statement is refuted by a proof of another "
+                           "statement, such as its negation.").arg(*proof, *tag));
     const StatementFile& file = *contents.statement(*tag);
     if (!file.reading.lossless)
         return notEditable(file.path, file.reading.problems);

@@ -47,7 +47,8 @@ std::optional<QString> proofFingerprint(const ProjectContents& contents, const Q
 ProofChecking proofChecking(const ProjectContents& contents, const QString& id)
 {
     ProofChecking checking;
-    checking.fingerprint = proofFingerprint(contents, id).value_or(QString());
+    // Keep why there is no fingerprint, so status can say so rather than "it changed".
+    checking.fingerprint = proofFingerprint(contents, id, &checking.fingerprintProblem).value_or(QString());
     if (const ChecksFile* file = contents.checksOf(id))
         checking.checks = file->reading.checks;
     checking.standing = standingOf(checking.checks, checking.fingerprint);

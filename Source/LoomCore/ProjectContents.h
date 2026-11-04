@@ -74,6 +74,9 @@ struct ProjectContents {
     std::vector<ChecksFile> checks;
     std::vector<PaperFile> papers;
     std::vector<StubFile> stubs;
+    /// The tag of every folder in `Proofs/` named by a tag, whatever it holds (proofs, only a
+    /// check history, only stray files, or nothing), sorted. For tagsInUse().
+    QStringList proofFolders;
     /// Problems found while listing the folders: `stray-file`, a paper folder without its
     /// `paper.toml` (`missing-field`), and `bad-path` for a file that resolves outside the project.
     std::vector<Problem> listingProblems;
@@ -117,7 +120,8 @@ ContentsLoading loadContents(const QString& root);
 /// Every problem in the project that statements and proofs show: each file's own problems,
 /// the listing's, and those that need several files (`tag-unknown`, `id-syntax` and `ref-alias`
 /// in references, `id-duplicate`, `alias-duplicate`, `ref-unknown`, `stated-using-self`,
-/// `stated-using-cycle`, `superseded-invalid`, `refuted-unknown`, `refuted-no-status`,
+/// `stated-using-cycle`, `superseded-invalid` (also for a paper stub: `superseded_by` names a
+/// statement), `refuted-unknown`, `refuted-self` (refuted by one of its own proofs), `refuted-no-status`,
 /// `proof-folder-unknown`, `proves-mismatch`, `proof-of-no-status`, `premise-no-status`, `premise-cycle`,
 /// `verbose-orphan`, `checks-orphan`), with each check history's own problems; and for papers
 /// and stubs, each file's own problems and `paper-key-mismatch`, `paper-key-rule` (a warning),
@@ -130,8 +134,9 @@ ContentsLoading loadContents(const QString& root);
 std::vector<Problem> checkContents(const ProjectConfig& config, const ProjectContents& contents);
 
 /// Every tag a new statement or stub mustn't take (Specs/m1-core.md, "IDs", "Generation"): the
-/// tags and aliases of every statement and stub, and every proof folder's tag, so a new
-/// statement never adopts proofs left behind in a folder.
+/// tags and aliases of every statement and stub, and the tag of every folder in `Proofs/`,
+/// whatever it holds (proofs, verbose proofs, only a check history, only stray files), so a new
+/// statement never adopts what was left behind in a folder.
 /// @returns The tags and aliases. No side effects.
 QSet<QString> tagsInUse(const ProjectContents& contents);
 
@@ -141,7 +146,9 @@ QSet<QString> tagsInUse(const ProjectContents& contents);
 /// @returns The tag of an existing statement or stub, or nothing. No side effects.
 std::optional<QString> resolveStatement(const ProjectContents& contents, const QString& typed);
 
-/// Reads a proof ID a person typed, as resolveStatement() reads the tag part.
+/// Reads a proof ID a person typed: the tag part as normaliseTag() reads it (lower case, `O`
+/// and `I`/`L` forgiven) and the letters in any case. Aliases aren't resolved, unlike in
+/// resolveStatement(): an alias may itself contain a `.`.
 /// @param typed E.g. `4kx7.A`.
 /// @returns The ID of an existing proof, or nothing. No side effects.
 std::optional<QString> resolveProof(const ProjectContents& contents, const QString& typed);

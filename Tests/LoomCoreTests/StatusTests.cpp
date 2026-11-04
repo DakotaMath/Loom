@@ -245,6 +245,26 @@ TEST_CASE("Explanations of less common cases", "[status][explanations]")
     {
         CHECK(explanationOf(graphOf(project.root), "4KX7") == "4KX7 unchecked: 4KX7.a is complete, but has no agent pass.");
     }
+    SECTION("Dakota's pass only, no agent check")
+    {
+        addCheck(project, "4KX7.a", "dakota", "pass", 0);
+        CHECK(explanationOf(graphOf(project.root), "4KX7") == "4KX7 unchecked: 4KX7.a is complete, but has no agent pass.");
+    }
+    SECTION("a fingerprint Loom can't compute")
+    {
+        // Checked, then a premise's front matter breaks: no check can match, and the sentence
+        // says why rather than claiming the proof changed.
+        makeChecked(project, "4KX7.a");
+        project.write("Statements/5HN8.tex", "+++\nid = \"5HN8\"\nkind = lemma\n+++\nBody of 5HN8.\n");
+        const loom::ProjectGraph graph = graphOf(project.root);
+        CHECK(statusOf(graph, "4KX7") == Status::Unchecked);
+        CHECK(graph.proof("4KX7.a")->checking.fingerprintProblem
+              == "Loom can't compute the fingerprint of 4KX7.a: Loom can't read the front matter of its premise 5HN8 "
+                 "(Statements/5HN8.tex).");
+        CHECK(explanationOf(graph, "4KX7")
+              == "4KX7 unchecked: 4KX7.a is complete, but no check of it can count. Loom can't compute the fingerprint of "
+                 "4KX7.a: Loom can't read the front matter of its premise 5HN8 (Statements/5HN8.tex).");
+    }
     SECTION("premises both proved and cited, and several resting premises")
     {
         project.write("Papers/SmithJones24/paper.toml", loomtest::smithJones24());
@@ -464,4 +484,29 @@ TEST_CASE("refute sets refuted_by and refuted_on, and the statement becomes fals
         CHECK(result.outcome == loom::ChangeOutcome::Refused);
         CHECK(result.code == "ref-unknown");
     }
+    SECTION("one of its own proofs")
+    {
+        const QByteArray before = project.read("Statements/G5TZ.tex");
+        const loom::ChangeResult result = loom::refuteStatement(project.root, "G5TZ", "G5TZ.a", true, at(0));
+        CHECK(result.outcome == loom::ChangeOutcome::Refused);
+        CHECK(result.code == "refuted-self");
+        CHECK(result.message
+              == "G5TZ.a is a proof of G5TZ itself, so it can't refute it. A statement is refuted by a proof of another "
+                 "statement, such as its negation.");
+        CHECK(project.read("Statements/G5TZ.tex") == before);
+    }
+}
+
+TEST_CASE("A stub's paper is named by its key", "[status]")
+{
+    // Specs/m1-core.md, the `loom status` JSON: "`paper` is the key for stubs". The key and the
+    // folder differ only alongside `paper-key-mismatch`.
+    const ProjectFixture project;
+    QByteArray paper = loomtest::smithJones24();
+    paper.replace("key = \"SmithJones24\"", "key = \"SmithJones25\"");
+    project.write("Papers/SmithJones24/paper.toml", paper);
+    project.write("Papers/SmithJones24/Statements/7RT2.toml", loomtest::stubToml("7RT2", "theorem", true));
+    const loom::ProjectGraph graph = graphOf(project.root);
+    CHECK(graph.statement("7RT2")->paper == "SmithJones25");
+    CHECK(explanationOf(graph, "7RT2") == "7RT2 cited: Theorem 1.2, p. 4 in SmithJones25 (arxiv-v1), checked against the PDF on 2026-10-18.");
 }

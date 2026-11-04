@@ -42,16 +42,23 @@ struct ContentsChecker {
     const ProjectConfig& config;
     const ProjectContents& contents;
     std::vector<Problem> problems;
-    /// Indexes, so checking stays linear in the size of the project.
+    /// Indexes, so most lookups don't scan the lists. Not all: premiseCycles() and keyOf() still
+    /// look statements and papers up one by one, so checking isn't linear in the size of the
+    /// project; at M1's sizes that costs nothing measurable.
     QHash<QString, Node> nodeByTag;
     QHash<QString, QString> tagByAlias;
     QSet<QString> proofIds;
     QSet<QString> declaredTags;
 
+    /// Builds the indexes: every statement's and stub's node (statements first, so a stub
+    /// reusing a statement's tag is the one reported; the first by path otherwise), their
+    /// aliases, the proof IDs and `loom.toml`'s tags.
+    /// @param projectConfig   The project's `loom.toml`; kept by reference.
+    /// @param projectContents The files to check; kept by reference, and must outlive the checker.
+    /// No side effects beyond the checker itself.
     ContentsChecker(const ProjectConfig& projectConfig, const ProjectContents& projectContents)
         : config(projectConfig), contents(projectContents)
     {
-        // Statements first, so a stub reusing a statement's tag is the one reported.
         for (const StatementFile& file : contents.statements) {
             const StatementReading& r = file.reading;
             if (!nodeByTag.contains(file.tag))
@@ -196,20 +203,35 @@ struct ContentsChecker {
 
             statedUsing(file.tag, file.path, s.statedUsing, r.lines);
 
+            // `superseded_by` is "the tag of another statement" (Specs/m1-core.md, "Statements"),
+            // so a paper stub, which shares the tags, doesn't qualify (open question S6).
             if (!s.supersededBy.isEmpty()) {
                 const int line = r.lines.of(QStringLiteral("superseded_by"));
-                if (s.supersededBy == file.tag)
+                if (s.supersededBy == file.tag) {
                     add("superseded-invalid", file.path, line,
                         QStringLiteral("%1 is superseded by %2, which is itself.").arg(file.tag, s.supersededBy));
-                else if (!reference(s.supersededBy, QStringLiteral("superseded_by"), file.path, line, nullptr) && isTag(s.supersededBy))
+                } else if (const Node* target = reference(s.supersededBy, QStringLiteral("superseded_by"), file.path, line, nullptr)) {
+                    if (target->stub)
+                        add("superseded-invalid", file.path, line,
+                            QStringLiteral("%1 is superseded by %2, which is a result from %3, not a statement of this project.")
+                                .arg(file.tag, s.supersededBy, keyOf(target->stub->paperFolder)));
+                } else if (isTag(s.supersededBy)) {
                     add("superseded-invalid", file.path, line,
                         QStringLiteral("%1 is superseded by %2, which doesn't exist.").arg(file.tag, s.supersededBy));
+                }
             }
 
             const bool refuted = !s.refutedBy.isEmpty() || s.refutedOn.isValid();
-            if (!s.refutedBy.isEmpty() && !proofIds.contains(s.refutedBy))
+            if (!s.refutedBy.isEmpty() && !proofIds.contains(s.refutedBy)) {
                 add("refuted-unknown", file.path, r.lines.of(QStringLiteral("refuted_by")),
                     QStringLiteral("%1 is refuted by `%2`, which isn't a proof in this project.").arg(file.tag, s.refutedBy));
+            } else if (const std::optional<ProofIdParts> by = splitProofId(s.refutedBy); by && by->tag == file.tag) {
+                // A proof of the statement itself argues for it, so it can't refute it (open
+                // question S26): a refutation is a proof of another statement, such as its negation.
+                add("refuted-self", file.path, r.lines.of(QStringLiteral("refuted_by")),
+                    QStringLiteral("%1 is refuted by `%2`, which is one of its own proofs. A statement is refuted by a proof of "
+                                   "another statement, such as its negation.").arg(file.tag, s.refutedBy));
+            }
             if (refuted && statementKinds.contains(s.kind) && !isProvableKind(s.kind))
                 add("refuted-no-status", file.path, r.lines.of(s.refutedBy.isEmpty() ? QStringLiteral("refuted_on") : QStringLiteral("refuted_by")),
                     QStringLiteral("%1 is a %2; only lemmas, propositions, theorems, corollaries and conjectures can be refuted.").arg(file.tag, s.kind));
@@ -611,6 +633,7 @@ ContentsLoading loadContents(const QString& root)
             stray(contents, folderPath, QStringLiteral("Proofs/"), proofsHold);
             continue;
         }
+        contents.proofFolders << tag;
         const QString holds = QStringLiteral("the proofs of %1, their verbose versions and their checks").arg(tag);
         for (const QFileInfo& entry : entriesOf(folder.filePath())) {
             const QString name = entry.fileName();
@@ -682,10 +705,17 @@ QSet<QString> tagsInUse(const ProjectContents& contents)
                 used.insert(alias);
         }
     }
+    // Every proof folder, whatever it holds: a folder with only a check history would otherwise
+    // hand its history to a new statement. The files are counted too, for contents an edit
+    // changed in memory, which has no listing of folders.
+    for (const QString& folder : contents.proofFolders)
+        used.insert(folder);
     for (const ProofFile& proof : contents.proofs)
         used.insert(proof.folder);
     for (const VerboseFile& verbose : contents.verbose)
         used.insert(verbose.proofId.first(4));
+    for (const ChecksFile& checks : contents.checks)
+        used.insert(checks.proofId.first(4));
     return used;
 }
 
