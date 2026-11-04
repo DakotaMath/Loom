@@ -1,9 +1,14 @@
 #include "LoomCore/Hooks.h"
 
+#include "LoomCore/ProjectToml.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QSaveFile>
+
+#include <filesystem>
+#include <system_error>
 
 namespace loom {
 
@@ -41,7 +46,38 @@ QString whyGitFailed(const GitRun& run)
     return why;
 }
 
+/// `path`, made absolute against `base`, in the form used to compare it with another path:
+/// every link and junction in the part that exists resolved, with `/`. Git and Qt can spell one
+/// folder differently (a link, a drive letter's case, a short 8.3 name), and
+/// std::filesystem::weakly_canonical() gives the one final path Windows knows.
+/// @returns The resolved path; the absolute path as it is if it can't be resolved. No side effects.
+QString resolvedPath(const QString& base, const QString& path)
+{
+    const QString absolute = QDir::cleanPath(QDir(base).absoluteFilePath(path));
+    std::error_code error;
+    const std::filesystem::path resolved = std::filesystem::weakly_canonical(QFileInfo(absolute).filesystemAbsoluteFilePath(), error);
+    if (error)
+        return absolute;
+    return QDir::cleanPath(QFileInfo(resolved).absoluteFilePath());
+}
+
+/// How file names compare: ignoring case on Windows, where the file system does.
+constexpr Qt::CaseSensitivity fileNameCase =
+#ifdef Q_OS_WIN
+    Qt::CaseInsensitive;
+#else
+    Qt::CaseSensitive;
+#endif
+
 } // namespace
+
+QString hooksPathOutsideMessage(const QString& folder)
+{
+    return QStringLiteral("Git runs hooks from `%1` (`core.hooksPath`), outside this project, so Loom can't install its "
+                          "commit guard there. Run `git config --local core.hooksPath .git/hooks` here, then `loom "
+                          "install-hooks` again.")
+        .arg(QDir::toNativeSeparators(folder));
+}
 
 QByteArray preCommitHook(const QString& loomProgram)
 {
@@ -62,13 +98,37 @@ bool isLoomHook(const QByteArray& hook)
 
 HooksResult installHooks(const QString& root, const QString& loomProgram, const GitTool& git)
 {
-    const GitRun where = runGit(git, {QStringLiteral("rev-parse"), QStringLiteral("--git-path"), QStringLiteral("hooks/pre-commit")}, root);
-    if (!where.started)
+    // A1: only a Loom project at the top of its own repository, and only into that repository's
+    // own git directory. All three are checked before anything is written.
+    const OpenedProject project = openProject(root);
+    if (project.status == OpenStatus::NotAProject)
+        return failure(HooksOutcome::CantWork, "not-a-project", project.message);
+
+    const QString nativeRoot = QDir::toNativeSeparators(project.root);
+    const GitRun top = runGit(git, {QStringLiteral("rev-parse"), QStringLiteral("--show-toplevel")}, root);
+    if (!top.started)
         return failure(HooksOutcome::CantWork, "git-failed",
             QStringLiteral("Loom needs git, and `git` didn't run. Install Git for Windows and try again."));
-    if (!where.ok() || where.output.trimmed().isEmpty())
+    if (!top.ok() || top.output.trimmed().isEmpty())
         return failure(HooksOutcome::CantWork, "not-a-repository",
-            QStringLiteral("`%1` isn't a git repository, so Loom has nowhere to install its hook.").arg(QDir::toNativeSeparators(root)));
+            QStringLiteral("`%1` isn't a git repository, so Loom has nowhere to install its hook.").arg(nativeRoot));
+    if (resolvedPath(root, top.output.trimmed()).compare(resolvedPath(root, QStringLiteral(".")), fileNameCase) != 0)
+        return failure(HooksOutcome::CantWork, "hooks-not-top-level",
+            QStringLiteral("`%1` isn't the top of its git repository, so its hooks belong to another project. "
+                           "Run `loom install-hooks` in a Loom project.").arg(nativeRoot));
+
+    // `--git-path` follows core.hooksPath; `--git-common-dir` is the repository's own git
+    // directory, shared by its linked worktrees, where git keeps their hooks.
+    const GitRun where = runGit(git, {QStringLiteral("rev-parse"), QStringLiteral("--git-path"), QStringLiteral("hooks/pre-commit")}, root);
+    const GitRun common = runGit(git, {QStringLiteral("rev-parse"), QStringLiteral("--git-common-dir")}, root);
+    if (!where.ok() || where.output.trimmed().isEmpty() || !common.ok() || common.output.trimmed().isEmpty())
+        return failure(HooksOutcome::CantWork, "git-failed",
+            QStringLiteral("Loom couldn't ask git where this repository's hooks are: %1.").arg(whyGitFailed(where.ok() ? common : where)));
+    const QString hookFolder = resolvedPath(root, QFileInfo(where.output.trimmed()).path());
+    const QString gitFolder = resolvedPath(root, common.output.trimmed());
+    if (hookFolder.compare(gitFolder, fileNameCase) != 0 && !hookFolder.startsWith(gitFolder + u'/', fileNameCase))
+        return failure(HooksOutcome::CantWork, "hooks-path-outside",
+            hooksPathOutsideMessage(QDir::cleanPath(QDir(root).absoluteFilePath(QFileInfo(where.output.trimmed()).path()))));
 
     HooksResult result;
     result.hookPath = QDir::cleanPath(QDir(root).absoluteFilePath(where.output.trimmed()));

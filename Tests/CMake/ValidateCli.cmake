@@ -97,6 +97,38 @@ if(NOT out MATCHES "^{\"hook\": \"[^\"]*pre-commit\", \"moved_hook\": null, \"me
     message(FATAL_ERROR "Unexpected JSON from install-hooks: ${out}")
 endif()
 
+# 3: install-hooks works only in a Loom project at the top of its own repository, and writes only
+# into that repository's git directory (A1). Each refusal writes nothing.
+set(foreign_hook "#!/bin/sh\nexec make check\n")
+file(MAKE_DIRECTORY "${WORK}/Plain")
+run(0 out err "${GIT}" -C "${WORK}/Plain" init -q -b main)
+file(WRITE "${WORK}/Plain/.git/hooks/pre-commit" "${foreign_hook}")
+run(3 out err "${LOOM}" install-hooks --project "${WORK}/Plain" --json)
+if(NOT out MATCHES "^{\"error\": {\"code\": \"not-a-project\", ")
+    message(FATAL_ERROR "Unexpected JSON for install-hooks without loom.toml: ${out}")
+endif()
+file(WRITE "${WORK}/Plain/Inner/loom.toml" "format = 1\nname = \"Inner\"\ncreated = 2026-11-04\n")
+run(3 out err "${LOOM}" install-hooks --project "${WORK}/Plain/Inner" --json)
+if(NOT out MATCHES "^{\"error\": {\"code\": \"hooks-not-top-level\", ")
+    message(FATAL_ERROR "Unexpected JSON for install-hooks below the top of a repository: ${out}")
+endif()
+file(READ "${WORK}/Plain/.git/hooks/pre-commit" hook)
+expect_equal("the repository's own hook" "${hook}" "${foreign_hook}")
+if(EXISTS "${WORK}/Plain/.git/hooks/pre-commit.before-loom")
+    message(FATAL_ERROR "install-hooks moved the hook of a repository that isn't a Loom project")
+endif()
+file(WRITE "${WORK}/Shared/pre-commit" "${foreign_hook}")
+run(0 out err "${GIT}" -C "${WORK}/Demo" config --local core.hooksPath "${WORK}/Shared")
+run(3 out err "${LOOM}" install-hooks --project "${WORK}/Demo" --json)
+if(NOT out MATCHES "^{\"error\": {\"code\": \"hooks-path-outside\", \"message\": \"Git runs hooks from `[^`]*Shared` \\(`core\\.hooksPath`\\), outside this project")
+    message(FATAL_ERROR "Unexpected JSON for install-hooks with core.hooksPath set: ${out}")
+endif()
+file(GLOB shared RELATIVE "${WORK}/Shared" "${WORK}/Shared/*")
+expect_equal("the shared hooks folder" "${shared}" "pre-commit")
+file(READ "${WORK}/Shared/pre-commit" hook)
+expect_equal("the shared hook" "${hook}" "${foreign_hook}")
+run(0 out err "${GIT}" -C "${WORK}/Demo" config --local --unset core.hooksPath)
+
 # The commit guard (Specs/m1-core.md, Verification, "Commit guard"): break a statement's front
 # matter and the commit is refused with the message; fix it and the commit goes through.
 run(0 out err "${LOOM}" new-statement --project "${WORK}/Demo" --kind lemma --title "A lemma" --body "Every x is fine.")

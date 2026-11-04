@@ -90,7 +90,8 @@ std::optional<Args> parseArgs(const QStringList& args, const QString& name, cons
                               const QString& positionalName = {});
 
 /// Finds the project folder (Specs/m1-core.md, "The project folder": the current folder or the
-/// nearest parent holding `loom.toml`, unless `--project` names one).
+/// nearest parent holding `loom.toml`, unless `--project` names one, which must hold `loom.toml`
+/// too).
 /// @returns The folder, or nothing with `message` set. No side effects.
 std::optional<QString> findProject(const Context& context, QString& message);
 

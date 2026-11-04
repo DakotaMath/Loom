@@ -31,7 +31,9 @@ struct NewProjectRequest {
 enum class NewProjectOutcome {
     Created,  ///< Exit 0.
     Refused,  ///< Exit 1: a rule refused it, and nothing was written.
-    CantWork, ///< Exit 3: git, Git LFS or git's identity is missing, or a write or git step failed.
+    /// Exit 3: git, Git LFS or git's identity is missing, git runs hooks from a shared folder
+    /// (`core.hooksPath`), or a write or git step failed.
+    CantWork,
 };
 
 /// The result of createProject().
@@ -39,7 +41,8 @@ struct NewProjectResult {
     NewProjectOutcome outcome = NewProjectOutcome::Refused;
     /// A stable code for `--json`: empty when created, else one of `folder-not-empty`,
     /// `not-a-folder`, `parent-missing`, `name-empty`, `git-missing`, `git-lfs-missing`,
-    /// `git-identity-missing`, `kit-missing`, `write-failed`, `git-failed`, `hooks-failed`.
+    /// `git-identity-missing`, `hooks-path-outside`, `kit-missing`, `write-failed`, `git-failed`,
+    /// `hooks-failed`.
     QString code;
     /// What went wrong, in plain English; empty when created.
     QString message;
@@ -49,8 +52,9 @@ struct NewProjectResult {
 
 /// Creates a project (Specs/m1-core.md, "The project folder", steps 1 to 6).
 /// In order: refuses a non-empty folder, a file, or a folder whose parent doesn't exist; checks
-/// that `git` and `git lfs` run and that git knows the user's name and email, as the new repo
-/// will see them; only then creates the folder, writes `loom.toml` and the project kit (with LF
+/// that `git` and `git lfs` run, that git knows the user's name and email, as the new repo
+/// will see them, and that the global or system config doesn't set `core.hooksPath` (A1: the
+/// hooks would land in a folder other repositories share); only then creates the folder, writes `loom.toml` and the project kit (with LF
 /// line endings, `gitignore` and `gitattributes` renamed to `.gitignore` and `.gitattributes`),
 /// runs `git init -b main`, `git lfs install --local` and installHooks(), and commits everything
 /// as `Create project <name>`, through the pre-commit hook like any commit.

@@ -2,7 +2,8 @@
 // made to show on demand. LOOM_FAKE_GIT_MODE picks the failure:
 //   no-lfs      `git lfs version` fails, as when Git LFS isn't installed.
 //   init-fails  `git init` fails, after Loom has written the project files.
-// Everything else succeeds and does nothing; `git config --get` prints a made-up value.
+// Everything else succeeds and does nothing; `git config --get` prints a made-up value, except
+// for `core.hooksPath`, which is unset (exit 1, as git gives for a key that isn't set).
 
 #include <QString>
 #include <QtGlobal>
@@ -30,6 +31,8 @@ int main(int argc, char* argv[])
         }
         std::cout << "git-lfs/0.0.0 (fake)\n";
     } else if (command == "config") {
+        if (args.back() == "core.hooksPath")
+            return 1;
         std::cout << "Fake Value\n";
     } else if (command == "init" && mode == u"init-fails") {
         std::cerr << "fatal: the fake git won't init.\n";
