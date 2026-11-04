@@ -7,10 +7,11 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 -->
 # Status
 
-**Updated:** 2026-11-04 · main at a49670c
-**Current milestone:** M1, the core: the build, CI, `loom new-project`, statements and proofs, checks and papers are merged; #7 (status) is in review
+**Updated:** 2026-11-04 · main at 414d5b1
+**Current milestone:** M1, the core: everything up to status (#7) is merged; #9 (`loom validate`), the last M1 issue, is in review
 
 ## Done recently
+- #7 the graph and computed status, `loom status`/`graph`/`refute` (2026-11-04): PR #18 merged ([log](Wiki/logs/2026-11/2026-11-04-status.md)).
 - #8 paper entries, stubs, the key rule, `refs.bib`, `loom new-paper`/`new-stub`/`rekey`/`build-bib` (2026-11-04): PR #17 merged ([log](Wiki/logs/2026-11/2026-11-04-papers.md)).
 - #6 check histories, fingerprints, `fingerprint`/`add-check`/`merge-checks` (2026-11-04): PR #16 merged ([log](Wiki/logs/2026-11/2026-11-04-checks.md)).
 - #5 statements, proofs, IDs and their subcommands (2026-11-04): PR #15 merged ([log](Wiki/logs/2026-11/2026-11-04-statements-proofs.md)).
@@ -21,14 +22,14 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 - The design chat (2026-11-03): Loom's design written as [`Specs/loom.md`](Specs/loom.md), and this repo's skeleton set up ([log](Wiki/logs/2026-11/2026-11-03-design-chat.md)).
 
 ## In progress
-- #7 the graph and computed status, `loom status`/`graph`/`refute`: PR #18, all 157 `ctest` tests pass on Windows; waiting on Dakota's review, the Windows check and the spec points under its ⚠️ Flags ([log](Wiki/logs/2026-11/2026-11-04-status.md)).
+- #9 `loom validate [--staged]`, `loom install-hooks` and the commit guard: PR #19, all 170 `ctest` tests pass on Windows; waiting on Dakota's review, the Windows check and the spec points under its ⚠️ Flags ([log](Wiki/logs/2026-11/2026-11-04-validate.md)).
 
 ## Next up
 Milestones M0–M12 are on GitHub; M1's issues are #2–#9, linked by "blocked by".
-- **In order:** #9 `loom validate` after #7, last in M1. The issues were updated to match the approved spec on 2026-11-03.
+- M1's issues are all built; once #19 is merged, M1 is done and M2 is next.
 
 ## Waiting on Dakota
-- PR #18 (#7): review, the Windows check in the PR, and the spec points under its ⚠️ Flags.
+- PR #19 (#9): review, the Windows check in the PR, and the spec points under its ⚠️ Flags.
 
 ## Watch out for
 - **Windows CI and Qt 6.11:** aqtinstall is pinned to a commit of its main branch until a release after 3.3.0 ([gotcha](Wiki/gotchas/ci/aqtinstall-qt-6-11-windows.md)).
