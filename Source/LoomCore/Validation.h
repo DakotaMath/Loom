@@ -76,11 +76,14 @@ ValidationResult validateProject(const ValidationRequest& request);
 std::vector<Problem> checkStatuses(const ProjectContents& contents, const ProjectGraph& graph);
 
 /// The problems in the LaTeX of statement, proof and verbose proof bodies (Specs/m1-core.md,
-/// "IDs and references"), all warnings: `ref-alias` (a `\ref` or `\paperref` to an old name),
-/// `ref-dangling` (to nothing: not a tag, an alias, or a `\label` in any body), `ref-not-listed`
-/// (a statement's `\ref` or `\paperref` to a statement or stub its `stated_using` doesn't list; a
-/// proof's, to one its `premises` don't list, except the statement it proves and statements
-/// without a status) and `cite-alias` (a `\cite` of a paper's old key).
+/// "IDs and references"): the warnings `ref-alias` (a `\ref` or `\paperref` to an old name),
+/// `ref-dangling` (a `\ref` to nothing: not a tag, an alias, or a `\label` in any body; a
+/// `\paperref` to nothing: not a stub's tag or alias), `ref-not-listed` (a statement's `\ref` or
+/// `\paperref` to a statement or stub its `stated_using` doesn't list; a proof's, to one its
+/// `premises` don't list, except the statement it proves and statements without a status) and
+/// `cite-alias` (a `\cite` of a paper's old key); and the error `paperref-not-stub`, a
+/// `\paperref` to a statement of the project rather than a paper stub (Specs/loom.md:
+/// `\paperref{<stub-id>}` cites a paper's result).
 /// Rules for reading LaTeX: a `%` not escaped by `\` starts a comment, which is skipped; a
 /// command and its `{…}` argument must be on one line; optional `[…]` arguments are skipped;
 /// `\cite{A, B}` names two keys. `ref-not-listed` is reported once per file and statement.
@@ -103,8 +106,9 @@ struct CommittedFiles {
 };
 
 /// The problems that need the last commit (Specs/m1-core.md, "Checks", rule 1, and "IDs",
-/// "Permanent"): `check-changed`, an error for each committed check that isn't, unchanged, in its
-/// file now (entries may move, as a merge interleaves them by date, but not change or go), and
+/// "Permanent"): `check-changed`, an error for each committed check that isn't, unchanged and in
+/// the same order relative to the other committed checks (A7), in its file now (new entries may
+/// sit between committed ones, as a merge interleaves them by date), and
 /// `deleted-since-commit`, a warning for each statement, proof or stub in the commit whose ID
 /// has no file now (a stub may move to another paper's folder when the paper is rekeyed).
 /// @param committed The commit's files.

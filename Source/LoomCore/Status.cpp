@@ -88,6 +88,8 @@ private:
     /// The proved set: each statement in it, to the proof that brought it in.
     QHash<QString, QString> m_proved;
 
+    /// Whether a node is a paper stub. buildGraph() gives a `paper` to stubs only, and never an
+    /// empty one (the key, else the folder's name). No side effects.
     static bool isStub(const StatementNode& node) { return !node.paper.isEmpty(); }
 
     /// Rule 4: both fields set. One without the other is `refuted-incomplete`, and doesn't count.
@@ -221,10 +223,19 @@ private:
     }
 
     /// "Dakota asked for changes …", "has an agent pass, but no pass from Dakota", …: what an
-    /// unchecked deciding proof lacks (Specs/m1-core.md, "Tie-breaks and explanations").
+    /// unchecked deciding proof lacks (Specs/m1-core.md, "Tie-breaks and explanations"). When
+    /// Loom can't compute the proof's fingerprint, no check can match ("Checks", rule 4), and
+    /// that is what it lacks: the sentence gives proofFingerprint()'s reason, since the proof
+    /// itself may not have changed at all.
     QString lacks(const ProofNode& proof) const
     {
         const ProofChecking& c = proof.checking;
+        if (c.fingerprint.isEmpty()) {
+            QString why = c.fingerprintProblem.isEmpty() ? QStringLiteral("Loom can't compute its fingerprint") : c.fingerprintProblem;
+            while (why.endsWith(u'.'))
+                why.chop(1); // explain() ends the sentence.
+            return QStringLiteral("%1 is complete, but no check of it can count. %2").arg(proof.id, why);
+        }
         const Check* agent = c.standing.countingAgent ? &c.checks[*c.standing.countingAgent] : nullptr;
         const Check* dakota = c.standing.countingDakota ? &c.checks[*c.standing.countingDakota] : nullptr;
         if (dakota && dakota->verdict == u"needs-changes")
@@ -435,6 +446,14 @@ ProjectGraph buildGraph(const ProjectContents& contents)
         node.refutedOn = s.refutedOn;
         graph.statements.push_back(node);
     }
+    // A stub's `paper` is its paper's key (the `loom status` JSON: "`paper` is the key for
+    // stubs"), as ContentsChecker names it in messages: the key, else the folder's name when the
+    // entry has no key Loom could read. They differ only alongside `paper-key-mismatch`.
+    QHash<QString, QString> keyOfFolder;
+    for (const PaperFile& file : contents.papers) {
+        if (file.reading.parsed && !file.reading.document.key.isEmpty())
+            keyOfFolder.insert(file.folder, file.reading.document.key);
+    }
     for (const StubFile& file : contents.stubs) {
         if (!file.reading.parsed || seen.contains(file.tag))
             continue;
@@ -445,7 +464,7 @@ ProjectGraph buildGraph(const ProjectContents& contents)
         node.kind = s.kind;
         node.title = s.title.isEmpty() ? s.gist : s.title; // "Without one, Loom shows the gist."
         node.path = file.path;
-        node.paper = file.paperFolder;
+        node.paper = keyOfFolder.value(file.paperFolder, file.paperFolder);
         node.statedUsing = s.statedUsing;
         node.paperPremises = s.paperPremises;
         // Rules 2 and 3; rule 1 (a kind without status) is applied over this by the computation.

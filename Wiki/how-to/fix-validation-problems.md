@@ -18,7 +18,7 @@ tags: [validate, problems, pre-commit, checks, m1]
    ```
    loom validate
    ```
-   Each problem is one line on stderr, `<file>:<line>: <severity>: <message>`, errors first, then warnings, each in file order; then a count line. Exit code 0 means no errors (warnings allowed), 1 means errors, 3 means Loom couldn't check the project at all (no `loom.toml`, a newer format, an unreadable file, no `git`).
+   Each problem is one line on stderr, `<file>:<line>: <severity>: <message>`, errors first, then warnings, each in file order; then a count line. Exit code 0 means no errors (warnings allowed), 1 means errors, 3 means Loom couldn't check the project at all (no `loom.toml`, a newer format, an unreadable file, no `git`, or git failing to read the last commit, e.g. in a repository it refuses to use for "dubious ownership").
 2. If a commit was refused, the hook ran `loom validate --staged`, which checks what git has **staged**, not the files on disk. Fix the file, then `git add` it again before committing.
 3. Look up each problem below by what the message says (or by `code` in `loom validate --json`), and fix it. Change Loom's files with `loom` commands where one exists (`loom edit-statement`, `loom edit-proof`, `loom new-tag`, `loom rekey`, …); a plain edit is fine as long as `loom validate` accepts it.
 4. Run `loom validate` again until it reports no errors.
@@ -61,7 +61,8 @@ tags: [validate, problems, pre-commit, checks, m1]
 | `ref-unknown` | error | Front matter names a tag no statement or stub has. | Fix the tag, or create the statement first. |
 | `ref-alias` | error in front matter, warning in a body | An old name (alias) is used where the tag should be. | Write the tag the message gives. In a body it still works, but the tag is clearer. |
 | `ref-not-listed` | warning | The body `\ref`s or `\paperref`s a statement that `premises` (a proof) or `stated_using` (a statement) doesn't list. A proof's refs to the statement it proves, and to definitions and other statements without a status, don't count. | If the proof relies on it, add it: `loom edit-proof <id> --add-premise <tag>` (or `--add-stated-using` for a statement). Otherwise rephrase the reference. |
-| `ref-dangling` | warning | `\ref{…}` (or `\paperref{…}`) points at nothing: not a tag, an alias, or a `\label` in any body. | Fix the label, or add the `\label` it means. |
+| `ref-dangling` | warning | `\ref{…}` points at nothing: not a tag, an alias, or a `\label` in any body. Or `\paperref{…}` points at no paper stub (a `\label` doesn't count for it). | Fix the label, or add the `\label` it means. For `\paperref`, write the stub's tag. |
+| `paperref-not-stub` | error | `\paperref{…}` names a statement of this project (by tag or alias). `\paperref` cites a paper's result, so it must name a stub. | Write `\ref{<tag>}` for a statement of the project; keep `\paperref` for stubs. |
 | `cite-alias` | warning | `\cite{…}` uses a paper's old key. It still works, through the alias. | Write the current key the message gives, when you're next editing the text (it changes the fingerprint, so do it before checks, not after). |
 
 ### Statements
@@ -69,9 +70,10 @@ tags: [validate, problems, pre-commit, checks, m1]
 | --- | --- | --- | --- |
 | `stated-using-self` | error | A statement lists itself in `stated_using`. | Remove it. |
 | `stated-using-cycle` | error | `stated_using` goes round in a circle. | Break the circle: one of them doesn't really need the other to be stated. |
-| `superseded-invalid` | error | `superseded_by` names nothing, itself, or leads round in a circle. | Point it at the statement that replaces this one. |
+| `superseded-invalid` | error | `superseded_by` names nothing, itself, a paper stub, or leads round in a circle. | Point it at the statement of the project that replaces this one. A paper's result isn't one: state it as a statement first. |
 | `refuted-incomplete` | error | Only one of `refuted_by` and `refuted_on` is set. | Refuting is Dakota's click: `loom refute <id> --by <proof-id>` at a terminal sets both. Remove a half-set pair. |
 | `refuted-unknown` | error | `refuted_by` names a proof that doesn't exist. | Fix the proof ID. |
+| `refuted-self` | error | `refuted_by` names one of the statement's own proofs, which argues for it, not against it. | Name a proof of another statement, such as one stating its negation. `loom refute` refuses this too. |
 | `refuted-no-status` | error | A definition, question, remark or example is marked refuted. | Remove `refuted_by` and `refuted_on`; only provable kinds can be false. |
 | `refuted-but-proved` | warning | The statement is marked false, yet one of its complete, checked proofs, whose premises all hold, would prove it. | One of them is wrong: look for the mistake in the proof or in the refutation, then fail the proof's check or reconsider the refutation. |
 | `conjecture-proved` | warning | A conjecture is now proved. | `loom edit-statement <id> --kind theorem` (or lemma, …) when you're ready. |
@@ -106,7 +108,7 @@ tags: [validate, problems, pre-commit, checks, m1]
 | `check-record-not-found` | warning | A check's `record` names a file that doesn't exist (normal before M4 writes records). | Commit the record, or fix the path. |
 | `check-order` | error | A check is dated before the one above it. | Checks are append-only and in date order. If you added one by hand, move it to its place; never edit the dates of committed checks. |
 | `check-duplicate` | error | The same entry appears twice. | Remove the later copy (only if it isn't committed yet). |
-| `check-changed` | error | A check that is in the last commit was edited or removed. | Restore the file (`git restore <file>`) and add a new check instead. |
+| `check-changed` | error | A check that is in the last commit was edited, removed or moved. Committed checks keep their order relative to each other, even when two have the same date; new ones may sit between them, as a merge interleaves. | Restore the file (`git restore <file>`) and add a new check instead. |
 
 ### Papers and stubs
 | Code | Sev. | What it means | How to fix |

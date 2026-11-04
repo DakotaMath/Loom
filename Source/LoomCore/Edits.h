@@ -189,7 +189,8 @@ CheckAdded addCheck(const QString& root, const QString& typed, const NewCheck& r
 /// `loom refute <id> --by <proof-id>`: marks a statement false (Specs/m1-core.md, "Statements",
 /// D4): sets `refuted_by` to the proof and `refuted_on` to today, the date of Dakota's click.
 /// Refuses: without `dakotaConfirmed`; a stub (it is cited from its paper, not stated here); a
-/// statement already refuted; an ID or proof that names nothing; and anything that adds an error
+/// statement already refuted; an ID or proof that names nothing; one of the statement's own
+/// proofs (`refuted-self`: a refutation proves another statement); and anything that adds an error
 /// (`refuted-no-status` for a definition, …). Neither field is in a fingerprint, so no check is
 /// outdated.
 /// @param typed           The statement's ID as typed.

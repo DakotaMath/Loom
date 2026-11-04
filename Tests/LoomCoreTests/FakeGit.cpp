@@ -1,7 +1,11 @@
-// loom-fake-git: a stand-in for git, for the failures of `loom new-project` a real git can't be
-// made to show on demand. LOOM_FAKE_GIT_MODE picks the failure:
+// loom-fake-git: a stand-in for git, for the failures of `loom new-project` and `loom validate` a
+// real git can't be made to show on demand. LOOM_FAKE_GIT_MODE picks the failure:
 //   no-lfs      `git lfs version` fails, as when Git LFS isn't installed.
 //   init-fails  `git init` fails, after Loom has written the project files.
+//   head-fails  `git rev-parse --git-dir` finds a repository, but reading `HEAD` fails with a
+//               fatal error (exit 128), as for a damaged repository.
+//   dubious     Every `git rev-parse` fails as git does in a repository it refuses to use
+//               ("dubious ownership", exit 128).
 // Everything else succeeds and does nothing; `git config --get` prints a made-up value, except
 // for `core.hooksPath`, which is unset (exit 1, as git gives for a key that isn't set).
 
@@ -36,6 +40,16 @@ int main(int argc, char* argv[])
         std::cout << "Fake Value\n";
     } else if (command == "init" && mode == u"init-fails") {
         std::cerr << "fatal: the fake git won't init.\n";
+        return 128;
+    } else if (command == "rev-parse" && mode == u"dubious") {
+        std::cerr << "fatal: detected dubious ownership in repository at 'C:/Fake'\n";
+        return 128;
+    } else if (command == "rev-parse" && mode == u"head-fails") {
+        if (args.size() == 2 && args[1] == "--git-dir") {
+            std::cout << ".git\n";
+            return 0;
+        }
+        std::cerr << "fatal: bad object HEAD\n";
         return 128;
     }
     return 0;

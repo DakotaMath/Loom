@@ -77,6 +77,8 @@ struct BodyChecker {
     QHash<QString, QString> kindOfTag;
     /// Every alias of a statement or stub, to its tag.
     QHash<QString, QString> tagOfAlias;
+    /// Every stub's tag, for `\paperref`.
+    QSet<QString> stubTags;
     /// Every `\label` in any body.
     QSet<QString> labels;
     /// Every paper's current key (and folder), and each old key to its paper's current key.
@@ -95,8 +97,10 @@ struct BodyChecker {
         };
         for (const StatementFile& file : contents.statements)
             node(file.tag, file.reading.parsed, file.reading.document.kind, file.reading.document.aliases);
-        for (const StubFile& file : contents.stubs)
+        for (const StubFile& file : contents.stubs) {
             node(file.tag, file.reading.parsed, file.reading.document.kind, file.reading.document.aliases);
+            stubTags.insert(file.tag);
+        }
 
         const auto collectLabels = [&](const QByteArray& body, int line) {
             for (const LatexCommand& c : latexCommands(body, line)) {
@@ -127,20 +131,34 @@ struct BodyChecker {
         }
     }
 
-    /// Resolves a `\ref` or `\paperref`, reporting `ref-alias` or `ref-dangling`.
-    /// @returns The tag of the statement or stub it names, or an empty string.
+    /// Resolves a `\ref` or `\paperref`, reporting `ref-alias`, `ref-dangling` or
+    /// `paperref-not-stub`. `\paperref{<stub-id>}` cites a paper's result (Specs/loom.md), so
+    /// it must name a stub: a statement of the project, by tag or alias, is an error (it can't
+    /// become `\cite[…]{Key}` when LaTeX is built), and a `\label` doesn't count.
+    /// @returns The tag of the statement or stub it names, or an empty string (also after
+    ///          `paperref-not-stub`, so the reference isn't compared with the front matter).
     QString resolve(const LatexCommand& c, const QString& path)
     {
-        if (kindOfTag.contains(c.argument))
-            return c.argument;
-        if (const QString tag = tagOfAlias.value(c.argument); !tag.isEmpty()) {
-            add(problems, "ref-alias", path, c.line, QStringLiteral("`%1` is an old name of %2. Write `%2` here.").arg(c.argument, tag));
+        const bool paperref = c.name == u"paperref";
+        const bool isAlias = !kindOfTag.contains(c.argument);
+        const QString tag = isAlias ? tagOfAlias.value(c.argument) : c.argument;
+        if (!tag.isEmpty()) {
+            if (paperref && !stubTags.contains(tag)) {
+                add(problems, "paperref-not-stub", path, c.line,
+                    QStringLiteral("`\\paperref{%1}` names %2, a statement of this project, not a paper's result. Use `\\ref{%2}`.")
+                        .arg(c.argument, tag),
+                    Severity::Error);
+                return {};
+            }
+            if (isAlias)
+                add(problems, "ref-alias", path, c.line, QStringLiteral("`%1` is an old name of %2. Write `%2` here.").arg(c.argument, tag));
             return tag;
         }
-        if (c.name == u"ref" && labels.contains(c.argument))
+        if (!paperref && labels.contains(c.argument))
             return {};
         add(problems, "ref-dangling", path, c.line,
-            QStringLiteral("`\\%1{%2}` points to nothing: it isn't a tag, an alias, or a `\\label` in any body.").arg(c.name, c.argument));
+            paperref ? QStringLiteral("`\\paperref{%1}` points to nothing: it isn't the tag or old name of a paper stub.").arg(c.argument)
+                     : QStringLiteral("`\\ref{%1}` points to nothing: it isn't a tag, an alias, or a `\\label` in any body.").arg(c.argument));
         return {};
     }
 
@@ -347,18 +365,48 @@ std::optional<ValidationResult> copyIndex(const GitTool& git, const QString& roo
     return std::nullopt;
 }
 
+/// The failure of a git command readCommit() runs: `check-changed` and `deleted-since-commit`
+/// can't be checked, which validation must say rather than skip them.
+ValidationResult commitUnreadable(const QString& command, const GitRun& run)
+{
+    return cantWork("git-failed", QStringLiteral("Loom couldn't read the last commit to compare the checks with it: `%1` failed (%2).")
+                                      .arg(command, whyGitFailed(run)));
+}
+
 /// Reads the project's files at `HEAD`.
+/// Rule (Specs/m1-core.md, "Checks", rule 1, and "IDs", "Permanent"): only two cases mean there
+/// is nothing to compare with, and the checks against the commit are skipped: no repository
+/// (`git rev-parse --git-dir` fails saying so), and a repository without a commit yet (`git
+/// rev-parse --verify --quiet HEAD^{commit}` exits 1 without a word). Any other failure, such as
+/// a repository git refuses to use ("dubious ownership") or a fatal error reading `HEAD`, is
+/// `git-failed`. (A `HEAD` naming a missing object also exits 1 silently, so it reads as "no
+/// commit yet"; git's own commands fail loudly there.)
 /// @param committed Set to the files, if there is a commit.
-/// @returns Nothing if it worked (or there's no commit yet, or no repository, when there's
-///          nothing to compare with), else the failure. Side effects: runs git.
+/// @returns Nothing if it worked (or there's nothing to compare with), else the failure.
+///          Side effects: runs git.
 std::optional<ValidationResult> readCommit(const GitTool& git, const QString& root, std::optional<CommittedFiles>& committed)
 {
+    // In English, whatever the user's locale, so that "not a git repository" can be recognised.
+    GitTool english = git;
+    english.environment.insert(QStringLiteral("LC_ALL"), QStringLiteral("C"));
+    const GitRun repository = runGit(english, {QStringLiteral("rev-parse"), QStringLiteral("--git-dir")}, root);
+    if (!repository.started)
+        return cantWork("git-missing", QStringLiteral("Loom needs git, and `git` didn't run. Install Git for Windows and try again."));
+    if (!repository.ok()) {
+        if (repository.errors.contains(u"not a git repository"))
+            return std::nullopt;
+        return commitUnreadable(QStringLiteral("git rev-parse --git-dir"), repository);
+    }
+
     const GitRun head = runGit(git, {QStringLiteral("rev-parse"), QStringLiteral("--verify"), QStringLiteral("--quiet"),
                                      QStringLiteral("HEAD^{commit}")}, root);
     if (!head.started)
         return cantWork("git-missing", QStringLiteral("Loom needs git, and `git` didn't run. Install Git for Windows and try again."));
-    if (!head.ok())
-        return std::nullopt; // No commit yet, or not a repository.
+    if (!head.ok()) {
+        if (head.exitCode == 1 && head.errors.trimmed().isEmpty())
+            return std::nullopt; // No commit yet: the first commit through the hook.
+        return commitUnreadable(QStringLiteral("git rev-parse HEAD"), head);
+    }
 
     // Paths relative to the project, limited to it, as `ls-files` gives them.
     const GitRun tree = runGit(git, {QStringLiteral("ls-tree"), QStringLiteral("-r"), QStringLiteral("-z"), QStringLiteral("HEAD")}, root);
@@ -537,8 +585,14 @@ std::vector<Problem> checkAgainstCommit(const ProjectContents& contents, const C
                                "or mark a proof `failed`, instead of deleting it.").arg(id));
     }
 
-    // Checks are append-only (Specs/m1-core.md, "Checks", rule 1): every committed entry is
-    // still there, unchanged. Each entry now can stand for one committed entry.
+    // Checks are append-only (Specs/m1-core.md, "Checks", rule 1, and A7): every committed entry
+    // is still there, unchanged and in the same order relative to the other committed entries;
+    // new entries may sit between them, as a merge interleaves by date. So the committed list
+    // must be a subsequence of the current one. Order matters even where dates tie, since rule 2
+    // then counts the later entry in the file as the newer.
+    // Each committed entry is matched, in order, to the first equal entry after the previous
+    // match; greedy matching finds a match for every entry exactly when the committed list is a
+    // subsequence. An entry without a match was changed, moved or removed.
     for (auto it = committed.checks.constBegin(); it != committed.checks.constEnd(); ++it) {
         const QString& path = it.key();
         const ChecksReading before = readChecks(it.value(), path);
@@ -549,19 +603,32 @@ std::vector<Problem> checkAgainstCommit(const ProjectContents& contents, const C
             continue; // Its own errors come first.
         const std::vector<Check> empty;
         const std::vector<Check>& after = now == contents.checks.end() ? empty : now->reading.checks;
+        const auto headerLine = [&](std::size_t j) {
+            return j < static_cast<std::size_t>(now->reading.lines.size()) ? now->reading.lines[j].header : 1;
+        };
         std::vector<bool> used(after.size(), false);
-        for (std::size_t i = 0; i < before.checks.size(); ++i) {
-            const Check& check = before.checks[i];
-            bool found = false;
-            for (std::size_t j = 0; j < after.size() && !found; ++j) {
-                if (!used[j] && sameCheck(check, after[j]))
-                    used[j] = found = true;
-            }
-            if (found)
+        std::size_t next = 0; // The first current entry after the last match.
+        for (const Check& check : before.checks) {
+            std::size_t j = next;
+            while (j < after.size() && !sameCheck(check, after[j]))
+                ++j;
+            if (j < after.size()) {
+                used[j] = true;
+                next = j + 1;
                 continue;
-            const int line = now != contents.checks.end() && i < now->reading.lines.size() ? now->reading.lines[i].header : 1;
+            }
+            // The line: the entry itself if it moved, else where it should be, else line 1.
+            int line = 1;
+            std::size_t moved = 0;
+            while (moved < after.size() && (used[moved] || !sameCheck(check, after[moved])))
+                ++moved;
+            if (moved < after.size())
+                line = headerLine(moved);
+            else if (next < after.size())
+                line = headerLine(next);
             add(problems, "check-changed", path, line,
-                QStringLiteral("A check committed earlier (%1, %2) was changed or removed. Checks are never edited; add a new one instead.")
+                QStringLiteral("A check committed earlier (%1, %2) was changed, moved or removed. Checks are never edited or "
+                               "reordered; add a new one instead.")
                     .arg(check.by, check.date.isValid() ? tomlOffsetDateTime(check.date) : QStringLiteral("no date")),
                 Severity::Error);
         }
@@ -573,15 +640,17 @@ ValidationResult validateProject(const ValidationRequest& request)
 {
     const QString root = QFileInfo(request.root).absoluteFilePath();
 
-    // The tree to check: the project, or a copy of what git has staged.
-    QTemporaryDir staging;
+    // The tree to check: the project, or a copy of what git has staged. The temporary folder is
+    // made only for the copy, since making one creates it on disk.
+    std::optional<QTemporaryDir> staging;
     QString tree = root;
     if (request.staged) {
-        if (!staging.isValid())
+        staging.emplace();
+        if (!staging->isValid())
             return cantWork("unreadable", QStringLiteral("Loom couldn't make a temporary folder to check the staged files in."));
-        if (std::optional<ValidationResult> failed = copyIndex(request.git, root, staging.path()))
+        if (std::optional<ValidationResult> failed = copyIndex(request.git, root, staging->path()))
             return *failed;
-        tree = staging.path();
+        tree = staging->path();
     }
 
     const OpenedProject project = openProject(tree);

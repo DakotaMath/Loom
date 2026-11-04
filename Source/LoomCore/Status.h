@@ -70,7 +70,9 @@ struct StatementNode {
     QString kind;
     QString title;            ///< For a stub without a title, its gist.
     QString path;             ///< Its file, project-relative.
-    QString paper;            ///< For a stub, its paper's key; empty for a statement.
+    /// For a stub, its paper's key as `paper.toml` gives it (its folder's name if the entry has
+    /// no key Loom could read); empty for a statement.
+    QString paper;
     QStringList tags;
     QStringList statedUsing;
     QStringList paperPremises; ///< Stubs only.

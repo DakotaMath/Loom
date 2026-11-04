@@ -26,7 +26,7 @@ check-record-missing Proofs/CK1A/CK1A.a.checks.toml:33: error: Check 6 is by an 
 check-order Proofs/CK1A/CK1A.a.checks.toml:48: error: Check 8 is dated before check 7. Checks are kept in date order.
 check-duplicate Proofs/CK1A/CK1A.a.checks.toml:53: error: Checks 8 and 9 are the same entry twice.
 bad-path Proofs/CK1A/CK1A.a.checks.toml:65: error: `../outside.md` must be a path inside the project, written with `/`, without `..`.
-check-changed Proofs/CK2A/CK2A.a.checks.toml:1: error: A check committed earlier (agent:claude-opus-5-5, 2026-11-04T10:00:00-06:00) was changed or removed. Checks are never edited; add a new one instead.
+check-changed Proofs/CK2A/CK2A.a.checks.toml:1: error: A check committed earlier (agent:claude-opus-5-5, 2026-11-04T10:00:00-06:00) was changed, moved or removed. Checks are never edited or reordered; add a new one instead.
 proof-of-no-status Proofs/D3FN/D3FN.a.tex:3: error: D3FN is a definition; only lemmas, propositions, theorems, corollaries and conjectures have proofs.
 proof-id-mismatch Proofs/K3MA/K3MA.b.tex:2: error: The proof's id `K3MA.c` doesn't match its file name `K3MA.b`, or doesn't start with its folder's tag.
 checks-orphan Proofs/K3MA/K3MA.y.checks.toml:1: error: `Proofs/K3MA/K3MA.y.checks.toml` holds checks of K3MA.y, which doesn't exist.
@@ -49,14 +49,17 @@ missing-field Statements/MSNG.tex:1: error: `created` is missing; every statemen
 not-utf8 Statements/N8T8.tex:3: error: This file isn't valid UTF-8 (the first bad byte is at offset 25). Save it as UTF-8.
 front-matter-unclosed Statements/NC10.tex:1: error: The front matter starting on line 1 is never closed by a `+++` line.
 ref-alias Statements/RA1S.tex:5: error: `def:old` is an old name of D3FN. Write `D3FN` here.
+paperref-not-stub Statements/RB0D.tex:10: error: `\paperref{K3MA}` names K3MA, a statement of this project, not a paper's result. Use `\ref{K3MA}`.
 refuted-incomplete Statements/RF1C.tex:5: error: RF1C has `refuted_by` but not `refuted_on`. Refuting a statement needs both: the proof and the date Dakota accepted it.
 refuted-unknown Statements/RF2N.tex:5: error: RF2N is refuted by `ZZZZ.a`, which isn't a proof in this project.
 refuted-no-status Statements/RF3N.tex:5: error: RF3N is a definition; only lemmas, propositions, theorems, corollaries and conjectures can be refuted.
 missing-field Statements/RF5E.tex:5: error: `refuted_by` is empty; give it a value or leave it out.
+refuted-self Statements/RF6S.tex:5: error: RF6S is refuted by `RF6S.a`, which is one of its own proofs. A statement is refuted by a proof of another statement, such as its negation.
 toml-syntax Statements/S1NX.tex:4: error: This isn't valid TOML: Error while parsing string: unescaped control characters other than TAB (U+0009) are explicitly prohibited.
 stated-using-self Statements/S5F1.tex:5: error: S5F1 can't be stated using itself.
 stated-using-cycle Statements/SC1A.tex:5: error: `stated_using` goes round in a circle: SC1A → SC1B → SC1A.
 superseded-invalid Statements/SP1N.tex:5: error: SP1N is superseded by ZZZY, which doesn't exist.
+superseded-invalid Statements/SP3B.tex:5: error: SP3B is superseded by 7RT2, which is a result from SmithJones24, not a statement of this project.
 tag-unknown Statements/TG1V.tex:5: error: `no-such-tag` isn't one of the project's tags. Add it with `loom new-tag`, or fix the spelling.
 wrong-type Statements/TYPE.tex:5: error: `tags` should be a list of tags, not a string.
 bad-value Statements/VA1E.tex:3: error: `kind` can't be `theorm`; it must be one of `definition`, `lemma`, `proposition`, `theorem`, `corollary`, `conjecture`, `question`, `remark`, `example`.

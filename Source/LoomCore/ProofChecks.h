@@ -26,6 +26,9 @@ std::optional<QString> proofFingerprint(const ProjectContents& contents, const Q
 struct ProofChecking {
     /// The proof's current fingerprint; empty if it can't be computed, and then no check matches.
     QString fingerprint;
+    /// When `fingerprint` is empty, why: proofFingerprint()'s `problem`, ready to print (e.g. a
+    /// premise whose front matter Loom can't read). Empty when the fingerprint was computed.
+    QString fingerprintProblem;
     /// Its check history, in file order; empty if it has none.
     std::vector<Check> checks;
     /// Which checks count, whether the proof is checked and whether it supports its statement.
@@ -34,7 +37,7 @@ struct ProofChecking {
 
 /// What a proof's checks say now (Specs/m1-core.md, "Checks", rules 4–7).
 /// @param id The proof's ID.
-/// @returns The fingerprint, the history and its standing. No side effects.
+/// @returns The fingerprint (or why there is none), the history and its standing. No side effects.
 ProofChecking proofChecking(const ProjectContents& contents, const QString& id);
 
 /// The proofs a change would outdate (Specs/m1-core.md, "Statements": editing text that is in a
