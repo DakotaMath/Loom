@@ -1,6 +1,7 @@
 #include "PaperCommands.h"
 
 #include "LoomCore/PaperEdits.h"
+#include "LoomCore/Problem.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -122,11 +123,12 @@ int runBuildBib(const QStringList& args, const Context& context)
     QStringList problems;
     for (const loom::Problem& problem : built.problems) {
         const QString severity = problem.severity == loom::Severity::Error ? QStringLiteral("error") : QStringLiteral("warning");
-        write(stderr, QStringLiteral("%1:%2: %3: %4\n").arg(problem.file).arg(problem.line).arg(severity, problem.message));
+        // Each line is filled in by one .arg() call, so a `%2` in a file name is never replaced
+        // by a later call.
+        write(stderr, loom::problemLine(problem) + u'\n');
         problems << QStringLiteral("{\"severity\": %1, \"code\": %2, \"file\": %3, \"line\": %4, \"message\": %5}")
-                        .arg(jsonString(severity), jsonString(problem.code), jsonString(problem.file))
-                        .arg(problem.line)
-                        .arg(jsonString(problem.message));
+                        .arg(jsonString(severity), jsonString(problem.code), jsonString(problem.file),
+                             QString::number(problem.line), jsonString(problem.message));
     }
     const QString path = QDir::toNativeSeparators(QDir(root).filePath(built.change.path));
     return report(built.change, context.json, path,

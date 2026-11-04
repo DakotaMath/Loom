@@ -24,6 +24,18 @@ run_loom(2 out new-project)
 run_loom(2 out new-project "${WORK}/Demo")
 run_loom(2 out new-project "${WORK}/Demo" --name Demo --colour blue)
 run_loom(2 out new-project "${WORK}/Demo" "${WORK}/Other" --name Demo)
+run_loom(2 out new-project "${WORK}/Demo" --name Demo --name Other --json)
+if(NOT out STREQUAL "{\"error\": {\"code\": \"usage\", \"message\": \"`--name` can be given only once.\"}}\n")
+    message(FATAL_ERROR "Unexpected JSON for a repeated --name: ${out}")
+endif()
+# The folder to create is new-project's argument; `--project` names an existing project.
+run_loom(2 out new-project "${WORK}/Demo" --name Demo --project "${WORK}/Elsewhere" --json)
+if(NOT out MATCHES "^{\"error\": {\"code\": \"usage\", \"message\": \"`loom new-project` doesn't take `--project`")
+    message(FATAL_ERROR "Unexpected JSON for new-project with --project: ${out}")
+endif()
+if(EXISTS "${WORK}/Demo" OR EXISTS "${WORK}/Elsewhere")
+    message(FATAL_ERROR "new-project created a folder after wrong usage")
+endif()
 
 # 1: refused by a rule, with the JSON error on stdout.
 file(WRITE "${WORK}/Busy/notes.txt" "mine")

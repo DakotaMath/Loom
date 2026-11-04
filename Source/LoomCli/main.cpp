@@ -1,4 +1,4 @@
-// The `loom` command (Specs/m1-core.md, "The `loom` command"). It knows `--version`,
+// The `loom` command (Specs/m1-core.md, "The `loom` command"). It knows `--version`, `help`,
 // `new-project`, the statement and proof subcommands, the check subcommands, `refute`, `status`,
 // `graph`, the paper subcommands, `validate` and `install-hooks`.
 
@@ -29,12 +29,27 @@ namespace {
 
 using namespace cli;
 
-/// Prints how to use `loom` to stderr.
-/// @returns exitUsage, so callers can `return printUsage();`.
-int printUsage()
+/// The problem for a word that isn't one of `loom`'s subcommands. No side effects.
+QString unknownSubcommand(const QString& subcommand)
 {
-    write(stderr, usageText() + u'\n');
-    return exitUsage;
+    return QStringLiteral("`%1` isn't a loom subcommand. `loom help` lists them.").arg(subcommand);
+}
+
+/// Runs `loom help [<subcommand>]`: the usage text, or one subcommand's, on stdout. Asking for
+/// help isn't wrong usage, so it exits 0 (the spec gives no exit code for `help`; flagged in the
+/// PR). With `--json` it prints `{"usage": "…"}`, a shape the spec doesn't give either.
+/// @param args The arguments after `help`, with the common options taken out.
+/// @returns 0, or 2 for more than one argument or one that isn't a subcommand.
+/// Side effects: prints.
+int runHelp(const QStringList& args, bool json)
+{
+    if (args.size() > 1)
+        return usageError(QStringLiteral("`loom help` takes at most one subcommand."), json);
+    const std::optional<QString> text = args.isEmpty() ? usageText() : subcommandUsage(args[0]);
+    if (!text)
+        return usageError(unknownSubcommand(args[0]), json);
+    write(stdout, json ? QStringLiteral("{\"usage\": %1}\n").arg(jsonString(*text)) : *text + u'\n');
+    return exitDone;
 }
 
 /// Runs `loom new-project <folder> --name <name> [--idea <text>]`.
@@ -44,29 +59,20 @@ int printUsage()
 /// Side effects: creates the project (see loom::createProject); prints its path, or the problem.
 int runNewProject(const QStringList& args, bool json)
 {
+    const QString name = QStringLiteral("new-project");
+    QString error;
+    const std::optional<Args> parsed =
+        parseArgs(args, name, {1, {"--name", "--idea"}, {}, {}}, error, QStringLiteral("the folder to create"));
+    if (!parsed)
+        return usageError(error, json);
+    if (const QString problem = missing(*parsed, name, {"--name"}); !problem.isEmpty())
+        return usageError(problem, json);
     loom::NewProjectRequest request;
-    bool haveFolder = false;
-    bool haveName = false;
-    for (qsizetype i = 0; i < args.size(); ++i) {
-        const QString& arg = args[i];
-        if (arg == u"--name" || arg == u"--idea") {
-            if (i + 1 >= args.size())
-                return fail(exitUsage, QStringLiteral("usage"), QStringLiteral("`%1` needs a value.").arg(arg), json);
-            (arg == u"--name" ? request.name : request.idea) = args[++i];
-            haveName = haveName || arg == u"--name";
-        } else if (arg.startsWith(u"--") || haveFolder) {
-            return fail(exitUsage, QStringLiteral("usage"),
-                QStringLiteral("`loom new-project` doesn't take `%1`.\n").arg(arg) + usageText(), json);
-        } else {
-            request.folder = arg;
-            haveFolder = true;
-        }
-    }
-    if (!haveFolder || !haveName)
-        return fail(exitUsage, QStringLiteral("usage"),
-            QStringLiteral("`loom new-project` needs a folder and `--name`.\n") + usageText(), json);
+    request.folder = parsed->positional[0];
+    request.name = *parsed->value("--name");
+    request.idea = parsed->value("--idea").value_or(QString());
     if (request.name.isEmpty())
-        return fail(exitUsage, QStringLiteral("usage"), QStringLiteral("`--name` can't be empty."), json);
+        return usageError(QStringLiteral("`--name` can't be empty."), json);
 
     // The hook falls back on this `loom` when `loom` isn't on PATH.
     request.loomProgram = QCoreApplication::applicationFilePath();
@@ -116,13 +122,10 @@ int main(int argc, char* argv[])
     QStringList args = QCoreApplication::arguments().mid(1);
 
     Context context;
-    context.json = args.removeAll(QStringLiteral("--json")) > 0;
-    if (const qsizetype at = args.indexOf(QStringLiteral("--project")); at >= 0) {
-        if (at + 1 >= args.size())
-            return usageError(QStringLiteral("`--project` needs a folder."), context.json);
-        context.project = args.takeAt(at + 1);
-        args.removeAt(at);
-    }
+    bool projectGiven = false;
+    QString error;
+    if (!takeCommonOptions(args, context, projectGiven, error))
+        return usageError(error, context.json);
     const bool json = context.json;
 
     if (args.size() == 1 && args[0] == u"--version") {
@@ -131,11 +134,18 @@ int main(int argc, char* argv[])
         return exitDone;
     }
     if (args.isEmpty())
-        return printUsage();
+        return usageError(QStringLiteral("`loom` needs a subcommand."), json);
 
     const QString subcommand = args.takeFirst();
-    if (subcommand == u"new-project")
+    if (subcommand == u"help")
+        return runHelp(args, json);
+    if (subcommand == u"new-project") {
+        // `--project` names an existing project; the folder to create is new-project's argument.
+        if (projectGiven)
+            return usageError(QStringLiteral("`loom new-project` doesn't take `--project`: give the folder to create as its first argument."),
+                              json);
         return runNewProject(args, json);
+    }
     if (subcommand == u"new-tag")
         return runNewTag(args, context);
     if (subcommand == u"new-statement")
@@ -170,5 +180,5 @@ int main(int argc, char* argv[])
         return runValidate(args, context);
     if (subcommand == u"install-hooks")
         return runInstallHooks(args, context);
-    return printUsage();
+    return usageError(unknownSubcommand(subcommand), json);
 }

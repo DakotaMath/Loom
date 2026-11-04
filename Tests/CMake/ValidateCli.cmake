@@ -74,6 +74,13 @@ expect_equal("the JSON" "${out}"
     "{\"severity\": \"warning\", \"code\": \"premise-false\", \"file\": \"Proofs/T9GB/T9GB.a.tex\", \"line\": 4, \"message\": \"T9GB.a uses F2NS, which is false.\"}, "
     "{\"severity\": \"warning\", \"code\": \"refuted-but-proved\", \"file\": \"Statements/F2NS.tex\", \"line\": 5, \"message\": \"F2NS is marked false, but F2NS.a would prove it. One of them is wrong.\"}"
     "]}\n")
+# A file name holding `%2` is printed as it is, not with the line number put in its place.
+file(WRITE "${WORK}/Worked/Statements/Smith%2C.tex" "Not a statement.\n")
+run(1 out err "${LOOM}" validate --project "${WORK}/Worked")
+if(NOT err MATCHES "\nStatements/Smith%2C\\.tex:1: error: `Statements/Smith%2C\\.tex` doesn't belong in Statements/")
+    message(FATAL_ERROR "validate garbled a file name holding %2: ${err}")
+endif()
+file(REMOVE "${WORK}/Worked/Statements/Smith%2C.tex")
 # 3: a project from a newer Loom.
 file(WRITE "${WORK}/Worked/loom.toml" "format = 2\nname = \"Future\"\n")
 run(3 out err "${LOOM}" validate --project "${WORK}/Worked")

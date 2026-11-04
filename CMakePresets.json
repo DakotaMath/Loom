@@ -24,7 +24,7 @@
     { "name": "linux", "configurePreset": "linux" }
   ],
   "testPresets": [
-    { "name": "windows", "configurePreset": "windows", "output": { "outputOnFailure": true } },
+    { "name": "windows", "configurePreset": "windows", "configuration": "Debug", "output": { "outputOnFailure": true } },
     { "name": "linux", "configurePreset": "linux", "output": { "outputOnFailure": true } }
   ]
 }

@@ -4,13 +4,18 @@ add_subdirectory(LoomCoreTests)
 add_subdirectory(LoomAppTests)
 
 # `loom --version` (Specs/m1-core.md, "The `loom` command"). Matching the output ignores the
-# exit code, so the usage test checks the code instead.
+# exit code, so the usage test runs through a script that checks the code exactly.
 add_test(NAME loom.version COMMAND loom --version)
 set_tests_properties(loom.version PROPERTIES PASS_REGULAR_EXPRESSION "^loom 0\\.1\\.0[\r\n]*$")
 add_test(NAME loom.version-json COMMAND loom --version --json)
 set_tests_properties(loom.version-json PROPERTIES PASS_REGULAR_EXPRESSION "^\\{\"version\": \"0\\.1\\.0\"\\}[\r\n]*$")
-add_test(NAME loom.no-arguments-is-usage-error COMMAND loom)
-set_tests_properties(loom.no-arguments-is-usage-error PROPERTIES WILL_FAIL TRUE)
+# No subcommand, an unknown one, and `loom help` (Tests/CMake/UsageCli.cmake).
+add_test(NAME loom.usage
+    COMMAND "${CMAKE_COMMAND}"
+        "-DLOOM=$<TARGET_FILE:loom>"
+        "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/UsageCli"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/CMake/UsageCli.cmake")
+set_tests_properties(loom.usage PROPERTIES PASS_REGULAR_EXPRESSION "usage CLI: passed")
 # `loom new-project`: exit codes, output and the first commit (Tests/CMake/NewProjectCli.cmake).
 add_test(NAME loom.new-project
     COMMAND "${CMAKE_COMMAND}"
@@ -57,7 +62,7 @@ add_test(NAME loom.validate
         -P "${CMAKE_CURRENT_SOURCE_DIR}/CMake/ValidateCli.cmake")
 set_tests_properties(loom.validate PROPERTIES PASS_REGULAR_EXPRESSION "validate CLI: passed")
 if(WIN32)
-    set_tests_properties(loom.version loom.version-json loom.no-arguments-is-usage-error loom.new-project loom.statements loom.checks loom.papers loom.status loom.validate
+    set_tests_properties(loom.version loom.version-json loom.usage loom.new-project loom.statements loom.checks loom.papers loom.status loom.validate
         PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${LOOM_QT_BIN_DIR}")
 endif()
 
