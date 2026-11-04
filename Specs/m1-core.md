@@ -9,7 +9,7 @@ tags: [m1, formats, validation, status, checks, ids, papers, cli, toolchain]
 > **Summary:** Everything `LoomCore` and the `loom` command do in M1, precisely enough to build without guessing: the folder `loom new-project` creates, `loom.toml`, the `+++` TOML front matter, statements, proofs, IDs, check histories and their fingerprints, the status rules with a worked example, paper entries, stubs, the key rule and the BibTeX it produces, every check `loom validate` makes with its message, every `loom` subcommand, and the toolchain (MSVC, CMake, Qt 6, toml++, Catch2) with the CI matrix. Departures from `Specs/loom.md` are listed in one place.
 
 **Last verified:** 2026-11-03 · commit e5b68aa
-**Status:** Approved by Dakota on 2026-11-03; amendments A1–A7 (from the M1 review) answered by Dakota on 2026-11-04
+**Status:** Approved by Dakota on 2026-11-03; amendments A1–A7 (from the M1 review) answered by Dakota on 2026-11-04; A8 onwards (readings the review's fixes applied) approved by merging their PR
 **Milestone:** M1
 
 ## Scope
@@ -33,7 +33,7 @@ The design is approved; these are the places this spec makes it more precise in 
 | D10 | Agents give `pass`, `needs-changes`, `fail`; Dakota gives `accept`, `reject` | Both give `pass`, `needs-changes`, `fail`. Dakota's `needs-changes` carries a `changes` message, which becomes a task (from M4) | Dakota's decision on the PR: one set of verdicts, and the changes he asks for go straight onto the task list |
 
 ## Amendments from the M1 review
-The M1 code review (`Reviews/M1/` on branch `m1/review`) found places where the spec was silent or the code needed a rule to be fixed against. Dakota answered them on 2026-11-04; each is marked in the text where it applies.
+The M1 code review (`Reviews/M1/` on branch `m1/review`) found places where the spec was silent or the code needed a rule to be fixed against. Dakota answered A1–A7 on 2026-11-04, before the fixes. A8 onwards are the readings the fixes (PRs #21–#25 and batch 6) applied where the spec was still silent; Dakota approves them by merging the PR that adds them. Each is marked in the text where it applies.
 
 | # | Question | Answer |
 | --- | --- | --- |
@@ -44,6 +44,14 @@ The M1 code review (`Reviews/M1/` on branch `m1/review`) found places where the 
 | A5 | How a name with an empty `first` is written in BibTeX | The surname in braces, `{Last}` (The bibliography) |
 | A6 | Do `\{` and `\}` count toward brace balance? | Yes, as in BibTeX (The bibliography) |
 | A7 | Must committed checks keep their order? | Yes, relative to each other; `check-changed` says "moved" (Checks, rule 1) |
+| A8 | What an empty optional field says, and which fields name something | "`{field}` is empty; give it a value or leave it out." Every bibliographic string value of a version counts as naming (Front matter) |
+| A9 | A date Loom can't hold (`0000-01-01`; toml++ reads it, Qt has no year 0) | `bad-value`, and the file isn't rewritten (Front matter) |
+| A10 | `new-project` under a global `core.hooksPath`; which git directory is "the repository's own"; `build-bib --out` onto a project file | Its own message; `git rev-parse --git-common-dir`; refused, `bib-out-project-file` (The project folder; The bibliography) |
+| A11 | What `loom help` does, and what an unknown subcommand says | Usage on stdout, exit 0; an unknown or missing subcommand is a usage error that names the problem (The `loom` command) |
+| A12 | May `superseded_by` name a paper stub? May `\paperref` name a statement? May a statement be refuted by one of its own proofs? | No to all three: `superseded-invalid`, `paperref-not-stub`, `refuted-self` (Statements; Validation) |
+| A13 | The deciding proof of a proved statement; "What a proof gives"; a fingerprint Loom can't compute; git failing to read the last commit | The proof that brought it into the proved set; either counting check's `fail`; the explanation says why; exit 3, `git-failed` (How status is computed; Checks) |
+| A14 | `paper-key-rule` when no key can be made; `primary_class`'s form; an `http://` source | Skipped when `authors-missing` covers it, else the key rule's own message; an arXiv category; `field-source` with its own message (Papers; Validation) |
+| A15 | The JSON every subcommand prints | As listed under JSON shapes (The `loom` command) |
 
 ## Decisions this spec makes
 | Decision | Choice | Why |
@@ -62,7 +70,7 @@ A project is a folder with `loom.toml` at its top. Every `loom` command finds th
 
 **What `loom new-project <folder> --name <name> [--idea <text>]` does, in order:**
 1. Refuses if `<folder>` exists and isn't empty: *"`C:\Temp\Demo` isn't empty. Loom creates projects only in a new or empty folder."* Creates `<folder>` if it doesn't exist (its parent must).
-2. Checks, before writing anything, that `git` and `git lfs` run and that git knows the user's name and email. If not, it stops with one of: *"Loom needs git, and `git` didn't run. Install Git for Windows and try again."*, *"Loom needs Git LFS, and `git lfs` didn't run. Git for Windows includes it; reinstall Git with LFS ticked."*, *"Git doesn't know your name and email yet, so Loom can't make the first commit. Run `git config --global user.name \"…\"` and `git config --global user.email …`, then try again."* It also stops, with `install-hooks`' `hooks-path-outside` message, if the user's global git config sets `core.hooksPath`, since both `git lfs install --local` and the commit guard would then write their hooks into that shared folder (A1).
+2. Checks, before writing anything, that `git` and `git lfs` run and that git knows the user's name and email. If not, it stops with one of: *"Loom needs git, and `git` didn't run. Install Git for Windows and try again."*, *"Loom needs Git LFS, and `git lfs` didn't run. Git for Windows includes it; reinstall Git with LFS ticked."*, *"Git doesn't know your name and email yet, so Loom can't make the first commit. Run `git config --global user.name \"…\"` and `git config --global user.email …`, then try again."* It also stops (code `hooks-path-outside`) if the user's global or system git config sets `core.hooksPath`, since both `git lfs install --local` and the commit guard would then write their hooks into that shared folder (A1). Its message is its own, since `install-hooks`' remedy needs a repository that doesn't exist yet (A10): *"Git runs hooks from `{folder}` (`core.hooksPath` in your global git config), so a new project's commit guard and Git LFS hooks would go there. Unset it with `git config --global --unset core.hooksPath`, then try again."*
 3. Writes the files below from the project kit (`Templates/project/`, compiled into `loom` as a Qt resource so `loom` is one self-contained program).
 4. Runs `git init -b main`, then `git lfs install --local` (hooks for this repo only; the user's global git config is never touched), then `loom install-hooks` (below).
 5. Stages everything and commits with the message `Create project <name>`, through the pre-commit hook like any commit.
@@ -114,7 +122,7 @@ Papers/*/local/
 - sets, in the repo's own `.git/config`: `merge.loom-checks.name = Loom check history` and `merge.loom-checks.driver = loom merge-checks %O %A %B`.
 - An existing `pre-commit` hook that Loom didn't write is renamed `pre-commit.before-loom`, and Loom says so.
 - **Only for a Loom project at the top of its own repository** (A1). It refuses, writing nothing, when the folder has no `loom.toml` (exit 3, as for any command outside a project), or when it isn't the repository's top level (`git rev-parse --show-toplevel`): *"`{folder}` isn't the top of its git repository, so its hooks belong to another project. Run `loom install-hooks` in a Loom project."* (exit 3, code `hooks-not-top-level`).
-- **Only inside the repository's own git directory** (A1). If git runs hooks from somewhere else (`core.hooksPath` is set, locally or globally), it refuses, writing nothing: *"Git runs hooks from `{folder}` (`core.hooksPath`), outside this project, so Loom can't install its commit guard there. Run `git config --local core.hooksPath .git/hooks` here, then `loom install-hooks` again."* (exit 3, code `hooks-path-outside`). A hook in `.git/hooks` that git never runs would look like a guard and not be one.
+- **Only inside the repository's own git directory** (A1). If git runs hooks from somewhere else (`core.hooksPath` is set, locally or globally), it refuses, writing nothing: *"Git runs hooks from `{folder}` (`core.hooksPath`), outside this project, so Loom can't install its commit guard there. Run `git config --local core.hooksPath .git/hooks` here, then `loom install-hooks` again."* (exit 3, code `hooks-path-outside`). A hook in `.git/hooks` that git never runs would look like a guard and not be one. "Outside" means outside `git rev-parse --git-common-dir`, so a linked worktree, whose hooks git keeps in the main repository's git directory, is accepted (A10).
 
 ### `loom.toml`
 Plain TOML (no front matter).
@@ -168,6 +176,9 @@ Every statement, proof and verbose proof is a text file with TOML front matter, 
 - **Canonical form:** the fields in the order of this spec's tables, one per line as `key = value`; strings as basic strings (`"…"`, escaping `"`, `\` and control characters, so no string ever spans lines); arrays inline (`["7RT2", "9D3F"]`); dates as `2026-11-03`; optional fields left out when empty or absent. Comments in front matter are dropped on rewrite, since front matter is data: prose belongs in the body.
 - **Unknown fields are errors,** so a misspelt field is caught rather than ignored.
 - **Empty values are missing values** (A2). In every file Loom reads (front matter, `loom.toml`, `paper.toml`, stubs, check histories), a required field, or an optional field whose value names something (an ID, a tag, a key, a path, a date, a fingerprint), that is present but empty (`""`) is `missing-field`, worded "`{field}` is empty". An optional field with no value is left out, never written empty. Free-text optional fields (such as a version's `differences`), and fields the tables say may be empty (an author's `first`), are unaffected.
+  - **Wording** (A8): a required field says "`{field}` is empty; every {thing} needs one."; an optional one says "`{field}` is empty; give it a value or leave it out."
+  - **Which optional fields name something** (A8): `origin`, `superseded_by`, `refuted_by`, every date, a version's `pdf`, a reading's `session`, a check's `record` and `note`, a draft's `key` and `cite`, and every bibliographic string value of a version (`doi`, `journal`, `primary_class`, …). Free text that may be empty: `idea`, `relevance_why`, `summary`, `differences`, a stub's `title`, an author's `first`, renumbering labels. An empty `gist` keeps its own code, `stub-gist-empty`; a check's `changes` keeps `wrong-type`, since the Checks table already requires it non-empty.
+- **Dates Loom can't hold** (A9): TOML allows the year 0 (`0000-01-01`), Qt's dates don't. Such a date, in any file, is `bad-value`: "`{field}` can't be `0000-01-01`; it must be one of the dates from 0001-01-01 on." Loom then won't rewrite the file, since the rewrite would drop the date.
 - **Writes are atomic:** through `QSaveFile` (write a temporary file, then rename), so a crash never leaves half a file. A `loom` command that writes takes the lock `.loom/write.lock` first and waits up to 10 seconds for it.
 
 ### Statements
@@ -197,8 +208,8 @@ Let $u_0\in L^2(\R^n)$ and let $u$ be a weak solution with data $u_0$ ...
 | `stated_using` | no | Array of statement or stub tags, no repeats, not itself; no cycles through `stated_using` |
 | `aliases` | no | Array of old names (see IDs) |
 | `origin` | no (default `new`) | `new`, `spec:<spec-id>` or `import:<path>`, where the part after `:` is non-empty |
-| `superseded_by` | no | The tag of another statement; no cycles |
-| `refuted_by` | with `refuted_on` | A proof ID in the project (M9 adds experiment IDs) |
+| `superseded_by` | no | The tag of another statement of this project, not a paper stub (A12); no cycles |
+| `refuted_by` | with `refuted_on` | A proof ID in the project, not a proof of this statement (A12; M9 adds experiment IDs) |
 | `refuted_on` | with `refuted_by` | Date of Dakota's click accepting the refutation. Dakota-only |
 | `created` | yes | Date |
 | `verified` | no | Date the front matter (title, tags, `stated_using`) was last checked against the body |
@@ -302,7 +313,7 @@ as a separate lemma or start the induction at k = 1 and treat k = 0 by hand.
 | `fail` | The argument is wrong | The proof stops supporting its statement. Loom doesn't set `level = "failed"` itself; that's Dakota's click, since he may repair the proof instead |
 
 **Rules.**
-1. **Append-only.** No entry is ever edited, removed or reordered. Validation compares the file with its version in `HEAD`: every committed entry must still be there, unchanged and in the same order relative to the other committed entries (A7); new entries may sit between them, as a merge interleaves by date.
+1. **Append-only.** No entry is ever edited, removed or reordered. Validation compares the file with its version in `HEAD`: every committed entry must still be there, unchanged and in the same order relative to the other committed entries (A7); new entries may sit between them, as a merge interleaves by date. With no commit yet, or outside a git repository (`git rev-parse --git-dir` fails with "not a git repository", read with `LC_ALL=C` so it isn't translated), there is nothing to compare with. If git fails in any other way (a repository git refuses as of dubious ownership, say), `validate` stops with exit 3, code `git-failed` (A13): *"Loom couldn't read the last commit to compare the checks with it: `{git command}` failed ({git's message})."*
 2. **Date order.** Entries are in non-decreasing `date` order. Ties are allowed; then the later entry in the file is the newer.
 3. **Who.** Every agent check has a `record`. Every `needs-changes` by Dakota has `changes`.
 4. **Matching.** A check *matches* when its `fingerprint` equals the proof's current fingerprint. Checks that don't match stay in the history and count for nothing.
@@ -358,7 +369,7 @@ What isn't in it: titles, kinds, tags, `stated_using`, `level`, dates, the order
 Statuses: `proved`, `conditional`, `unchecked`, `sketch`, `heuristic`, `open`, `cited`, `extracted`, `false`, and no status.
 
 **What a proof gives.** Every proof P of statement S gives one of:
-- **nothing**, if `level = "failed"` or P's counting agent check is `fail` (P doesn't support S);
+- **nothing**, if `level = "failed"` or either counting check (agent's or Dakota's) is `fail` (P doesn't support S; rule 7 of Checks, A13);
 - **complete-checked**, if `level = "complete"` and P is checked;
 - **complete-unchecked**, if `level = "complete"` and P isn't checked;
 - **sketch** or **heuristic**, from its level (checks on these levels change nothing except a `fail`).
@@ -382,9 +393,9 @@ Statuses: `proved`, `conditional`, `unchecked`, `sketch`, `heuristic`, `open`, `
 
 **Why sketch outranks heuristic:** a sketch is a proof with routine gaps, meant to become complete; a heuristic is a non-rigorous argument that suggests the statement is true. The levels rank `complete` > `sketch` > `heuristic` everywhere Loom compares them.
 
-**Tie-breaks and explanations.** The **deciding proof** is the proof the matching rule rests on; when several qualify, the one with the fewest premises that are not proved or cited, then the lowest letter (`a` before `b`, `z` before `aa`).
+**Tie-breaks and explanations.** The **deciding proof** is the proof the matching rule rests on; when several qualify, the one with the fewest premises that are not proved or cited, then the lowest letter (`a` before `b`, `z` before `aa`). For a **proved** statement it is the proof that brought the statement into the proved set (A13): the set grows in rounds, each judged against the set as the round began, and the deciding proof is the lowest-lettered proof that qualified in the round the statement entered. Its premises were all proved or cited before it, so the explanation never goes round in a circle (the worked example's `H8KD proved (via J3RW.b)`); the plain rule could pick a proof whose premise is proved only through the statement itself.
 - A **conditional** statement **rests on** the premises of its deciding proof that are neither proved nor cited, in tag order. Loom names them, with their statuses.
-- An **unchecked** statement says what its deciding proof lacks: an agent pass, Dakota's pass, a pass from Dakota newer than the agent's, or a fix (a counting check is `needs-changes`; Dakota's `changes` text is quoted).
+- An **unchecked** statement says what its deciding proof lacks: an agent pass, Dakota's pass, a pass from Dakota newer than the agent's, or a fix (a counting check is `needs-changes`; Dakota's `changes` text is quoted). When Loom can't compute the proof's fingerprint (a premise's front matter doesn't parse, say), no check can count, and the explanation says why in a second sentence (A13): `4KX7 unchecked: 4KX7.a is complete, but no check of it can count. Loom can't compute the fingerprint of 4KX7.a: Loom can't read the front matter of its premise 5HN8 (Statements/5HN8.tex).`
 - An **open** statement says whether it has no proofs or only proofs that don't support it.
 
 **Superseded statements** keep the status their proofs give them (a superseded result is usually still true). Using one as a premise is a warning.
@@ -393,7 +404,7 @@ Statuses: `proved`, `conditional`, `unchecked`, `sketch`, `heuristic`, `open`, `
 
 **Recomputing.** Status is a pure function of the files: `LoomCore` reads the project, builds the graph and computes every status from scratch. At M1's sizes (thousands of statements) this takes milliseconds, so "recompute everything downstream" is "recompute everything"; an incremental version waits until it's needed.
 
-**`loom status <id>` explains in one sentence:**
+**`loom status <id>` explains in one sentence** (two when a fingerprint can't be computed, above):
 - `4KX7 proved: 4KX7.a is complete and checked, and its premises 5HN8, 9D3F are proved.`
 - `6BWT conditional: 6BWT.a is complete and checked, but rests on 3WQ6, which is extracted (not yet checked against the paper's PDF).`
 - `8CJA unchecked: 8CJA.a is complete and has an agent pass, but no pass from Dakota.`
@@ -462,7 +473,7 @@ Top level:
 | `[[reading]]` | no | Below |
 | `[[renumbering]]` | no | Below |
 
-**Fields** (every bibliographic value) are inline tables `{ value = …, source = "…", verified = … }`: `source` is a non-empty URL (`https://…`) or a path inside the paper's `local/`; `verified` is the date of Dakota's click, or `false`. Setting `verified` to a date is Dakota's click (M6's verification window); agents write `false`.
+**Fields** (every bibliographic value) are inline tables `{ value = …, source = "…", verified = … }`: `source` is a non-empty URL (`https://…`; an `http://` one is `field-source`, A14) or a path inside the paper's `local/`; `verified` is the date of Dakota's click, or `false`. Setting `verified` to a date is Dakota's click (M6's verification window); agents write `false`.
 
 **`[work]`:**
 - `type`: one of `article`, `book`, `incollection`, `inproceedings`, `phdthesis`, `mastersthesis`, `techreport`, `talk`, `lecture-notes`, `other`.
@@ -470,7 +481,7 @@ Top level:
 - `authors` and `editors`: arrays of `{ last = "…", first = "…" }`, `last` including any particle as printed (`"van der Berg"`, `"de Giorgi"`). `first` may be empty. At least one author, or for a book with no authors, at least one editor.
 
 **`[[versions]]`:** each has `id`, `kind`, `pdf` (optional path inside `local/`), `differences` (optional string), and fields from the table for its kind and the work's type.
-- `kind = "arxiv"`: `id` is `arxiv-v<N>`, and `arxiv_version` must equal N. Fields: `arxiv_id` (A4: `YYMM.NNNN` for April 2007 to December 2014, `YYMM.NNNNN` from January 2015, or old-style `archive/YYMMNNN`, optionally with a subject class, such as `math/0601001` or `math.AP/0601001`; never with a version suffix `vN`, which belongs in `arxiv_version`; anything else is `bad-value`, its allowed values given as "an arXiv identifier such as `2503.01234` or `math/0601001`, without `vN`"), `arxiv_version`, `posted` (date), `primary_class` (e.g. `math.AP`), `page_count`.
+- `kind = "arxiv"`: `id` is `arxiv-v<N>`, and `arxiv_version` must equal N. Fields: `arxiv_id` (A4: `YYMM.NNNN` for April 2007 to December 2014, `YYMM.NNNNN` from January 2015, or old-style `archive/YYMMNNN`, optionally with a subject class, such as `math/0601001` or `math.AP/0601001`; never with a version suffix `vN`, which belongs in `arxiv_version`; anything else is `bad-value`, worded "`arxiv_id` can't be `{value}`; it must be an arXiv identifier such as `2503.01234` or `math/0601001`, without `vN`."; old-style identifiers are checked for a month 01–12, not for their years), `arxiv_version`, `posted` (date), `primary_class` (an arXiv category, A14: an archive of lowercase words joined by `-`, optionally followed by `.` and either two capitals or lowercase words joined by `-`, such as `math.AP`, `hep-th` or `cond-mat.mes-hall`; else `bad-value`, "…must be an arXiv category such as `math.AP` or `hep-th`"), `page_count`.
 - `kind = "published"`: `id` is `published` (at most one), or `ed<N>` (N ≥ 2) for a book's later editions. Fields by the work's type:
 
 | Type | Expected fields | Optional fields |
@@ -625,7 +636,8 @@ Other types, cited version `published`:
 | `ref-unknown` | error | `{ref}` in `{field}` isn't a statement or paper stub in this project. |
 | `ref-alias` | error in front matter, warning in a body | `{ref}` is an old name of {id}. Write `{id}` here. |
 | `ref-not-listed` | warning | The text refers to {id} (`\ref` or `\paperref`) but {premises / stated_using} doesn't list it. (A proof's refs to the statement it proves, and to statements without a status, such as definitions, don't count.) |
-| `ref-dangling` | warning | `\ref{{label}}` points to nothing: it isn't a tag, an alias, or a `\label` in any body. |
+| `ref-dangling` | warning | `\ref{{label}}` points to nothing: it isn't a tag, an alias, or a `\label` in any body. For `\paperref` (A12): `\paperref{{id}}` points to nothing: it isn't the tag or old name of a paper stub. |
+| `paperref-not-stub` | error | `\paperref{{ref}}` names {id}, a statement of this project, not a paper's result. Use `\ref{{id}}`. (A12) |
 | `cite-alias` | warning | `\cite{{old}}` uses an old key of {Key}. It still works; `{Key}` is its current key. |
 
 **Statements**
@@ -634,9 +646,10 @@ Other types, cited version `published`:
 | --- | --- | --- |
 | `stated-using-self` | error | {id} can't be stated using itself. |
 | `stated-using-cycle` | error | `stated_using` goes round in a circle: {A} → {B} → {A}. |
-| `superseded-invalid` | error | {id} is superseded by {target}, which {doesn't exist / is itself / leads round in a circle: …}. |
+| `superseded-invalid` | error | {id} is superseded by {target}, which {doesn't exist / is itself / leads round in a circle: …}. For a stub (A12): {id} is superseded by {target}, which is a result from {Key}, not a statement of this project. |
 | `refuted-incomplete` | error | {id} has `{refuted_by / refuted_on}` but not `{the other}`. Refuting a statement needs both: the proof and the date Dakota accepted it. |
 | `refuted-unknown` | error | {id} is refuted by `{proof}`, which isn't a proof in this project. |
+| `refuted-self` | error | {id} is refuted by `{proof}`, which is one of its own proofs. A statement is refuted by a proof of another statement, such as its negation. (A12) |
 | `refuted-no-status` | error | {id} is a {kind}; only lemmas, propositions, theorems, corollaries and conjectures can be refuted. |
 | `refuted-but-proved` | warning | {id} is marked false, but {proof} would prove it. One of them is wrong. |
 | `conjecture-proved` | warning | Conjecture {id} is now proved. Change its kind to theorem (or lemma, …) when you're ready. |
@@ -680,10 +693,10 @@ Other types, cited version `published`:
 | Code | Sev. | Message |
 | --- | --- | --- |
 | `paper-key-mismatch` | error | The key is `{key}` but the folder is `{folder}`; they must match. |
-| `paper-key-rule` | warning | By the key rule this paper's key is `{expected}`, not `{key}`. Run `loom rekey {key}`. |
+| `paper-key-rule` | warning | By the key rule this paper's key is `{expected}`, not `{key}`. Run `loom rekey {key}`. When no key can be made (A14): the key rule's own message (steps 1 and 3). Not reported for a paper with no authors or editors, which `authors-missing` already reports. |
 | `paper-key-duplicate` | error | `{key}` is the key or an old key of more than one paper. (Compared ignoring case, A3.) |
 | `field-shape` | error | `{field}` must be `{ value = …, source = "…", verified = … }`. |
-| `field-source` | error | `{field}` has no source. Every field says where it came from. |
+| `field-source` | error | `{field}` has no source. Every field says where it came from. For an `http://` source (A14): `{field}`'s source `{url}` must be an `https://` link or a path inside this paper's `local/` folder. |
 | `field-verified` | error | `{field}`'s `verified` must be a date or `false`. |
 | `field-not-for-type` | error | `{field}` isn't a field of {an article's published version / an arXiv version / …}. |
 | `field-expected` | warning | {Key}'s {version} has no `{field}`; {type}s usually have one. |
@@ -702,6 +715,8 @@ Other types, cited version `published`:
 ### The `loom` command
 `loom <subcommand> [arguments]`. Common options: `--project <folder>` (default: found from the current folder) and `--json` (one JSON object on stdout instead of text). Messages and problems go to stderr; results to stdout. With `--json`, a failure is `{"error": {"code": "…", "message": "…"}}` on stdout as well.
 
+**Usage** (A11). The common options are taken only where they stand as options, never as another option's value (`--title --json` is a title); every valueless option (`--json`, `--version`, `--staged`, `--verified`, `--outdate-checks`) is known by name, so the word after it is never taken as its value. Giving `--project` twice, or giving it to `new-project`, is a usage error. A usage error (exit 2, code `usage`) prints the problem and then the usage on stderr; with `--json` the error's `message` is the problem alone. With no subcommand: *"`loom` needs a subcommand."*; with an unknown one: *"`{word}` isn't a loom subcommand. `loom help` lists them."*
+
 **Exit codes** (every subcommand):
 
 | Code | Meaning |
@@ -709,30 +724,30 @@ Other types, cited version `published`:
 | 0 | Done (for `validate`: no errors) |
 | 1 | Refused by a rule, or `validate` found errors. Nothing was written |
 | 2 | Wrong usage: unknown subcommand, missing or bad argument |
-| 3 | Can't work here: no project found, a newer project format, a file Loom can't read or write, `git` missing |
+| 3 | Can't work here: no project found, a newer project format, a file Loom can't read or write, `git` missing or failing |
 
 **Dakota's clicks.** Subcommands marked *(Dakota)* ask *"This is Dakota's decision: {what it does}. Type yes to go ahead:"* and go ahead only on `yes`. If input isn't a terminal they refuse (exit 1): *"Only Dakota can {do this}, and only at a terminal."* `LoomCore` itself takes an explicit confirmation argument; the terminal prompt is how `loom` supplies it.
 
 | Subcommand | Arguments | Does | Prints (text; `--json`) |
 | --- | --- | --- | --- |
 | `--version` | | | `loom 0.1.0`; `{"version": "0.1.0"}` |
-| `help` | `[subcommand]` | Usage | Usage text |
+| `help` | `[subcommand]` | Usage, on stdout, exit 0 (A11). With a subcommand, only its usage lines and the common options; an unknown subcommand, or more than one word, is a usage error | Usage text; `{"usage": "…"}` |
 | `new-project` | `<folder> --name <name> [--idea <text>]` | Creates a project (above) | The path; `{"path": …}` |
 | `install-hooks` | | Pre-commit hook and merge driver (above) | What it did |
 | `new-tag` | `<tag> --kind equation\|technique\|other --title <title>` | Adds a tag to `loom.toml` | The tag |
 | `new-statement` | `--kind <kind> --title <title> (--body <text> \| --body-file <path>) [--tag <tag>]… [--stated-using <id>]… [--origin <origin>]` | Creates `Statements/<new tag>.tex`, `created` today | The new tag; `{"id", "path"}` |
 | `edit-statement` | `<id> [--title …] [--kind …] [--body-file <path>] [--add-tag …] [--remove-tag …] [--add-stated-using …] [--remove-stated-using …] [--superseded-by <id>] [--verified] [--outdate-checks]` | Changes the statement. A change to the body that would outdate checks (see Statements) is refused unless `--outdate-checks` *(Dakota)*. `--verified` sets `verified` to today | The changed fields; with `--json`, also `outdated_checks` |
 | `new-proof` | `<statement-id> --level <level> (--body <text> \| --body-file <path>) [--premise <id>]…` | Creates the next proof of the statement | The new proof ID; `{"id", "path"}` |
-| `edit-proof` | `<proof-id> [--level …] [--body-file <path>] [--add-premise …] [--remove-premise …] [--verified]` | Changes the proof. Changing the body or premises of a checked proof is refused unless `--outdate-checks` *(Dakota)* | The changed fields |
+| `edit-proof` | `<proof-id> [--level …] [--body-file <path>] [--add-premise …] [--remove-premise …] [--verified] [--outdate-checks]` | Changes the proof. Changing the body or premises of a checked proof is refused unless `--outdate-checks` *(Dakota)* | The changed fields |
 | `fingerprint` | `<proof-id>` | | The current fingerprint; `{"proof", "fingerprint"}` |
 | `add-check` | `<proof-id> --by <dakota\|agent:model> --verdict <pass\|needs-changes\|fail> [--changes <text> \| --changes-file <path>] [--fingerprint <fp>] [--record <path>] [--note <path>]` | Appends a check with the current fingerprint and time. Agents must give `--fingerprint` (refused if the proof has changed) and `--record`. `--by dakota` is *(Dakota)*; with `needs-changes` and no `--changes`, it asks for the message at the terminal | The entry and whether the proof is now checked |
-| `refute` | `<id> --by <proof-id>` *(Dakota)* | Sets `refuted_by` and `refuted_on` (today) | The new status |
+| `refute` | `<id> --by <proof-id>` *(Dakota)* | Sets `refuted_by` and `refuted_on` (today). Refuses a proof of `<id>` itself (A12, code `refuted-self`): *{proof} is a proof of {id} itself, so it can't refute it. A statement is refuted by a proof of another statement, such as its negation.* | The new status |
 | `status` | `[<id>]` | Computes status | One line per statement (`ID  status  title`) and the counts by status; with an ID, the explanation sentence. JSON below |
 | `graph` | `--json` | | The graph (below) |
-| `new-paper` | `<draft.toml>` | Reads a draft `paper.toml` without `key` (or with a `key` that is checked against the rule), computes the key, creates `Papers/<Key>/paper.toml` in canonical form (`cite` defaulted if absent, `created` today), renaming a paper that now shares its key. Never replaces a file: if `Papers/<Key>/` already exists (compared ignoring case), whatever is in it, it refuses and writes nothing: *"`Papers/{Key}/` already exists. Fix or remove what's there first; `loom validate` shows its problems."* (A3, code `paper-exists`) | The key; `{"key", "path", "renamed": [{from, to}]}` |
+| `new-paper` | `<draft.toml>` | Reads a draft `paper.toml` without `key` (or with a `key` that is checked against the rule), computes the key, creates `Papers/<Key>/paper.toml` in canonical form (`cite` defaulted if absent, `created` today), renaming a paper that now shares its key. Never replaces a file: if `Papers/<Key>/` already exists (compared ignoring case), whatever is in it, it refuses and writes nothing: *"`Papers/{Key}/` already exists. Fix or remove what's there first; `loom validate` shows its problems."* (A3, code `paper-exists`; `{Key}` is the folder as it is on disk, which may differ in case) | The key; `{"key", "path", "renamed": [{from, to}]}` |
 | `new-stub` | `<key> --kind <kind> --gist <text> --version <version-id> --at <locator> --by <dakota\|agent:model> [--title …] [--stated-using <id>]… [--paper-premise <id>]…` | Creates a stub with a new tag, its locator `checked_against_pdf = false` | The new tag |
 | `rekey` | `<key>` | Renames the paper to the key the rule gives (see the key rule) | `old → new`, or "already right" |
-| `build-bib` | `[--out <path>]` | Writes the bibliography | The path and any warnings |
+| `build-bib` | `[--out <path>]` | Writes the bibliography. Refuses (exit 1, code `bib-out-project-file`, A10) an `--out` that is one of the project's own files or in a folder Loom keeps them in (`loom.toml`, `CLAUDE.md`, `.gitignore`, `.gitattributes`, the preambles, `.loom/write.lock`, anything in `Statements/`, `Proofs/`, `Papers/` or `.git/`; compared ignoring case): *"`{path}` is one of the project's own files, or in a folder Loom keeps them in, so Loom won't write the bibliography there. Give `--out` a path of its own, such as `TeX/refs.bib`."* | The path and any warnings |
 | `validate` | `[--staged]` | Checks everything (above) | The problems and a count line; JSON below |
 | `merge-checks` | `<base> <ours> <theirs>` | The git merge driver (see Checks) | Nothing on success |
 
@@ -769,6 +784,23 @@ Other types, cited version `published`:
  "problems": [{"severity": "error", "code": "ref-unknown", "file": "Proofs/4KX7/4KX7.a.tex",
                "line": 4, "message": "…"}]}
 ```
+
+**The other subcommands' JSON** (A15). Each prints one object on success; `index` and `counting_*_check` count checks from 0, as in `graph`.
+
+| Subcommand | JSON |
+| --- | --- |
+| `new-project` | `{"path"}` |
+| `install-hooks` | `{"hook", "moved_hook", "merge_driver": "loom-checks"}`; `moved_hook` is the renamed old hook, or `null` |
+| `new-tag` | `{"id"}` |
+| `new-statement`, `new-proof`, `new-stub` | `{"id", "path"}` |
+| `edit-statement`, `edit-proof` | `{"id", "changed": [field…], "outdated_checks": [proof-id…]}` |
+| `fingerprint` | `{"proof", "fingerprint"}` |
+| `add-check` | `{"proof", "path", "index", "check": {"by", "date", "fingerprint", "verdict", "changes", "record", "note"}, "checked", "supports", "counting_agent_check", "counting_dakota_check"}` |
+| `refute` | `{"id", "path", "status", "explanation"}` |
+| `new-paper` | `{"key", "path", "renamed": [{"from", "to"}…]}` |
+| `rekey` | `{"from", "to", "renamed": [{"from", "to"}…]}`; `from` equals `to` when the key was already right |
+| `build-bib` | `{"path", "problems": [{"severity", "code", "file", "line", "message"}…]}` |
+| `merge-checks` | Nothing; it is run by git |
 
 ### Path safety
 Every path `LoomCore` reads or writes is resolved against the project folder and must stay inside it: no absolute paths, no `..` that leaves it, and no symlink or junction that resolves outside it (checked on the canonical path). Paths stored in files are project-relative with `/`. A path that fails is refused (`bad-path`, or exit 3 for a command).
@@ -847,7 +879,7 @@ Each linked or compiled-in dependency gets its decision page in `Wiki/decisions/
 | Key rule | Catch2 | Every row of the key table, plus shared-key lettering and renaming with aliases |
 | BibTeX | Catch2 | Exact output for the published article, the arXiv-only paper and one entry per other type; escaping; unverified-field warnings |
 | Validation messages | Catch2 | A test project with one of every problem gives exactly the expected list, text and JSON |
-| CLI | Catch2 | Exit codes 0–3; `--json` shapes; *(Dakota)* commands refuse without a terminal |
+| CLI | CTest scripts (`Tests/CMake/`) | Exit codes 0–3; `--json` shapes; *(Dakota)* commands refuse without a terminal |
 | Path safety | Catch2 | `..`, absolute paths and symlinks leaving the project are refused |
 | Build and tests on Windows | manual on Windows | The build how-to works on a clean machine; `ctest` passes |
 | Commit guard on Windows | manual on Windows | Break a statement's front matter; `git commit` is refused with the message; fix it and the commit goes through |
