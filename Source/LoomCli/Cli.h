@@ -11,6 +11,7 @@
 
 #include <cstdio>
 #include <optional>
+#include <utility>
 
 namespace loom {
 struct ChangeResult;
@@ -61,6 +62,9 @@ struct ArgSpec {
     QSet<QString> single;      ///< Options with a value, given at most once.
     QSet<QString> repeated;    ///< Options with a value, given any number of times.
     QSet<QString> flags;       ///< Options without a value.
+    /// What the one positional argument is, for the usage message, e.g. `a draft file`; empty
+    /// means `an ID`.
+    QString positionalName;
 };
 
 /// A subcommand's arguments, read by parseArgs().
@@ -83,6 +87,16 @@ std::optional<Args> parseArgs(const QStringList& args, const QString& name, cons
 /// nearest parent holding `loom.toml`, unless `--project` names one).
 /// @returns The folder, or nothing with `message` set. No side effects.
 std::optional<QString> findProject(const Context& context, QString& message);
+
+/// Reads a subcommand's arguments and finds the project, the first steps of most subcommands.
+/// @param exitCode Set when it fails, after the problem is reported.
+/// @returns The arguments and the project folder, or nothing.
+std::optional<std::pair<Args, QString>> start(const QStringList& args, const QString& name, const ArgSpec& spec,
+                                              const Context& context, int& exitCode);
+
+/// Checks that the options in `required` were given.
+/// @returns An empty string, or the usage problem. No side effects.
+QString missing(const Args& args, const QString& name, const QStringList& required);
 
 /// "A, B and C". No side effects.
 QString listed(const QStringList& items);

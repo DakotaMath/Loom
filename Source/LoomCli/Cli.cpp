@@ -83,6 +83,12 @@ QString usageText()
         "                     [--changes <text> | --changes-file <path>] [--fingerprint <fp>]\n"
         "                     [--record <path>] [--note <path>]\n"
         "  loom merge-checks <base> <ours> <theirs>\n"
+        "  loom new-paper <draft.toml>\n"
+        "  loom new-stub <key> --kind <kind> --gist <text> --version <version-id> --at <locator>\n"
+        "                     --by dakota|agent:<model> [--title <title>] [--stated-using <id>]...\n"
+        "                     [--paper-premise <id>]...\n"
+        "  loom rekey <key>\n"
+        "  loom build-bib [--out <path>]\n"
         "Every subcommand that works in a project takes --project <folder> and --json.");
 }
 
@@ -128,7 +134,7 @@ std::optional<Args> parseArgs(const QStringList& args, const QString& name, cons
     }
     if (parsed.positional.size() != spec.positionals) {
         const QString wanted = spec.positionals == 0 ? QStringLiteral("no other arguments")
-                             : spec.positionals == 1 ? QStringLiteral("an ID")
+                             : spec.positionals == 1 ? (spec.positionalName.isEmpty() ? QStringLiteral("an ID") : spec.positionalName)
                                                      : QStringLiteral("%1 arguments").arg(spec.positionals);
         error = QStringLiteral("`loom %1` needs %2.").arg(name, wanted);
         return std::nullopt;
@@ -259,6 +265,32 @@ int report(const loom::ChangeResult& result, bool json, const QString& text, con
         break;
     }
     return fail(exitCantWork, result.code, result.message, json);
+}
+
+std::optional<std::pair<Args, QString>> start(const QStringList& args, const QString& name, const ArgSpec& spec,
+                                              const Context& context, int& exitCode)
+{
+    QString error;
+    std::optional<Args> parsed = parseArgs(args, name, spec, error);
+    if (!parsed) {
+        exitCode = usageError(error, context.json);
+        return std::nullopt;
+    }
+    std::optional<QString> root = findProject(context, error);
+    if (!root) {
+        exitCode = fail(exitCantWork, QStringLiteral("not-a-project"), error, context.json);
+        return std::nullopt;
+    }
+    return std::pair{std::move(*parsed), *root};
+}
+
+QString missing(const Args& args, const QString& name, const QStringList& required)
+{
+    for (const QString& option : required) {
+        if (!args.value(option))
+            return QStringLiteral("`loom %1` needs `%2`.").arg(name, option);
+    }
+    return {};
 }
 
 } // namespace cli

@@ -1,0 +1,27 @@
+relevance = 1
+relevance_why = "Proves the estimate the project wants to extend"
+tags = ["model-system"]
+
+[work]
+type = { value = "article", source = "https://doi.org/10.0000/jea.2024.17", verified = false }
+title = { value = "Energy decay for a model parabolic system", source = "https://doi.org/10.0000/jea.2024.17", verified = false }
+authors = { value = [{ last = "Smith", first = "Alice" }, { last = "Jones", first = "Bob" }], source = "https://doi.org/10.0000/jea.2024.17", verified = false }
+
+[[versions]]
+id = "arxiv-v1"
+kind = "arxiv"
+arxiv_id = { value = "2401.99999", source = "https://arxiv.org/abs/2401.99999v1", verified = false }
+arxiv_version = { value = 1, source = "https://arxiv.org/abs/2401.99999v1", verified = false }
+posted = { value = 2023-01-15, source = "https://arxiv.org/abs/2401.99999v1", verified = false }
+primary_class = { value = "math.AP", source = "https://arxiv.org/abs/2401.99999v1", verified = false }
+page_count = { value = 18, source = "https://arxiv.org/abs/2401.99999v1", verified = false }
+
+[[versions]]
+id = "published"
+kind = "published"
+journal = { value = "Journal of Example Analysis", source = "https://doi.org/10.0000/jea.2024.17", verified = false }
+volume = { value = "12", source = "https://doi.org/10.0000/jea.2024.17", verified = false }
+number = { value = "3", source = "https://doi.org/10.0000/jea.2024.17", verified = false }
+pages = { value = "101--130", source = "https://doi.org/10.0000/jea.2024.17", verified = false }
+year = { value = 2024, source = "https://doi.org/10.0000/jea.2024.17", verified = false }
+doi = { value = "10.0000/jea.2024.17", source = "https://doi.org/10.0000/jea.2024.17", verified = false }
