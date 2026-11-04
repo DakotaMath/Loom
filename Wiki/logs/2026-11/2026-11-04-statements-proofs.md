@@ -8,7 +8,7 @@ tags: [m1, build, statements, proofs, ids, cli]
 > **Summary:** Built #5: `LoomCore` reads and writes statement, proof and verbose proof files (TOML front matter around a body kept byte for byte), checks every field and the references between files, generates tags and proof letters, and creates and edits statements, proofs and tags behind the write lock; `loom` gains `new-tag`, `new-statement`, `edit-statement`, `new-proof` and `edit-proof`. All 82 `ctest` tests pass on Windows.
 
 **Session model:** Opus 5.5
-**Issues and PRs:** #5, PR (see the issue)
+**Issues and PRs:** #5, PR #15
 
 ## Done
 - `LoomCore`: `FrontMatter` (finding `+++` front matter, UTF-8, BOM, CRLF), `StatementsAndProofs` (the three file types, their own problems, the canonical writer), `Ids` (tags, Crockford reading on the command line, generation, proof letters, aliases), `ProjectContents` (reading `Statements/` and `Proofs/`, the problems that need several files, resolving typed IDs), `Cycles` (one circle per strongly connected group; #7 can reuse it for premises), `Edits` (the five changes, `.loom/write.lock`, refusing any change that adds an error), `TomlFields` (the field checker `ProjectToml` used, now shared).
@@ -28,4 +28,4 @@ tags: [m1, build, statements, proofs, ids, cli]
 - Then #6 (checks and fingerprints) and #8 (papers), which build on `ProjectContents`.
 
 ## Waiting on Dakota
-- The PR for #5: review, the Windows check, and the spec points it raises.
+- PR #15 (#5): review, the Windows check, and the spec points it raises.

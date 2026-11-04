@@ -18,14 +18,14 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 - The design chat (2026-11-03): Loom's design written as [`Specs/loom.md`](Specs/loom.md), and this repo's skeleton set up ([log](Wiki/logs/2026-11/2026-11-03-design-chat.md)).
 
 ## In progress
-- #5 statements, proofs, IDs, and `loom new-tag`/`new-statement`/`edit-statement`/`new-proof`/`edit-proof`: PR open, all 82 `ctest` tests pass on Windows; waiting on Dakota's review and Windows check ([log](Wiki/logs/2026-11/2026-11-04-statements-proofs.md)).
+- #5 statements, proofs, IDs, and `loom new-tag`/`new-statement`/`edit-statement`/`new-proof`/`edit-proof`: PR #15, all 82 `ctest` tests pass on Windows; waiting on Dakota's review and Windows check ([log](Wiki/logs/2026-11/2026-11-04-statements-proofs.md)).
 
 ## Next up
 Milestones M0–M12 are on GitHub; M1's issues are #2–#9, linked by "blocked by".
 - **In order:** #6 checks and #8 papers (both after #5); #7 status after #6 and #8; #9 `loom validate` last. The issues were updated to match the approved spec on 2026-11-03.
 
 ## Waiting on Dakota
-- The PR for #5: review, the Windows check in the PR, and the spec points under its ⚠️ Flags.
+- PR #15 (#5): review, the Windows check in the PR, and the spec points under its ⚠️ Flags.
 
 ## Watch out for
 - **Windows CI and Qt 6.11:** aqtinstall is pinned to a commit of its main branch until a release after 3.3.0 ([gotcha](Wiki/gotchas/ci/aqtinstall-qt-6-11-windows.md)).
