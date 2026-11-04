@@ -124,6 +124,41 @@ TEST_CASE("install-hooks keeps a hook it didn't write", "[hooks]")
     CHECK(readFile(repo.hook() + ".before-loom") == "#!/bin/sh\nexec make check\n");
 }
 
+TEST_CASE("install-hooks stops at an existing hook it can't read", "[hooks]")
+{
+    // A folder where the hook should be: Loom can't tell whose it is, so it writes nothing.
+    const Repository repo;
+    REQUIRE(QDir().mkpath(repo.hook()));
+    const loom::HooksResult result = loom::installHooks(repo.root, "/usr/bin/loom", repo.git);
+    CHECK(result.outcome == loom::HooksOutcome::CantWork);
+    CHECK(result.code == "write-failed");
+    CHECK(result.message == "Loom couldn't read `" + QDir::toNativeSeparators(repo.hook()) + "`.");
+    CHECK(QFileInfo(repo.hook()).isDir());
+    CHECK_FALSE(repo.hasMergeDriver());
+}
+
+TEST_CASE("new-project says when install-hooks fails, and leaves what it made", "[hooks][new-project]")
+{
+    // The stand-in git "succeeds" at `git init` without making a repository, so install-hooks
+    // finds none.
+    QTemporaryDir temp;
+    REQUIRE(temp.isValid());
+    loom::NewProjectRequest request;
+    request.folder = temp.path() + "/Demo";
+    request.name = "Demo";
+    request.git.program = QStringLiteral(LOOM_FAKE_GIT);
+    request.git.environment.insert("GIT_CEILING_DIRECTORIES", temp.path());
+    request.loomProgram = QStringLiteral(LOOM_PROGRAM);
+    const loom::NewProjectResult result = loom::createProject(request);
+    CHECK(result.outcome == loom::NewProjectOutcome::CantWork);
+    CHECK(result.code == "hooks-failed");
+    const QString native = QDir::toNativeSeparators(request.folder);
+    CHECK(result.message == "Loom wrote the project files, but `loom install-hooks` failed: `" + native
+                            + "` isn't a git repository, so Loom has nowhere to install its hook. Loom left what it made in `"
+                            + native + "` for you to look at.");
+    CHECK(QFileInfo::exists(request.folder + "/loom.toml"));
+}
+
 TEST_CASE("install-hooks needs a git repository", "[hooks]")
 {
     QTemporaryDir temp;
@@ -208,6 +243,37 @@ TEST_CASE("install-hooks refuses when git runs hooks from outside the repository
     }
 }
 
+TEST_CASE("A git that doesn't finish in time is told apart from a git that isn't there", "[hooks][git]")
+{
+    QTemporaryDir temp;
+    REQUIRE(temp.isValid());
+    loom::GitTool slow;
+    slow.program = QStringLiteral(LOOM_FAKE_GIT);
+    slow.environment.insert("LOOM_FAKE_GIT_MODE", "slow");
+    slow.timeoutMs = 500;
+    loom::GitTool missing;
+    missing.program = temp.path() + "/no-such-git";
+
+    const loom::GitRun late = loom::runGit(slow, {"rev-parse", "--show-toplevel"}, temp.path());
+    const loom::GitRun absent = loom::runGit(missing, {"rev-parse", "--show-toplevel"}, temp.path());
+    CHECK_FALSE(late.ok());
+    CHECK_FALSE(absent.ok());
+    CHECK(late.timedOut);
+    CHECK_FALSE(absent.timedOut);
+    CHECK(loom::gitDidntRunMessage(absent, {"rev-parse", "--show-toplevel"})
+          == "Loom needs git, and `git` didn't run. Install Git for Windows and try again.");
+    const QString lateMessage = "`git rev-parse` didn't finish in time, so Loom stopped it. Git may be waiting for something, "
+                                "such as another git's lock or a slow network drive; try again.";
+    CHECK(loom::gitDidntRunMessage(late, {"rev-parse", "--show-toplevel"}) == lateMessage);
+
+    // install-hooks says so, rather than to install Git.
+    writeFile(temp.path() + "/Project/loom.toml", "format = 1\nname = \"Demo\"\ncreated = 2026-11-04\n");
+    const loom::HooksResult result = loom::installHooks(temp.path() + "/Project", "/usr/bin/loom", slow);
+    CHECK(result.outcome == loom::HooksOutcome::CantWork);
+    CHECK(result.code == "git-timeout");
+    CHECK(result.message == lateMessage);
+}
+
 TEST_CASE("new-project stops before writing anything when git's global config sets core.hooksPath", "[hooks][new-project]")
 {
     // Both `git lfs install --local` and the commit guard would write into that shared folder (A1).
@@ -225,7 +291,10 @@ TEST_CASE("new-project stops before writing anything when git's global config se
     const loom::NewProjectResult result = loom::createProject(request);
     CHECK(result.outcome == loom::NewProjectOutcome::CantWork);
     CHECK(result.code == "hooks-path-outside");
-    CHECK(result.message == hooksPathOutside(shared));
+    // Its own message: install-hooks' way out needs a repository, which doesn't exist yet.
+    CHECK(result.message == "Git runs hooks from `" + QDir::toNativeSeparators(shared) + "` (`core.hooksPath` in your "
+                            "global git config), so a new project's commit guard and Git LFS hooks would go there. Unset "
+                            "it with `git config --global --unset core.hooksPath`, then try again.");
     CHECK_FALSE(QFileInfo::exists(request.folder));
     CHECK(loomtest::filesUnder(shared) == QStringList{"pre-commit"});
     CHECK(readFile(shared + "/pre-commit") == "#!/bin/sh\nexec company-check\n");

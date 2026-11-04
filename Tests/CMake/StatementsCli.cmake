@@ -3,11 +3,12 @@
 # and finding the project from a folder inside it. LoomCoreTests covers the details.
 # Run as: cmake -DLOOM=<path to loom> -DWORK=<scratch folder, emptied first> -P StatementsCli.cmake
 
-# Runs loom in `dir` and fails the test unless it exits with `expected`.
+# Runs loom in `dir` and fails the test unless it exits with `expected`. Input comes from a file
+# holding `yes`, so it is never a terminal: Dakota's clicks must refuse even a piped yes.
 #   expected: the exit code wanted.  out_var: set to loom's stdout.  dir: the working folder.
 #   ARGN: loom's arguments.
 function(run_loom_in dir expected out_var)
-    execute_process(COMMAND "${LOOM}" ${ARGN} WORKING_DIRECTORY "${dir}"
+    execute_process(COMMAND "${LOOM}" ${ARGN} WORKING_DIRECTORY "${dir}" INPUT_FILE "${WORK}/yes.txt"
         RESULT_VARIABLE code OUTPUT_VARIABLE out ERROR_VARIABLE err)
     if(NOT code STREQUAL "${expected}")
         message(FATAL_ERROR "loom ${ARGN}: expected exit ${expected}, got ${code}\nstdout: ${out}\nstderr: ${err}")
@@ -30,6 +31,7 @@ endfunction()
 
 file(REMOVE_RECURSE "${WORK}")
 file(MAKE_DIRECTORY "${WORK}")
+file(WRITE "${WORK}/yes.txt" "yes\n")
 file(WRITE "${WORK}/gitconfig" "[user]\n\tname = Loom Test\n\temail = test@example.com\n")
 set(ENV{GIT_CONFIG_GLOBAL} "${WORK}/gitconfig")
 set(ENV{GIT_CONFIG_NOSYSTEM} 1)
@@ -64,6 +66,17 @@ run_loom(0 out edit-proof "${theorem}.a" --level sketch --json)
 expect_match("edit-proof, no change" "${out}" "^{\"id\": \"${theorem}\\.a\", \"changed\": \\[\\], \"outdated_checks\": \\[\\]}\n$")
 run_loom_in("${WORK}" 0 out edit-statement "${theorem}" --title "Decay, sharp" --verified --json --project "${PROJECT}")
 expect_match("edit-statement --json" "${out}" "^{\"id\": \"${theorem}\", \"changed\": \\[\"title\", \"verified\"\\], \"outdated_checks\": \\[\\]}\n$")
+run_loom(0 out new-tag decay --kind other --title "Decay" --json)
+expect_match("new-tag --json" "${out}" "^{\"id\": \"decay\"}\n$")
+run_loom(0 out edit-statement "${lemma_typed}" --kind proposition --add-tag decay --remove-tag energy-estimates --json)
+expect_match("edit-statement --kind --add-tag --remove-tag" "${out}"
+    "^{\"id\": \"${lemma}\", \"changed\": \\[\"kind\", \"tags\"\\], \"outdated_checks\": \\[\\]}\n$")
+run_loom(0 out new-statement --kind lemma --title "Old decay" --body "Weaker.")
+string(STRIP "${out}" old)
+run_loom(0 out edit-statement "${old}" --superseded-by "${lemma_typed}")
+expect_match("edit-statement --superseded-by" "${out}" "^${old}: changed superseded_by\\.\n$")
+file(READ "${PROJECT}/Statements/${old}.tex" text)
+expect_match("superseded_by written" "${text}" "\nsuperseded_by = \"${lemma}\"\n")
 
 # An option's value is taken as it is, even when it looks like `--json` or `--project`.
 run_loom(0 out new-statement --kind lemma --title --json --body --project)
@@ -79,6 +92,25 @@ run_loom(1 out new-proof ZZZZ --level complete --body "X" --json)
 expect_match("new-proof of nothing" "${out}" "^{\"error\": {\"code\": \"ref-unknown\", \"message\": \"`ZZZZ` isn't a statement in this project\\.\"}}\n$")
 run_loom(1 out edit-statement "${theorem}" --remove-stated-using "${lemma}")
 run_loom(1 out new-tag energy-estimates --kind technique --title "Again")
+# Setting `level = "failed"` is Dakota's click (the verdict table's `fail` row), creating a failed
+# proof too; nothing is written.
+file(READ "${PROJECT}/Proofs/${theorem}/${theorem}.b.tex" before)
+run_loom(1 out edit-proof "${theorem}.b" --level failed --json)
+expect_match("edit-proof --level failed without a terminal" "${out}"
+    "^{\"error\": {\"code\": \"dakota-only\", \"message\": \"Only Dakota can mark a proof failed, and only at a terminal\\.\"}}\n$")
+file(READ "${PROJECT}/Proofs/${theorem}/${theorem}.b.tex" after)
+if(NOT before STREQUAL after)
+    message(FATAL_ERROR "edit-proof --level failed without a terminal changed the proof")
+endif()
+run_loom(1 out new-proof "${theorem}" --level failed --body "Tried the energy method, but the sign is wrong." --json)
+expect_match("new-proof --level failed without a terminal" "${out}"
+    "^{\"error\": {\"code\": \"dakota-only\", \"message\": \"Only Dakota can mark a proof failed, and only at a terminal\\.\"}}\n$")
+if(EXISTS "${PROJECT}/Proofs/${theorem}/${theorem}.c.tex")
+    message(FATAL_ERROR "new-proof --level failed without a terminal wrote a proof")
+endif()
+# A rule's refusal comes first, so Dakota is never asked about a change that can't be made.
+run_loom(1 out edit-proof "${theorem}.b" --level failed --add-premise "${theorem}" --json)
+expect_match("edit-proof --level failed with a bad premise" "${out}" "^{\"error\": {\"code\": \"premise-self\", ")
 
 # 2: wrong usage.
 run_loom(2 out new-statement --kind lemma --body "X")

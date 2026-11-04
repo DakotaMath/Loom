@@ -4,7 +4,7 @@
 
 namespace loom {
 
-GitRun runGit(const GitTool& git, const QStringList& arguments, const QString& workingDir, int timeoutMs,
+GitRun runGit(const GitTool& git, const QStringList& arguments, const QString& workingDir, std::optional<int> timeoutMs,
               const QByteArray& input)
 {
     QProcess process;
@@ -22,7 +22,9 @@ GitRun runGit(const GitTool& git, const QStringList& arguments, const QString& w
     if (!input.isEmpty())
         process.write(input);
     process.closeWriteChannel();
-    if (!process.waitForFinished(timeoutMs)) {
+    if (!process.waitForFinished(timeoutMs.value_or(git.timeoutMs))) {
+        // Still running means it ran out of time; otherwise waiting failed for another reason.
+        run.timedOut = process.state() != QProcess::NotRunning;
         process.kill();
         process.waitForFinished();
         return run;
@@ -33,6 +35,20 @@ GitRun runGit(const GitTool& git, const QStringList& arguments, const QString& w
     run.output = QString::fromUtf8(run.outputBytes);
     run.errors = QString::fromUtf8(process.readAllStandardError());
     return run;
+}
+
+QString gitDidntRunMessage(const GitRun& run, const QStringList& arguments)
+{
+    if (run.timedOut)
+        return QStringLiteral("`git %1` didn't finish in time, so Loom stopped it. Git may be waiting for something, such as "
+                              "another git's lock or a slow network drive; try again.")
+            .arg(arguments.value(0));
+    return QStringLiteral("Loom needs git, and `git` didn't run. Install Git for Windows and try again.");
+}
+
+QString gitDidntRunCode(const GitRun& run, const QString& missingCode)
+{
+    return run.timedOut ? QStringLiteral("git-timeout") : missingCode;
 }
 
 } // namespace loom

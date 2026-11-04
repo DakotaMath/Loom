@@ -25,7 +25,7 @@ struct HooksResult {
     HooksOutcome outcome = HooksOutcome::Refused;
     /// A stable code for `--json`: empty when installed, else one of `not-a-project`,
     /// `not-a-repository`, `hooks-not-top-level`, `hooks-path-outside`, `hook-backup-exists`,
-    /// `write-failed`, `git-failed`.
+    /// `write-failed`, `git-failed`, `git-timeout` (git didn't finish in time).
     QString code;
     /// What went wrong, in plain English; empty when installed.
     QString message;

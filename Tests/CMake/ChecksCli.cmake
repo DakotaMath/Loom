@@ -114,6 +114,13 @@ run_loom(1 out edit-proof "${theorem}.b" --body-file "${WORK}/new-body.tex" --ou
 expect_match("--outdate-checks without a terminal" "${out}"
     "^{\"error\": {\"code\": \"dakota-only\", \"message\": \"Only Dakota can outdate checks, and only at a terminal\\.\"}}\n$")
 run_loom(1 out edit-statement "${theorem}" --body-file "${WORK}/new-body.tex")
+run_loom(1 out edit-statement "${theorem}" --body-file "${WORK}/new-body.tex" --outdate-checks --json)
+expect_match("edit-statement --outdate-checks without a terminal" "${out}"
+    "^{\"error\": {\"code\": \"dakota-only\", \"message\": \"Only Dakota can outdate checks, and only at a terminal\\.\"}}\n$")
+# Marking a checked proof failed asks for that click first; without a terminal it stops there.
+run_loom(1 out edit-proof "${theorem}.b" --level failed --body-file "${WORK}/new-body.tex" --outdate-checks --json)
+expect_match("--level failed with --outdate-checks without a terminal" "${out}"
+    "^{\"error\": {\"code\": \"dakota-only\", \"message\": \"Only Dakota can mark a proof failed, and only at a terminal\\.\"}}\n$")
 run_loom(0 out edit-proof "${theorem}.b" --level sketch --outdate-checks --json)
 expect_match("an edit outdating nothing" "${out}" "^{\"id\": \"${theorem}\\.b\", \"changed\": \\[\"level\"\\], \"outdated_checks\": \\[\\]}\n$")
 run_loom(0 out edit-statement "${lemma}" --body-file "${WORK}/new-body.tex" --json)

@@ -42,7 +42,9 @@ QString whyGitFailed(const GitRun& run)
     while (why.endsWith(u'.'))
         why.chop(1);
     if (why.isEmpty())
-        why = run.started ? QStringLiteral("it exited with code %1").arg(run.exitCode) : QStringLiteral("it didn't run");
+        why = run.started    ? QStringLiteral("it exited with code %1").arg(run.exitCode)
+            : run.timedOut ? QStringLiteral("it didn't finish in time")
+                           : QStringLiteral("it didn't run");
     return why;
 }
 
@@ -105,10 +107,13 @@ HooksResult installHooks(const QString& root, const QString& loomProgram, const 
         return failure(HooksOutcome::CantWork, "not-a-project", project.message);
 
     const QString nativeRoot = QDir::toNativeSeparators(project.root);
-    const GitRun top = runGit(git, {QStringLiteral("rev-parse"), QStringLiteral("--show-toplevel")}, root);
-    if (!top.started)
-        return failure(HooksOutcome::CantWork, "git-failed",
-            QStringLiteral("Loom needs git, and `git` didn't run. Install Git for Windows and try again."));
+    const QStringList topLevel = {QStringLiteral("rev-parse"), QStringLiteral("--show-toplevel")};
+    const GitRun top = runGit(git, topLevel, root);
+    if (!top.started) {
+        HooksResult result = failure(HooksOutcome::CantWork, "git-failed", gitDidntRunMessage(top, topLevel));
+        result.code = gitDidntRunCode(top, result.code);
+        return result;
+    }
     if (!top.ok() || top.output.trimmed().isEmpty())
         return failure(HooksOutcome::CantWork, "not-a-repository",
             QStringLiteral("`%1` isn't a git repository, so Loom has nowhere to install its hook.").arg(nativeRoot));

@@ -29,23 +29,44 @@ int reportEdit(const loom::ChangeResult& result, const Context& context)
                       .arg(jsonString(result.id), jsonStringArray(result.changed), jsonStringArray(result.outdatedChecks)));
 }
 
-/// Runs an edit; if it is refused only because it would outdate checks and `--outdate-checks`
-/// was given, asks for Dakota's click at the terminal, naming the proofs, and runs it again
-/// confirmed (Specs/m1-core.md, "The `loom` command": `--outdate-checks` is Dakota's).
-/// The second run recomputes everything, so it outdates exactly what the project then needs.
-/// @param edit Runs the edit; its argument is the confirmation.
+/// The clicks Dakota has given an edit so far.
+struct Confirmations {
+    /// He confirmed marking the proof `failed`.
+    bool failed = false;
+    /// The proofs whose checks he confirmed outdating, as he was shown them.
+    std::optional<QStringList> outdateChecks;
+};
+
+/// Runs an edit, asking for Dakota's clicks at the terminal as the core asks for them, and runs
+/// it again with each one given (Specs/m1-core.md, "Dakota's clicks"):
+/// - refused `dakota-only` (only edit-proof's `--level failed` gives it): asks to mark the proof
+///   failed;
+/// - refused `outdates-checks` and `--outdate-checks` was given: asks to outdate the checks of the
+///   proofs it names, and passes exactly those as confirmed. If the project changed in between,
+///   so the edit would now outdate others, the core refuses it and nothing is written.
+/// The core refuses for rules first, so Dakota is never asked about an edit they refuse.
+/// @param edit Runs the edit with the confirmations given so far.
 /// @returns The exit code, after printing the result.
 template <typename Edit>
 int editWithConfirmation(const Args& parsed, const Context& context, Edit edit)
 {
-    loom::ChangeResult result = edit(false);
-    if (result.code == u"outdates-checks" && parsed.flags.contains(QStringLiteral("--outdate-checks"))) {
-        int exitCode = exitDone;
+    Confirmations given;
+    loom::ChangeResult result = edit(given);
+    int exitCode = exitDone;
+    if (result.code == u"dakota-only") {
+        if (!requireTerminal(QStringLiteral("mark a proof failed"), context.json, exitCode)
+            || !askDakota(QStringLiteral("mark %1 failed").arg(result.id), context.json, exitCode))
+            return exitCode;
+        given.failed = true;
+        result = edit(given);
+    }
+    if (result.code == u"outdates-checks" && !given.outdateChecks && parsed.flags.contains(QStringLiteral("--outdate-checks"))) {
         if (!requireTerminal(QStringLiteral("outdate checks"), context.json, exitCode)
             || !askDakota(QStringLiteral("change %1, outdating the checks of %2").arg(result.id, listed(result.outdatedChecks)),
                           context.json, exitCode))
             return exitCode;
-        result = edit(true);
+        given.outdateChecks = result.outdatedChecks;
+        result = edit(given);
     }
     return reportEdit(result, context);
 }
@@ -131,8 +152,8 @@ int runEditStatement(const QStringList& args, const Context& context)
     edit.addStatedUsing = parsed.repeated.value("--add-stated-using");
     edit.removeStatedUsing = parsed.repeated.value("--remove-stated-using");
     edit.verified = parsed.flags.contains("--verified");
-    return editWithConfirmation(parsed, context, [&](bool confirmed) {
-        edit.outdateChecks = confirmed;
+    return editWithConfirmation(parsed, context, [&](const Confirmations& given) {
+        edit.outdateChecks = given.outdateChecks;
         return loom::editStatement(root, parsed.positional[0], edit);
     });
 }
@@ -159,7 +180,17 @@ int runNewProof(const QStringList& args, const Context& context)
     request.level = *parsed.value("--level");
     request.body = *body;
     request.premises = parsed.repeated.value("--premise");
-    return reportNew(loom::createProof(root, request), context);
+    loom::ChangeResult result = loom::createProof(root, request);
+    // A failed proof is Dakota's click; the core refuses it last, so he is asked only about a
+    // proof the rules allow.
+    if (result.code == u"dakota-only") {
+        if (!requireTerminal(QStringLiteral("mark a proof failed"), context.json, exitCode)
+            || !askDakota(QStringLiteral("create %1 as a failed proof").arg(result.id), context.json, exitCode))
+            return exitCode;
+        request.failedConfirmed = true;
+        result = loom::createProof(root, request);
+    }
+    return reportNew(result, context);
 }
 
 int runEditProof(const QStringList& args, const Context& context)
@@ -185,8 +216,9 @@ int runEditProof(const QStringList& args, const Context& context)
     edit.addPremises = parsed.repeated.value("--add-premise");
     edit.removePremises = parsed.repeated.value("--remove-premise");
     edit.verified = parsed.flags.contains("--verified");
-    return editWithConfirmation(parsed, context, [&](bool confirmed) {
-        edit.outdateChecks = confirmed;
+    return editWithConfirmation(parsed, context, [&](const Confirmations& given) {
+        edit.outdateChecks = given.outdateChecks;
+        edit.failedConfirmed = given.failed;
         return loom::editProof(root, parsed.positional[0], edit);
     });
 }

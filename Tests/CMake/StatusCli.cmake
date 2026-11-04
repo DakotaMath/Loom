@@ -80,6 +80,19 @@ file(READ "${PROJECT}/Statements/T9GB.tex" after)
 if(NOT before STREQUAL after)
     message(FATAL_ERROR "refute without a terminal changed T9GB")
 endif()
+# What refute can check without Dakota is checked before he is asked, so these fail as
+# themselves, not as `dakota-only`.
+run_loom(1 out refute ZZZZ --by G5TZ.a --json)
+expect_match("refute of nothing" "${out}" "^{\"error\": {\"code\": \"ref-unknown\", \"message\": \"`ZZZZ` isn't a statement in this project\\.\"}}\n$")
+run_loom(1 out refute T9GB --by G5TZ.z --json)
+expect_match("refute by nothing" "${out}" "^{\"error\": {\"code\": \"ref-unknown\", \"message\": \"`G5TZ\\.z` isn't a proof in this project\\.\"}}\n$")
+run_loom(1 out refute G5TZ --by G5TZ.a --json)
+expect_match("refute by its own proof" "${out}" "^{\"error\": {\"code\": \"refuted-self\", ")
+run_loom(1 out refute F2NS --by G5TZ.a --json)
+expect_match("refute again" "${out}" "^{\"error\": {\"code\": \"already-there\", ")
+run_loom(1 out refute 7RT2 --by G5TZ.a --json)
+expect_match("refute a stub" "${out}"
+    "^{\"error\": {\"code\": \"ref-unknown\", \"message\": \"7RT2 is a result from SmithJones24, cited from the paper; only statements of this project can be refuted\\.\"}}\n$")
 run_loom(1 out status ZZZZ --json)
 expect_match("status of nothing" "${out}" "^{\"error\": {\"code\": \"ref-unknown\", \"message\": \"`ZZZZ` isn't a statement in this project\\.\"}}\n$")
 

@@ -172,6 +172,16 @@ int runRefute(const QStringList& args, const Context& context)
 
     const QString& typed = parsed.positional[0];
     const QString proof = *parsed.value("--by");
+    // What Loom can check without Dakota, it checks before asking him (as add-check does), so a
+    // mistyped ID fails as itself; refuteStatement() checks it all again under the lock.
+    {
+        const std::optional<loom::ProjectContents> before = readProject(root, context.json, exitCode);
+        if (!before)
+            return exitCode;
+        if (const loom::ChangeResult checked = loom::checkRefutation(*before, typed, proof);
+            checked.outcome != loom::ChangeOutcome::Done)
+            return report(checked, context.json, {}, {});
+    }
     if (!requireTerminal(QStringLiteral("refute a statement"), context.json, exitCode)
         || !askDakota(QStringLiteral("mark %1 false, refuted by %2").arg(typed, proof), context.json, exitCode))
         return exitCode;

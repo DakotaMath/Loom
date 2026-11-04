@@ -6,6 +6,9 @@
 #include <QDir>
 #include <QFileInfo>
 
+#include <filesystem>
+#include <system_error>
+
 namespace cli {
 
 namespace {
@@ -29,6 +32,31 @@ void tellRenamed(const std::vector<loom::PaperRenamed>& renamed, const QString& 
     }
 }
 
+/// Says on stderr which of the draft's verified and checked dates Loom set to false (S16), so a
+/// person sees it whatever stdout is for. Says nothing when there are none.
+void tellUnclicked(const QStringList& unclicked)
+{
+    if (!unclicked.isEmpty())
+        write(stderr, QStringLiteral("Set to false, since verifying is Dakota's click: %1.\n").arg(listed(unclicked)));
+}
+
+/// `path` as the file system resolves it, absolute with `/`: every link, junction and 8.3 short
+/// name in the part that exists replaced by what it names; the rest (a file not written yet, and
+/// any folders above it that don't exist) kept as typed. std::filesystem::weakly_canonical()
+/// does this on Windows too, where QFileInfo::canonicalFilePath() leaves junctions alone
+/// (Wiki/gotchas/qt/canonical-path-ignores-junctions.md).
+/// @param path Absolute, or relative to the current folder.
+/// @returns The resolved path; the absolute path as typed if it can't be resolved. No side effects.
+QString resolvedPath(const QString& path)
+{
+    const QFileInfo info(path);
+    std::error_code error;
+    const std::filesystem::path resolved = std::filesystem::weakly_canonical(info.filesystemAbsoluteFilePath(), error);
+    if (error)
+        return QDir::cleanPath(info.absoluteFilePath());
+    return QDir::cleanPath(QFileInfo(resolved).absoluteFilePath());
+}
+
 } // namespace
 
 int runNewPaper(const QStringList& args, const Context& context)
@@ -45,11 +73,14 @@ int runNewPaper(const QStringList& args, const Context& context)
         return exitCode;
 
     const loom::PaperChange result = loom::createPaper(root, *draft, QDir::fromNativeSeparators(draftPath));
-    if (result.change.outcome == loom::ChangeOutcome::Done)
+    if (result.change.outcome == loom::ChangeOutcome::Done) {
         tellRenamed(result.renamed);
+        tellUnclicked(result.unclicked);
+    }
     return report(result.change, context.json, result.change.id,
-                  QStringLiteral("\"key\": %1, \"path\": %2, \"renamed\": %3")
-                      .arg(jsonString(result.change.id), jsonString(result.change.path), jsonRenamed(result.renamed)));
+                  QStringLiteral("\"key\": %1, \"path\": %2, \"renamed\": %3, \"unclicked\": %4")
+                      .arg(jsonString(result.change.id), jsonString(result.change.path), jsonRenamed(result.renamed),
+                           jsonStringArray(result.unclicked)));
 }
 
 int runNewStub(const QStringList& args, const Context& context)
@@ -107,11 +138,12 @@ int runBuildBib(const QStringList& args, const Context& context)
         return exitCode;
     const auto& [parsed, root] = *started;
 
-    // `--out` is typed relative to where the person is; LoomCore takes project paths.
+    // `--out` is typed relative to where the person is; LoomCore takes project paths. Both are
+    // resolved first, so a link, a junction or a short name leading into a folder Loom keeps its
+    // files in is seen for what it is, and LoomCore's guard applies (M2).
     QString out;
     if (const std::optional<QString> typed = parsed.value("--out")) {
-        const QString absolute = QFileInfo(*typed).absoluteFilePath();
-        out = QDir(root).relativeFilePath(absolute);
+        out = QDir(resolvedPath(root)).relativeFilePath(resolvedPath(*typed));
         if (out.startsWith(u"../") || out == u".." || QFileInfo(out).isAbsolute())
             return fail(exitCantWork, QStringLiteral("bad-path"),
                 QStringLiteral("`%1` must be inside the project.").arg(QDir::toNativeSeparators(*typed)), context.json);

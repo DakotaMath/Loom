@@ -39,7 +39,7 @@ tags: [validate, problems, pre-commit, checks, m1]
 | `bad-path` | error | A path in a file is absolute, uses `\`, or has `..`; or a file resolves outside the project through a link. | Write it project-relative with `/` (`Records/2026-11/job-0142.md`). Move linked files into the project. |
 | `stray-file` | error | A file sits where Loom keeps only its own files (`Statements/`, a proof folder, a paper folder). | Move it out (notes belong in a paper's `notes.md` or outside these folders), or delete an editor backup like `4KX7.tex~`. |
 | `unknown-top-level` | warning | A file or folder at the top of the project that no milestone uses. Names later milestones use (`Threads/`, `Tasks/`, …) are skipped. | Move it into a folder Loom knows, or remove it. Scratch files belong in `.loom/`, which git ignores. |
-| `deleted-since-commit` | warning | A statement, proof or stub was in the last commit and its file is gone. Tags are permanent. | Restore it (`git restore <file>`). Retire a statement with `superseded_by`, a proof with `level = "failed"`. |
+| `deleted-since-commit` | warning | A statement, proof or stub was in the last commit and its file is gone. Tags are permanent. | Restore it (`git restore <file>`). Retire a statement with `superseded_by`, a proof with `level = "failed"` (that is Dakota's click: `loom edit-proof <id> --level failed` at a terminal). |
 
 ### The project (`loom.toml`)
 | Code | Sev. | What it means | How to fix |
@@ -90,7 +90,7 @@ tags: [validate, problems, pre-commit, checks, m1]
 | `premise-duplicate` | error | A premise is listed twice. | Remove the repeat. |
 | `premise-no-status` | error | A premise is a definition (or another kind without a status). | Move it to the statement's `stated_using`. |
 | `premise-cycle` | error | Premises go round in a circle: no statement in it can be proved through it. | Prove one statement in the circle without the next. For an equivalence, keep one statement whose proof covers both directions. |
-| `premise-false` | warning | A premise has been refuted, so this proof proves nothing. | Find another route, or mark the proof `failed`. |
+| `premise-false` | warning | A premise has been refuted, so this proof proves nothing. | Find another route, or ask Dakota to mark the proof `failed` (his click). |
 | `premise-superseded` | warning | A premise has been superseded. | Use the statement that replaced it (`loom edit-proof --remove-premise … --add-premise …`); the proof's checks then need renewing. |
 | `verbose-orphan` | error | A verbose proof whose proof doesn't exist. | Rename it to match its proof, or remove it. |
 | `verbose-stale` | warning | The proof changed after its verbose version was written. | Rewrite the verbose version from the proof as it is now. |

@@ -43,7 +43,7 @@ enum class ValidationOutcome {
 struct ValidationResult {
     ValidationOutcome outcome = ValidationOutcome::CantWork;
     /// For CantWork, a stable code: `not-a-project`, `unreadable`, `format-too-new`,
-    /// `git-missing`, `not-a-repository` or `git-failed`.
+    /// `git-missing`, `git-timeout` (git didn't finish in time), `not-a-repository` or `git-failed`.
     QString code;
     /// For CantWork, why, in plain English.
     QString message;

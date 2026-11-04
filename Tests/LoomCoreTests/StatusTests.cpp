@@ -419,7 +419,7 @@ TEST_CASE("Changing one proof or check recomputes everything downstream", "[stat
     // Editing the bottom proof outdates its checks, and everything above is conditional again.
     loom::ProofEdit edit;
     edit.body = QByteArray("A better proof.\n");
-    edit.outdateChecks = true;
+    edit.outdateChecks = QStringList{"5HN8.a"};
     REQUIRE(loom::editProof(project.root, "5HN8.a", edit, at(6)).outcome == loom::ChangeOutcome::Done);
     graph = graphOf(project.root);
     CHECK(statusOf(graph, "5HN8") == Status::Unchecked);
