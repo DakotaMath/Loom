@@ -7,10 +7,11 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 -->
 # Status
 
-**Updated:** 2026-11-04 · main at 0a9d224
-**Current milestone:** M1, the core: the build, CI, `loom new-project` and statements and proofs are merged; #6 (checks) is in review
+**Updated:** 2026-11-04 · main at 9693149
+**Current milestone:** M1, the core: the build, CI, `loom new-project`, statements and proofs, and checks are merged; #8 (papers) is in review
 
 ## Done recently
+- #6 check histories, fingerprints, `fingerprint`/`add-check`/`merge-checks` (2026-11-04): PR #16 merged ([log](Wiki/logs/2026-11/2026-11-04-checks.md)).
 - #5 statements, proofs, IDs and their subcommands (2026-11-04): PR #15 merged ([log](Wiki/logs/2026-11/2026-11-04-statements-proofs.md)).
 - #4 `loom new-project`, opening a project, path safety (2026-11-03): PR #14 merged ([log](Wiki/logs/2026-11/2026-11-03-new-project.md)).
 - #3 CMake and CI (2026-11-03): PR #13 merged; `ctest` passes on Windows and Linux ([log](Wiki/logs/2026-11/2026-11-03-cmake-skeleton.md)).
@@ -19,14 +20,14 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 - The design chat (2026-11-03): Loom's design written as [`Specs/loom.md`](Specs/loom.md), and this repo's skeleton set up ([log](Wiki/logs/2026-11/2026-11-03-design-chat.md)).
 
 ## In progress
-- #6 check histories, fingerprints, `loom fingerprint`/`add-check`/`merge-checks`, `--outdate-checks`: PR #16, all 100 `ctest` tests pass on Windows; waiting on Dakota's review and Windows check ([log](Wiki/logs/2026-11/2026-11-04-checks.md)).
+- #8 paper entries, stubs, the key rule, `refs.bib`, `loom new-paper`/`new-stub`/`rekey`/`build-bib`: PR #17, all 147 `ctest` tests pass on Windows; waiting on Dakota's review, the Windows check and the spec points under its ⚠️ Flags ([log](Wiki/logs/2026-11/2026-11-04-papers.md)).
 
 ## Next up
 Milestones M0–M12 are on GitHub; M1's issues are #2–#9, linked by "blocked by".
-- **In order:** #8 papers; #7 status after #6 and #8; #9 `loom validate` last. The issues were updated to match the approved spec on 2026-11-03.
+- **In order:** #7 status after #8; #9 `loom validate` last. The issues were updated to match the approved spec on 2026-11-03.
 
 ## Waiting on Dakota
-- PR #16 (#6): review, the Windows check in the PR, and the spec points under its ⚠️ Flags.
+- PR #17 (#8): review, the Windows check in the PR, and the spec points under its ⚠️ Flags.
 
 ## Watch out for
 - **Windows CI and Qt 6.11:** aqtinstall is pinned to a commit of its main branch until a release after 3.3.0 ([gotcha](Wiki/gotchas/ci/aqtinstall-qt-6-11-windows.md)).
