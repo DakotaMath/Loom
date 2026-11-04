@@ -104,7 +104,8 @@ std::optional<QString> Args::value(const QString& option) const
     return std::nullopt;
 }
 
-std::optional<Args> parseArgs(const QStringList& args, const QString& name, const ArgSpec& spec, QString& error)
+std::optional<Args> parseArgs(const QStringList& args, const QString& name, const ArgSpec& spec, QString& error,
+                              const QString& positionalName)
 {
     Args parsed;
     for (qsizetype i = 0; i < args.size(); ++i) {
@@ -134,7 +135,7 @@ std::optional<Args> parseArgs(const QStringList& args, const QString& name, cons
     }
     if (parsed.positional.size() != spec.positionals) {
         const QString wanted = spec.positionals == 0 ? QStringLiteral("no other arguments")
-                             : spec.positionals == 1 ? (spec.positionalName.isEmpty() ? QStringLiteral("an ID") : spec.positionalName)
+                             : spec.positionals == 1 ? (positionalName.isEmpty() ? QStringLiteral("an ID") : positionalName)
                                                      : QStringLiteral("%1 arguments").arg(spec.positionals);
         error = QStringLiteral("`loom %1` needs %2.").arg(name, wanted);
         return std::nullopt;
@@ -268,10 +269,10 @@ int report(const loom::ChangeResult& result, bool json, const QString& text, con
 }
 
 std::optional<std::pair<Args, QString>> start(const QStringList& args, const QString& name, const ArgSpec& spec,
-                                              const Context& context, int& exitCode)
+                                              const Context& context, int& exitCode, const QString& positionalName)
 {
     QString error;
-    std::optional<Args> parsed = parseArgs(args, name, spec, error);
+    std::optional<Args> parsed = parseArgs(args, name, spec, error, positionalName);
     if (!parsed) {
         exitCode = usageError(error, context.json);
         return std::nullopt;

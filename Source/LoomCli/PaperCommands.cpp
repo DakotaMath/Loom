@@ -33,7 +33,8 @@ void tellRenamed(const std::vector<loom::PaperRenamed>& renamed, const QString& 
 int runNewPaper(const QStringList& args, const Context& context)
 {
     int exitCode = exitDone;
-    const auto started = start(args, QStringLiteral("new-paper"), {1, {}, {}, {}, QStringLiteral("a draft paper.toml")}, context, exitCode);
+    const auto started = start(args, QStringLiteral("new-paper"), {1, {}, {}, {}}, context, exitCode,
+                               QStringLiteral("a draft paper.toml"));
     if (!started)
         return exitCode;
     const auto& [parsed, root] = *started;
@@ -55,9 +56,8 @@ int runNewStub(const QStringList& args, const Context& context)
     const QString name = QStringLiteral("new-stub");
     int exitCode = exitDone;
     const auto started = start(args, name,
-        {1, {"--kind", "--gist", "--version", "--at", "--by", "--title"}, {"--stated-using", "--paper-premise"}, {},
-         QStringLiteral("a paper's key")},
-        context, exitCode);
+        {1, {"--kind", "--gist", "--version", "--at", "--by", "--title"}, {"--stated-using", "--paper-premise"}, {}},
+        context, exitCode, QStringLiteral("a paper's key"));
     if (!started)
         return exitCode;
     const auto& [parsed, root] = *started;
@@ -82,7 +82,7 @@ int runNewStub(const QStringList& args, const Context& context)
 int runRekey(const QStringList& args, const Context& context)
 {
     int exitCode = exitDone;
-    const auto started = start(args, QStringLiteral("rekey"), {1, {}, {}, {}, QStringLiteral("a paper's key")}, context, exitCode);
+    const auto started = start(args, QStringLiteral("rekey"), {1, {}, {}, {}}, context, exitCode, QStringLiteral("a paper's key"));
     if (!started)
         return exitCode;
     const auto& [parsed, root] = *started;
