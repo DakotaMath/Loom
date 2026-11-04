@@ -123,7 +123,7 @@ ContentsLoading loadContents(const QString& root);
 /// and stubs, each file's own problems and `paper-key-mismatch`, `paper-key-rule` (a warning),
 /// `paper-key-duplicate`, `session-missing` (a warning), `version-unknown`, `stub-paper-premise`
 /// and `proof-of-stub`. Stubs join statements in every check of tags, aliases and references.
-/// The warnings that need statuses, and bodies, are checked by later issues.
+/// The problems that need statuses, bodies, the disk or the last commit are Validation.h's.
 /// @param config   The project's `loom.toml`, for its tags.
 /// @param contents The statements and proofs.
 /// @returns The problems, sorted with sortProblems(). No side effects.

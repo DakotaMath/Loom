@@ -23,6 +23,9 @@ struct Problem {
     QString message;
 };
 
+/// `<file>:<line>: <severity>: <message>`, as `loom validate` prints a problem. No side effects.
+QString problemLine(const Problem& problem);
+
 /// Sorts problems the way `loom validate` prints them: errors first, then warnings, each group
 /// in file order, then by line.
 /// @param problems The problems to sort, in place. Side effects: reorders `problems`; the order

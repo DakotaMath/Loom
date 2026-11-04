@@ -1,5 +1,6 @@
 #include "LoomCore/NewProject.h"
 
+#include "LoomCore/Hooks.h"
 #include "LoomCore/ProjectFiles.h"
 #include "LoomCore/ProjectToml.h"
 
@@ -127,14 +128,22 @@ NewProjectResult createProject(const NewProjectRequest& request)
     if (!writeError.isEmpty())
         return failure(NewProjectOutcome::CantWork, "write-failed", writeError + leftInPlace, path);
 
-    // Steps 4 and 5: the repository and the first commit.
+    // Steps 4 and 5: the repository, Loom's hook and merge driver, and the first commit.
     const QList<QStringList> steps = {
         {QStringLiteral("init"), QStringLiteral("-b"), QStringLiteral("main")},
         {QStringLiteral("lfs"), QStringLiteral("install"), QStringLiteral("--local")},
+        {}, // loom install-hooks
         {QStringLiteral("add"), QStringLiteral("--all")},
         {QStringLiteral("commit"), QStringLiteral("--quiet"), QStringLiteral("--message"), QStringLiteral("Create project ") + request.name},
     };
     for (const QStringList& step : steps) {
+        if (step.isEmpty()) {
+            const HooksResult hooks = installHooks(path, request.loomProgram, git);
+            if (hooks.outcome != HooksOutcome::Installed)
+                return failure(NewProjectOutcome::CantWork, "hooks-failed",
+                    QStringLiteral("Loom wrote the project files, but `loom install-hooks` failed: %1").arg(hooks.message) + leftInPlace, path);
+            continue;
+        }
         const GitRun run = runGit(git, step, path);
         if (run.ok())
             continue;

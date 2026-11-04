@@ -1,0 +1,9 @@
+id = "6GST"
+kind = "lemma"
+gist = ""
+extracted_from = "published"
+extracted_by = "agent:claude-opus-5-5"
+created = 2026-11-04
+
+[locators]
+published = { at = "Lemma 2.2", checked_against_pdf = false }

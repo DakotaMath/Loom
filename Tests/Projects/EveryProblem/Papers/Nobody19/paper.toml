@@ -1,0 +1,19 @@
+key = "Nobody19"
+cite = "published"
+relevance = 3
+created = 2026-11-04
+
+[work]
+type = { value = "article", source = "https://example.org/a", verified = 2026-11-04 }
+title = { value = "An anonymous paper", source = "https://example.org/a", verified = 2026-11-04 }
+authors = { value = [], source = "https://example.org/a", verified = 2026-11-04 }
+
+[[versions]]
+id = "published"
+kind = "published"
+journal = { value = "Journal of Examples", source = "https://example.org/a", verified = 2026-11-04 }
+volume = { value = "1", source = "https://example.org/a", verified = 2026-11-04 }
+number = { value = "2", source = "https://example.org/a", verified = 2026-11-04 }
+pages = { value = "1--10", source = "https://example.org/a", verified = 2026-11-04 }
+year = { value = 2019, source = "https://example.org/a", verified = 2026-11-04 }
+doi = { value = "10.0000/example", source = "https://example.org/a", verified = 2026-11-04 }

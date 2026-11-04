@@ -20,6 +20,8 @@ add_library(LoomCore STATIC
     FrontMatter.h
     Git.cpp
     Git.h
+    Hooks.cpp
+    Hooks.h
     Ids.cpp
     Ids.h
     NewProject.cpp
@@ -48,6 +50,8 @@ add_library(LoomCore STATIC
     TomlFields.h
     TomlWriter.cpp
     TomlWriter.h
+    Validation.cpp
+    Validation.h
     Version.cpp
     Version.h)
 
@@ -71,3 +75,11 @@ qt_add_resources(LoomCore project_kit
         "${kit_dir}/TeX/preamble.tex"
         "${kit_dir}/gitattributes"
         "${kit_dir}/gitignore")
+
+# The pre-commit hook `loom install-hooks` writes (Templates/hooks/pre-commit), read from `:/hooks/`.
+set(hooks_dir "${PROJECT_SOURCE_DIR}/Templates/hooks")
+qt_add_resources(LoomCore loom_hooks
+    PREFIX "/hooks"
+    BASE "${hooks_dir}"
+    FILES
+        "${hooks_dir}/pre-commit")

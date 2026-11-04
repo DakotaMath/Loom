@@ -7,6 +7,7 @@ add_executable(LoomCoreTests
     EditsTests.cpp
     FingerprintTests.cpp
     FrontMatterTests.cpp
+    HooksTests.cpp
     IdsTests.cpp
     NewProjectTests.cpp
     PaperEditsTests.cpp
@@ -21,7 +22,8 @@ add_executable(LoomCoreTests
     StatementsAndProofsTests.cpp
     StatusTests.cpp
     TestSupport.cpp
-    TestSupport.h)
+    TestSupport.h
+    ValidationTests.cpp)
 target_link_libraries(LoomCoreTests PRIVATE LoomCore Catch2::Catch2WithMain)
 # The worked example of Specs/m1-core.md, a project folder the status tests read (and never write).
 target_compile_definitions(LoomCoreTests PRIVATE LOOM_WORKED_EXAMPLE="${PROJECT_SOURCE_DIR}/Tests/Projects/WorkedExample")
@@ -33,6 +35,12 @@ target_link_libraries(loom-fake-git PRIVATE Qt6::Core)
 loom_set_compiler_options(loom-fake-git)
 add_dependencies(LoomCoreTests loom-fake-git)
 target_compile_definitions(LoomCoreTests PRIVATE LOOM_FAKE_GIT="$<TARGET_FILE:loom-fake-git>")
+
+# The pre-commit hook runs `loom validate --staged`, so the tests that commit need this build's `loom`.
+add_dependencies(LoomCoreTests loom)
+target_compile_definitions(LoomCoreTests PRIVATE LOOM_PROGRAM="$<TARGET_FILE:loom>")
+# The test project with one of every problem (Tests/Projects/EveryProblem), copied before each use.
+target_compile_definitions(LoomCoreTests PRIVATE LOOM_EVERY_PROBLEM="${PROJECT_SOURCE_DIR}/Tests/Projects/EveryProblem")
 
 include(Catch)
 set(dl_paths "")

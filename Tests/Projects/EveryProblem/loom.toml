@@ -1,0 +1,24 @@
+format = 1
+name = "Every problem"
+idea = """
+A test project with one of every problem `loom validate` reports (Specs/m1-core.md, "Validation").
+"""
+created = 2026-11-04
+
+[tex]
+preamble = ["TeX/preamble.tex", "TeX/missing.tex"]
+
+[[tags]]
+id = "model-system"
+kind = "equation"
+title = "The model system"
+
+[[tags]]
+id = "model-system"
+kind = "equation"
+title = "The model system, again"
+
+[[tags]]
+id = "Bad_Tag"
+kind = "other"
+title = "Not a tag name"

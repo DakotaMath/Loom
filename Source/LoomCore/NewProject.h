@@ -22,6 +22,9 @@ struct NewProjectRequest {
     QDate created = QDate::currentDate();
     /// Which git to run.
     GitTool git;
+    /// The absolute path of the `loom` creating the project, for the pre-commit hook to fall back
+    /// on when `loom` isn't on PATH (see installHooks()); empty for none.
+    QString loomProgram;
 };
 
 /// How creating a project went; each maps to one of `loom`'s exit codes.
@@ -36,7 +39,7 @@ struct NewProjectResult {
     NewProjectOutcome outcome = NewProjectOutcome::Refused;
     /// A stable code for `--json`: empty when created, else one of `folder-not-empty`,
     /// `not-a-folder`, `parent-missing`, `name-empty`, `git-missing`, `git-lfs-missing`,
-    /// `git-identity-missing`, `kit-missing`, `write-failed`, `git-failed`.
+    /// `git-identity-missing`, `kit-missing`, `write-failed`, `git-failed`, `hooks-failed`.
     QString code;
     /// What went wrong, in plain English; empty when created.
     QString message;
@@ -44,18 +47,18 @@ struct NewProjectResult {
     QString path;
 };
 
-/// Creates a project (Specs/m1-core.md, "The project folder", steps 1 to 6, without step 4's
-/// `loom install-hooks`, which comes with `loom validate`).
+/// Creates a project (Specs/m1-core.md, "The project folder", steps 1 to 6).
 /// In order: refuses a non-empty folder, a file, or a folder whose parent doesn't exist; checks
 /// that `git` and `git lfs` run and that git knows the user's name and email, as the new repo
 /// will see them; only then creates the folder, writes `loom.toml` and the project kit (with LF
 /// line endings, `gitignore` and `gitattributes` renamed to `.gitignore` and `.gitattributes`),
-/// runs `git init -b main` and `git lfs install --local`, and commits everything as
-/// `Create project <name>`.
+/// runs `git init -b main`, `git lfs install --local` and installHooks(), and commits everything
+/// as `Create project <name>`, through the pre-commit hook like any commit.
 /// @param request What to create.
 /// @returns The outcome. On any failure after the checks, what was made is left in place and
 ///          `message` says which step failed.
-/// Side effects: creates the folder and its files and a git repository in it; runs git. Git's
+/// Side effects: creates the folder and its files and a git repository in it, with Loom's hook
+/// and merge driver; runs git, and through the hook, `loom validate --staged`. Git's
 /// repository-location variables (`GIT_DIR`, `GIT_WORK_TREE`, …) are removed from git's
 /// environment, so the new repository can't land anywhere else.
 NewProjectResult createProject(const NewProjectRequest& request);

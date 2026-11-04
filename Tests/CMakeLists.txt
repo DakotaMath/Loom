@@ -48,8 +48,16 @@ add_test(NAME loom.status
         "-DDATA=${CMAKE_CURRENT_SOURCE_DIR}/Projects/WorkedExample"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/CMake/StatusCli.cmake")
 set_tests_properties(loom.status PROPERTIES PASS_REGULAR_EXPRESSION "status CLI: passed")
+# `validate` and `install-hooks`, and the commit guard (Tests/CMake/ValidateCli.cmake).
+add_test(NAME loom.validate
+    COMMAND "${CMAKE_COMMAND}"
+        "-DLOOM=$<TARGET_FILE:loom>"
+        "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/ValidateCli"
+        "-DDATA=${CMAKE_CURRENT_SOURCE_DIR}/Projects/WorkedExample"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/CMake/ValidateCli.cmake")
+set_tests_properties(loom.validate PROPERTIES PASS_REGULAR_EXPRESSION "validate CLI: passed")
 if(WIN32)
-    set_tests_properties(loom.version loom.version-json loom.no-arguments-is-usage-error loom.new-project loom.statements loom.checks loom.papers loom.status
+    set_tests_properties(loom.version loom.version-json loom.no-arguments-is-usage-error loom.new-project loom.statements loom.checks loom.papers loom.status loom.validate
         PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${LOOM_QT_BIN_DIR}")
 endif()
 

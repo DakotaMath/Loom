@@ -1,12 +1,13 @@
 // The `loom` command (Specs/m1-core.md, "The `loom` command"). It knows `--version`,
 // `new-project`, the statement and proof subcommands, the check subcommands, `refute`, `status`,
-// `graph` and the paper subcommands; `validate` and `install-hooks` arrive with #9.
+// `graph`, the paper subcommands, `validate` and `install-hooks`.
 
 #include "CheckCommands.h"
 #include "Cli.h"
 #include "PaperCommands.h"
 #include "StatementCommands.h"
 #include "StatusCommands.h"
+#include "ValidateCommands.h"
 
 #include "LoomCore/NewProject.h"
 #include "LoomCore/Version.h"
@@ -67,6 +68,8 @@ int runNewProject(const QStringList& args, bool json)
     if (request.name.isEmpty())
         return fail(exitUsage, QStringLiteral("usage"), QStringLiteral("`--name` can't be empty."), json);
 
+    // The hook falls back on this `loom` when `loom` isn't on PATH.
+    request.loomProgram = QCoreApplication::applicationFilePath();
     const loom::NewProjectResult result = loom::createProject(request);
     switch (result.outcome) {
     case loom::NewProjectOutcome::Created: {
@@ -163,5 +166,9 @@ int main(int argc, char* argv[])
         return runRekey(args, context);
     if (subcommand == u"build-bib")
         return runBuildBib(args, context);
+    if (subcommand == u"validate")
+        return runValidate(args, context);
+    if (subcommand == u"install-hooks")
+        return runInstallHooks(args, context);
     return printUsage();
 }

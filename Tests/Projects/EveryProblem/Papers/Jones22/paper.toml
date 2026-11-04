@@ -1,0 +1,20 @@
+key = "Jones22"
+aliases = ["Brown21"]
+cite = "published"
+relevance = 2
+created = 2026-11-04
+
+[work]
+type = { value = "article", source = "https://example.org/a", verified = 2026-11-04 }
+title = { value = "Another made-up paper", source = "https://example.org/a", verified = 2026-11-04 }
+authors = { value = [{ last = "Jones", first = "Bob" }], source = "https://example.org/a", verified = 2026-11-04 }
+
+[[versions]]
+id = "published"
+kind = "published"
+journal = { value = "Journal of Examples", source = "https://example.org/a", verified = 2026-11-04 }
+volume = { value = "1", source = "https://example.org/a", verified = 2026-11-04 }
+number = { value = "2", source = "https://example.org/a", verified = 2026-11-04 }
+pages = { value = "1--10", source = "https://example.org/a", verified = 2026-11-04 }
+year = { value = 2022, source = "https://example.org/a", verified = 2026-11-04 }
+doi = { value = "10.0000/example", source = "https://example.org/a", verified = 2026-11-04 }

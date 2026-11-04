@@ -52,6 +52,7 @@ void finish(DocumentReading<Document>& reading, FieldReader& reader, const Front
 {
     reading.parsed = parsed;
     reading.document.body = split.body;
+    reading.bodyLine = split.found ? split.bodyLine : 0;
     if (parsed && isBlankBody(split.body))
         reader.checker.add("body-empty", split.bodyLine, QStringLiteral("%1 has no text below its front matter.").arg(name));
     reading.lossless = parsed && !reader.lost;

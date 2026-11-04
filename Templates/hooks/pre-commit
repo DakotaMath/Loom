@@ -1,0 +1,13 @@
+#!/bin/sh
+# Written by Loom (`loom install-hooks`). Before every commit it runs `loom validate --staged`,
+# which checks the project as it will be committed; any error refuses the commit.
+# Run `loom install-hooks` again to rewrite this file.
+if command -v loom >/dev/null 2>&1; then
+    exec loom validate --staged
+fi
+loom=@LOOM@
+if [ -n "$loom" ] && [ -x "$loom" ]; then
+    exec "$loom" validate --staged
+fi
+echo "Loom's checks couldn't run because \`loom\` wasn't found. Put Loom on PATH, or run \`loom install-hooks\` again." >&2
+exit 1

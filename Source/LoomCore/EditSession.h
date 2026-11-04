@@ -27,9 +27,6 @@ ChangeResult refused(const QString& code, const QString& message);
 /// A result for a project Loom can't work on (exit 3). No side effects.
 ChangeResult cantWork(const QString& code, const QString& message);
 
-/// `<file>:<line>: <severity>: <message>`, as `loom validate` prints a problem. No side effects.
-QString problemLine(const Problem& problem);
-
 /// A project opened for a change: `loom.toml` read, the write lock held, the contents read.
 struct Session {
     OpenedProject project;

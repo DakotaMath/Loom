@@ -1,0 +1,10 @@
+id = "8VRS"
+kind = "lemma"
+gist = "A fourth made-up result"
+extracted_from = "published"
+extracted_by = "agent:claude-opus-5-5"
+created = 2026-11-04
+
+[locators]
+published = { at = "Lemma 2.3", checked_against_pdf = false }
+ed5 = { at = "Lemma 2.3", checked_against_pdf = false }

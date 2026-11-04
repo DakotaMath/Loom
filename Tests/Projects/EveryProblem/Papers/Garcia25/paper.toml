@@ -1,0 +1,60 @@
+key = "Garcia25"
+cite = "ed9"
+relevance = 2
+created = 2026-11-04
+
+[work]
+type = { value = "article", source = "https://example.org/a", verified = 2026-11-04 }
+title = "A plain string"
+authors = { value = [{ last = "García", first = "Ana" }], source = "", verified = 2026-11-04 }
+
+[[versions]]
+id = "published"
+kind = "published"
+journal = { value = "Journal of Examples", source = "https://example.org/a", verified = 2026-11-04 }
+volume = { value = "1", source = "https://example.org/a", verified = 2026-11-04 }
+pages = { value = "1--10", source = "https://example.org/a", verified = 2026-11-04 }
+year = { value = 2025, source = "https://example.org/a", verified = 2026-11-04 }
+doi = { value = "10.0000/example", source = "https://example.org/a", verified = 2026-11-04 }
+school = { value = "Somewhere", source = "https://example.org/a", verified = 2026-11-04 }
+pdf = "../garcia.pdf"
+
+[[versions]]
+id = "arxiv-2"
+kind = "arxiv"
+arxiv_id = { value = "2501.00001", source = "https://example.org/a", verified = true }
+arxiv_version = { value = 2, source = "https://example.org/a", verified = 2026-11-04 }
+posted = { value = 2025-01-02, source = "https://example.org/a", verified = 2026-11-04 }
+primary_class = { value = "math.AP", source = "https://example.org/a", verified = 2026-11-04 }
+page_count = { value = 12, source = "https://example.org/a", verified = 2026-11-04 }
+
+[[versions]]
+id = "arxiv-v3"
+kind = "arxiv"
+arxiv_id = { value = "2501.00001", source = "https://example.org/a", verified = 2026-11-04 }
+arxiv_version = { value = 4, source = "https://example.org/a", verified = 2026-11-04 }
+posted = { value = 2025-02-02, source = "https://example.org/a", verified = 2026-11-04 }
+primary_class = { value = "math.AP", source = "https://example.org/a", verified = 2026-11-04 }
+page_count = { value = 12, source = "https://example.org/a", verified = 2026-11-04 }
+
+[[versions]]
+id = "arxiv-v3"
+kind = "arxiv"
+arxiv_id = { value = "2501.00001", source = "https://example.org/a", verified = 2026-11-04 }
+arxiv_version = { value = 3, source = "https://example.org/a", verified = 2026-11-04 }
+posted = { value = 2025-02-02, source = "https://example.org/a", verified = 2026-11-04 }
+primary_class = { value = "math.AP", source = "https://example.org/a", verified = 2026-11-04 }
+page_count = { value = 12, source = "https://example.org/a", verified = 2026-11-04 }
+
+[[reading]]
+version = "arxiv-v9"
+level = "read"
+what = "All of it"
+date = 2026-11-04
+
+[[reading]]
+version = "published"
+level = "skimmed"
+what = "The introduction"
+date = 2026-11-04
+session = "Sessions/2026-11-04"

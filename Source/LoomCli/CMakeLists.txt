@@ -10,6 +10,8 @@ add_executable(loom
     StatementCommands.h
     StatusCommands.cpp
     StatusCommands.h
+    ValidateCommands.cpp
+    ValidateCommands.h
     main.cpp)
 target_link_libraries(loom PRIVATE LoomCore)
 loom_set_compiler_options(loom)
