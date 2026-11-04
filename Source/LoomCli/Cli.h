@@ -1,0 +1,98 @@
+#pragma once
+
+// What every `loom` subcommand shares (Specs/m1-core.md, "The `loom` command"): exit codes,
+// output, JSON, reading arguments and finding the project.
+
+#include <QByteArray>
+#include <QHash>
+#include <QSet>
+#include <QString>
+#include <QStringList>
+
+#include <cstdio>
+#include <optional>
+
+namespace loom {
+struct ChangeResult;
+}
+
+namespace cli {
+
+// Exit codes, from the spec's table.
+constexpr int exitDone = 0;
+constexpr int exitRefused = 1;
+constexpr int exitUsage = 2;
+constexpr int exitCantWork = 3;
+
+/// The options every subcommand takes, taken out of the arguments before the subcommand sees them.
+struct Context {
+    /// `--json`: print one JSON object on stdout instead of text.
+    bool json = false;
+    /// `--project <folder>`; empty means "find it from the current folder".
+    QString project;
+};
+
+/// Writes text to a stream as UTF-8.
+/// @param stream stdout or stderr.
+/// @param text   The text, written as is (add the line break yourself).
+void write(std::FILE* stream, const QString& text);
+
+/// Writes a JSON string literal: quotes, with `"`, `\` and control characters escaped.
+/// @returns The JSON text. No side effects.
+QString jsonString(const QString& text);
+
+/// Writes a JSON array of strings, e.g. `["title", "body"]`. No side effects.
+QString jsonStringArray(const QStringList& items);
+
+/// Reports a failure: the message on stderr and, with `--json`, the error object on stdout.
+/// @returns `exitCode`, so callers can `return fail(...);`.
+int fail(int exitCode, const QString& code, const QString& message, bool json);
+
+/// Reports wrong usage of a subcommand: the problem, then the usage text.
+/// @returns exitUsage.
+int usageError(const QString& problem, bool json);
+
+/// The usage text for every subcommand.
+QString usageText();
+
+/// Which options a subcommand takes.
+struct ArgSpec {
+    qsizetype positionals = 0; ///< How many arguments that aren't options it needs, exactly.
+    QSet<QString> single;      ///< Options with a value, given at most once.
+    QSet<QString> repeated;    ///< Options with a value, given any number of times.
+    QSet<QString> flags;       ///< Options without a value.
+};
+
+/// A subcommand's arguments, read by parseArgs().
+struct Args {
+    QStringList positional;
+    QHash<QString, QString> single;
+    QHash<QString, QStringList> repeated;
+    QSet<QString> flags;
+
+    /// The value of a single option, if given.
+    std::optional<QString> value(const QString& option) const;
+};
+
+/// Reads a subcommand's arguments.
+/// @param name The subcommand, for messages.
+/// @returns The arguments, or nothing with `error` set to what's wrong. No side effects.
+std::optional<Args> parseArgs(const QStringList& args, const QString& name, const ArgSpec& spec, QString& error);
+
+/// Finds the project folder (Specs/m1-core.md, "The project folder": the current folder or the
+/// nearest parent holding `loom.toml`, unless `--project` names one).
+/// @returns The folder, or nothing with `message` set. No side effects.
+std::optional<QString> findProject(const Context& context, QString& message);
+
+/// Reads the text given by `--body` or `--body-file`.
+/// @param exitCode Set to exitUsage or exitCantWork when it fails.
+/// @returns The text's bytes, or nothing after reporting the problem. Reads the file, if any.
+std::optional<QByteArray> readBody(const Args& args, bool json, int& exitCode);
+
+/// Prints the result of a change, or the reason it failed.
+/// @param text       What to print on stdout when done, without `--json`.
+/// @param jsonFields The fields of the JSON object to print when done, e.g. `"id": "4KX7"`.
+/// @returns The exit code: 0 done, 1 refused, 3 can't work.
+int report(const loom::ChangeResult& result, bool json, const QString& text, const QString& jsonFields);
+
+} // namespace cli
