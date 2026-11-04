@@ -8,7 +8,7 @@ tags: [m1, review, validate]
 > **Summary:** Fixed batch 2 of the M1 review: empty values are `missing-field` in every reader (A2), every `QRegularExpression` rule is anchored at the very end, `FieldReader::date` reports the year 0, and `loom.toml` gets the UTF-8 check; each fix's test failed on `main` first, and all 180 `ctest` tests pass on Windows.
 
 **Session model:** Opus 5.5
-**Issues and PRs:** no issue (batch 2 of `Reviews/M1` on `m1/review`); PR m1/fix-reader-hardening
+**Issues and PRs:** no issue (batch 2 of `Reviews/M1` on `m1/review`); PR #22
 
 ## Done
 - `TomlFields`: `Need` is now `Optional` (free text), `Naming` (optional, names something) and `Required`; `FieldChecker::reportEmpty()` is the one rule for empty values, used by `FieldChecker::stringField`, `FieldReader::string`, `FieldReader::date`, the check-history reader and `loom.toml`'s `created`.
