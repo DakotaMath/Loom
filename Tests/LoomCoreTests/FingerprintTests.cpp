@@ -13,6 +13,7 @@ namespace {
 loom::FingerprintInput example()
 {
     loom::FingerprintInput input;
+    input.level = "complete";
     input.statementTag = "4KX7";
     input.statementBody = "Let $u$ be a weak solution with data $u_0$.  \r\nThen $|u(t)| = O(t^{-1/2})$.\n\n";
     input.premises = {{"9D3F", QByteArray("Energy estimate.\t\n")}, {"7RT2", QByteArray("Gr\xc3\xb6nwall.\n")}};
@@ -24,14 +25,16 @@ loom::FingerprintInput example()
 
 TEST_CASE("The fingerprint of a fixed example: its bytes and its hash", "[fingerprint]")
 {
-    // Computed independently (Python's hashlib) from the spec's description.
+    // Computed independently (Python's hashlib) from the spec's description (v2, with the
+    // level: A18).
     CHECK(loom::fingerprintBytes(example()) ==
-          "loom-fingerprint-v1\n"
+          "loom-fingerprint-v2\n"
+          "level\n8\ncomplete\n"
           "statement 4KX7\n72\nLet $u$ be a weak solution with data $u_0$.\nThen $|u(t)| = O(t^{-1/2})$.\n"
           "premise 7RT2\n10\nGr\xc3\xb6nwall.\n"
           "premise 9D3F\n16\nEnergy estimate.\n"
           "proof\n29\nBy 7RT2 and 9D3F, with $k=0$.\n");
-    CHECK(loom::fingerprint(example()) == "d84640b94eb8");
+    CHECK(loom::fingerprint(example()) == "48dc86cef83b");
 }
 
 TEST_CASE("A paper stub premise is written with no text", "[fingerprint]")
@@ -39,7 +42,7 @@ TEST_CASE("A paper stub premise is written with no text", "[fingerprint]")
     loom::FingerprintInput input = example();
     input.premises[1].body.reset();
     CHECK(loom::fingerprintBytes(input).contains("premise 7RT2\n0\n\npremise 9D3F\n"));
-    CHECK(loom::fingerprint(input) == "3e67474a0e36");
+    CHECK(loom::fingerprint(input) == "e1d5f2df5144");
 }
 
 TEST_CASE("Every input the fingerprint covers changes it", "[fingerprint]")
@@ -47,6 +50,7 @@ TEST_CASE("Every input the fingerprint covers changes it", "[fingerprint]")
     const QString original = loom::fingerprint(example());
     loom::FingerprintInput input = example();
 
+    SECTION("the proof's level alone (A18)") { input.level = "sketch"; }
     SECTION("the statement's body") { input.statementBody.replace("weak", "strong"); }
     SECTION("the statement's tag") { input.statementTag = "4KX8"; }
     SECTION("a premise's body") { input.premises[0].body = QByteArray("Energy estimates.\n"); }

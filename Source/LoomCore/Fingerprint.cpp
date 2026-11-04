@@ -45,7 +45,11 @@ QByteArray normaliseForFingerprint(const QByteArray& body)
 
 QByteArray fingerprintBytes(const FingerprintInput& input)
 {
-    QByteArray out = "loom-fingerprint-v1\n";
+    // v2 added the level (A18): v1 left it out, so raising a checked sketch to `complete` made
+    // it proved with no new check. The header changed with it, so no v1 byte string is ever a
+    // v2 one.
+    QByteArray out = "loom-fingerprint-v2\n";
+    appendSection(out, "level", input.level.toUtf8());
     appendSection(out, "statement " + input.statementTag.toUtf8(), normaliseForFingerprint(input.statementBody));
 
     // By tag in byte order: the order `premises` lists them in isn't part of what was read.

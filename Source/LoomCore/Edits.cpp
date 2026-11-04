@@ -44,8 +44,9 @@ ChangeResult dakotaOnly(const QString& what)
 /// Writes `bytes` to `path` if, with the file's contents replaced by `changed`, the project has no
 /// error it didn't have before, Dakota has given the click the change needs, if any, and the
 /// change outdates no checked proof's checks but those he confirmed.
-/// Rule (Specs/m1-core.md, "Statements"): editing text in a checked proof's fingerprint needs
-/// Dakota's confirmation, and the refusal names the proofs. His confirmation covers the proofs he
+/// Rule (Specs/m1-core.md, "Statements"): changing what is in a checked proof's fingerprint (a
+/// body, a proof's premises, or, since A18, a proof's level) needs Dakota's confirmation, and the
+/// refusal names the proofs. His confirmation covers the proofs he
 /// was shown: if the change would now outdate a different set (the project changed between the
 /// question and the confirmed run), it is refused, naming both, so he can be asked again.
 /// The refusals come in that order, so Dakota is asked only about a change the rules allow.
@@ -78,8 +79,9 @@ ChangeResult commit(Session& session, const QString& path, const QByteArray& byt
         const bool one = result.outdatedChecks.size() == 1;
         result.outcome = ChangeOutcome::Refused;
         result.code = QStringLiteral("outdates-checks");
-        result.message = QStringLiteral("Loom didn't %1, because it would outdate the checks of %2: %3 checked, and the "
-                                        "text %4 read would change. Only Dakota can outdate checks (`--outdate-checks`, "
+        // "What … read", not "the text": a proof's level is in its fingerprint too (A18).
+        result.message = QStringLiteral("Loom didn't %1, because it would outdate the checks of %2: %3 checked, and "
+                                        "what %4 read would change. Only Dakota can outdate checks (`--outdate-checks`, "
                                         "at a terminal).")
                              .arg(what, listed(result.outdatedChecks), one ? QStringLiteral("it is") : QStringLiteral("they are"),
                                   one ? QStringLiteral("its checks") : QStringLiteral("their checks"));
@@ -446,6 +448,9 @@ ChangeResult editProof(const QString& root, const QString& typed, const ProofEdi
     }
     // Setting `failed` is Dakota's click (Specs/m1-core.md, "Checks", verdict `fail`: "Loom doesn't
     // set `level = "failed"` itself"); keeping it, or leaving it for a repaired proof, isn't.
+    // It is a click of its own (A16): any level change of a checked proof, `failed` included,
+    // also outdates its checks, since the level is in the fingerprint (A18), so commit() asks for
+    // that confirmation too, after this one.
     const bool needsDakota = p.level == u"failed" && before.level != u"failed" && !edit.failedConfirmed;
     return commit(*session, file.path, bytes, changed, QStringLiteral("change %1").arg(*id), result, edit.outdateChecks,
                   needsDakota ? QStringLiteral("mark a proof failed") : QString());

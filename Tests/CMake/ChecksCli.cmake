@@ -121,8 +121,15 @@ expect_match("edit-statement --outdate-checks without a terminal" "${out}"
 run_loom(1 out edit-proof "${theorem}.b" --level failed --body-file "${WORK}/new-body.tex" --outdate-checks --json)
 expect_match("--level failed with --outdate-checks without a terminal" "${out}"
     "^{\"error\": {\"code\": \"dakota-only\", \"message\": \"Only Dakota can mark a proof failed, and only at a terminal\\.\"}}\n$")
-run_loom(0 out edit-proof "${theorem}.b" --level sketch --outdate-checks --json)
-expect_match("an edit outdating nothing" "${out}" "^{\"id\": \"${theorem}\\.b\", \"changed\": \\[\"level\"\\], \"outdated_checks\": \\[\\]}\n$")
+# The level is in the fingerprint (A18), so changing it outdates the checks like a body edit.
+run_loom(1 out edit-proof "${theorem}.b" --level sketch --json)
+expect_match("edit-proof --level outdating checks" "${out}"
+    "^{\"error\": {\"code\": \"outdates-checks\", \"message\": \"Loom didn't change ${theorem}\\.b, because it would outdate the checks of ${theorem}\\.b: it is checked, and what its checks read would change\\. ")
+run_loom(1 out edit-proof "${theorem}.b" --level sketch --outdate-checks --json)
+expect_match("edit-proof --level --outdate-checks without a terminal" "${out}"
+    "^{\"error\": {\"code\": \"dakota-only\", \"message\": \"Only Dakota can outdate checks, and only at a terminal\\.\"}}\n$")
+run_loom(0 out edit-proof "${theorem}.b" --verified --outdate-checks --json)
+expect_match("an edit outdating nothing" "${out}" "^{\"id\": \"${theorem}\\.b\", \"changed\": \\[\"verified\"\\], \"outdated_checks\": \\[\\]}\n$")
 run_loom(0 out edit-statement "${lemma}" --body-file "${WORK}/new-body.tex" --json)
 expect_match("an edit of an unchecked proof's premise" "${out}" "^{\"id\": \"${lemma}\", \"changed\": \\[\"body\"\\], \"outdated_checks\": \\[\\]}\n$")
 
