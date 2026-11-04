@@ -65,6 +65,14 @@ expect_match("edit-proof, no change" "${out}" "^{\"id\": \"${theorem}\\.a\", \"c
 run_loom_in("${WORK}" 0 out edit-statement "${theorem}" --title "Decay, sharp" --verified --json --project "${PROJECT}")
 expect_match("edit-statement --json" "${out}" "^{\"id\": \"${theorem}\", \"changed\": \\[\"title\", \"verified\"\\], \"outdated_checks\": \\[\\]}\n$")
 
+# An option's value is taken as it is, even when it looks like `--json` or `--project`.
+run_loom(0 out new-statement --kind lemma --title --json --body --project)
+expect_match("values that look like options" "${out}" "^[0-9A-HJKMNP-TV-Z][0-9A-HJKMNP-TV-Z][0-9A-HJKMNP-TV-Z][0-9A-HJKMNP-TV-Z]\n$")
+string(STRIP "${out}" literal)
+file(READ "${PROJECT}/Statements/${literal}.tex" text)
+expect_match("the title `--json`" "${text}" "\ntitle = \"--json\"\n")
+expect_match("the body `--project`" "${text}" "\n\\+\\+\\+\n--project\n$")
+
 # 1: refused by a rule, with the JSON error on stdout; nothing written.
 run_loom(1 out new-statement --kind lemma --title "X" --body "X" --tag no-such-tag)
 run_loom(1 out new-proof ZZZZ --level complete --body "X" --json)
@@ -83,6 +91,15 @@ run_loom(2 out new-proof --level complete --body "X")
 run_loom(2 out new-tag --kind other --title "X")
 run_loom(2 out edit-proof "${theorem}.a" --level)
 run_loom(2 out new-statement --kind lemma --title "X" --body "X" --project)
+run_loom(2 out new-statement --kind lemma --body "X" --json)
+expect_match("a usage error's JSON holds only the problem" "${out}"
+    "^{\"error\": {\"code\": \"usage\", \"message\": \"`loom new-statement` needs `--title`\\.\"}}\n$")
+# A body file that isn't UTF-8, its name holding `%1`: the message names it as it is.
+string(ASCII 255 not_utf8)
+file(WRITE "${WORK}/latin1%1.tex" "Caf${not_utf8}\n")
+run_loom(2 out new-statement --kind lemma --title "X" --body-file "${WORK}/latin1%1.tex" --json)
+expect_match("a body file that isn't UTF-8" "${out}"
+    "^{\"error\": {\"code\": \"not-utf8\", \"message\": \"`[^`]*latin1%1\\.tex` isn't valid UTF-8 \\(the first bad byte is at offset 3\\)\\. Save it as UTF-8\\.\"}}\n$")
 
 # 3: can't work here.
 file(MAKE_DIRECTORY "${WORK}/Empty")

@@ -15,8 +15,10 @@ namespace cli {
 int runFingerprint(const QStringList& args, const Context& context);
 
 /// Runs `loom add-check <proof-id> --by … --verdict … […]`. With `--by dakota` it is Dakota's:
-/// at a terminal it asks for `changes` if a needs-changes has none, then for a typed `yes`;
-/// without a terminal it refuses.
+/// it first checks the proof, the verdict and the check history, so a typo fails before he types
+/// anything; then, at a terminal, it asks for `changes` if a needs-changes has none, and for a
+/// typed `yes`; without a terminal it refuses. If the check isn't added after he typed `changes`,
+/// the text is printed back on stderr.
 /// @returns The exit code. Side effects: appends to the proof's check history; prints the entry
 ///          and whether the proof is now checked.
 int runAddCheck(const QStringList& args, const Context& context);

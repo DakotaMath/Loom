@@ -3,10 +3,12 @@
 # LoomCoreTests covers every status and explanation.
 # Run as: cmake -DLOOM=<path to loom> -DWORK=<scratch folder, emptied first> -DDATA=<the WorkedExample folder> -P StatusCli.cmake
 
-# Runs loom in the project and fails the test unless it exits with `expected`.
+# Runs loom in the project and fails the test unless it exits with `expected`. Input comes from a
+# file holding `yes`, so it is never a terminal, however the test is run: Dakota's `refute` must
+# refuse even a piped yes.
 #   expected: the exit code wanted.  out_var: set to loom's stdout.  ARGN: loom's arguments.
 function(run_loom expected out_var)
-    execute_process(COMMAND "${LOOM}" ${ARGN} WORKING_DIRECTORY "${PROJECT}"
+    execute_process(COMMAND "${LOOM}" ${ARGN} WORKING_DIRECTORY "${PROJECT}" INPUT_FILE "${WORK}/yes.txt"
         RESULT_VARIABLE code OUTPUT_VARIABLE out ERROR_VARIABLE err)
     if(NOT code STREQUAL "${expected}")
         message(FATAL_ERROR "loom ${ARGN}: expected exit ${expected}, got ${code}\nstdout: ${out}\nstderr: ${err}")
@@ -24,6 +26,7 @@ endfunction()
 
 file(REMOVE_RECURSE "${WORK}")
 file(MAKE_DIRECTORY "${WORK}")
+file(WRITE "${WORK}/yes.txt" "yes\n")
 file(COPY "${DATA}/" DESTINATION "${WORK}/WorkedExample")
 set(PROJECT "${WORK}/WorkedExample")
 
@@ -58,6 +61,15 @@ expect_match("graph --json, a proof without checks" "${out}"
 expect_match("graph --json, a failed proof" "${out}" "\"id\": \"D9XF\\.b\", [^}]*\"supports\": false, \"gives\": \"nothing\", \"counting_agent_check\": 1,")
 expect_match("graph --json, edges and cycles" "${out}"
     "\\], \"stated_using\": \\[{\"from\": \"4KX7\", \"to\": \"2M9Q\"}\\], \"paper_premises\": \\[\\], \"cycles\": \\[\\[\"H8KD\", \"J3RW\"\\], \\[\"K6YM\", \"M1PQ\"\\]\\]}\n$")
+# A hand-edited level holding `%1` is printed as it is, and the JSON stays valid.
+set(cq2r "${PROJECT}/Proofs/CQ2R/CQ2R.a.tex")
+file(READ "${cq2r}" cq2r_text)
+string(REPLACE "level = \"heuristic\"" "level = \"%1\"" odd_level "${cq2r_text}")
+file(WRITE "${cq2r}" "${odd_level}")
+run_loom(0 out graph --json)
+expect_match("graph --json, a level holding %1" "${out}"
+    "{\"id\": \"CQ2R\\.a\", \"proves\": \"CQ2R\", \"premises\": \\[\\], \"level\": \"%1\", \"fingerprint\": \"[0-9a-f]+\", \"checked\": false, \"supports\": true, \"gives\": \"nothing\", \"counting_agent_check\": null, \"counting_dakota_check\": null}")
+file(WRITE "${cq2r}" "${cq2r_text}")
 
 # 1: refused. `refute` is Dakota's, and the test's input isn't a terminal; nothing is written.
 file(READ "${PROJECT}/Statements/T9GB.tex" before)

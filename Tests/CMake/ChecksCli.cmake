@@ -69,6 +69,17 @@ expect_match("add-check --json" "${out}"
     "^{\"proof\": \"${theorem}\\.a\", \"path\": \"Proofs/${theorem}/${theorem}\\.a\\.checks\\.toml\", \"index\": 1, \"check\": {\"by\": \"agent:claude-opus-5-5\", \"date\": \"${date}\", \"fingerprint\": \"${fp_a}\", \"verdict\": \"needs-changes\", \"changes\": null, \"record\": \"Records/2026-11/job-0002\\.md\", \"note\": null}, \"checked\": false, \"supports\": true, \"counting_agent_check\": 1, \"counting_dakota_check\": null}\n$")
 file(READ "${PROJECT}/Proofs/${theorem}/${theorem}.a.checks.toml" checks)
 expect_match("the check history" "${checks}" "^\\[\\[checks\\]\\]\nby = \"agent:claude-opus-5-5\"\n.*\n\n\\[\\[checks\\]\\]\n.*verdict = \"needs-changes\"\n")
+# An agent's needs-changes with the changes from a file or typed, and a note. On Windows
+# file(WRITE) writes each `\n` as CRLF, which Loom reads as LF
+# (Wiki/gotchas/cmake/file-write-crlf-on-windows.md).
+file(WRITE "${WORK}/changes.txt" "Step 2 needs the bound.\nAnd step 3.\n")
+run_loom(0 out add-check "${theorem}.a" --by agent:claude-opus-5-5 --verdict needs-changes --fingerprint "${fp_a}"
+    --record Records/2026-11/job-0003.md --changes-file "${WORK}/changes.txt" --note Notes/step-2.md --json)
+expect_match("add-check --changes-file --note" "${out}"
+    "\"index\": 2, \"check\": {[^}]*\"verdict\": \"needs-changes\", \"changes\": \"Step 2 needs the bound\\.\\\\nAnd step 3\\.\\\\n\", \"record\": \"Records/2026-11/job-0003\\.md\", \"note\": \"Notes/step-2\\.md\"}")
+run_loom(0 out add-check "${theorem}.a" --by agent:claude-opus-5-5 --verdict needs-changes --fingerprint "${fp_a}"
+    --record Records/2026-11/job-0004.md --changes "Name the constant." --json)
+expect_match("add-check --changes" "${out}" "\"index\": 3, \"check\": {[^}]*\"changes\": \"Name the constant\\.\", \"record\": ")
 
 # 1: refused by a rule, with the JSON error on stdout.
 run_loom(1 out add-check "${theorem}.a" --by agent:claude-opus-5-5 --verdict pass --record Records/x.md --json)
@@ -80,6 +91,14 @@ run_loom(1 out add-check "${theorem}.a" --by dakota --verdict pass --json)
 expect_match("Dakota's check without a terminal" "${out}"
     "^{\"error\": {\"code\": \"dakota-only\", \"message\": \"Only Dakota can add Dakota's checks, and only at a terminal\\.\"}}\n$")
 run_loom(1 out add-check "${theorem}.a" --by agent:claude-opus-5-5 --verdict accept --record Records/x.md --fingerprint "${fp_a}")
+# Dakota's check is checked before he is asked to type anything, so a mistyped ID or verdict
+# never costs him his message.
+run_loom(1 out add-check ZZZZ.a --by dakota --verdict needs-changes --json)
+expect_match("Dakota's check of nothing" "${out}"
+    "^{\"error\": {\"code\": \"ref-unknown\", \"message\": \"`ZZZZ\\.a` isn't a proof in this project\\.\"}}\n$")
+run_loom(1 out add-check "${theorem}.a" --by dakota --verdict accept --json)
+expect_match("Dakota's check with a wrong verdict" "${out}"
+    "^{\"error\": {\"code\": \"check-verdict\", \"message\": \"`accept` isn't a verdict\\. Use pass, needs-changes or fail\\.\"}}\n$")
 run_loom(1 out fingerprint ZZZZ.a)
 
 # Dakota's pass, as his click at a terminal would write it, makes theorem.b checked; then editing

@@ -2,10 +2,13 @@
 
 #include "LoomCore/Edits.h"
 #include "LoomCore/FrontMatter.h"
+#include "LoomCore/ProjectToml.h"
 
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+
+#include <vector>
 
 #ifdef Q_OS_WIN
 #define NOMINMAX
@@ -62,54 +65,144 @@ QString jsonIndex(const std::optional<qsizetype>& index)
     return index ? QString::number(*index) : QStringLiteral("null");
 }
 
+namespace {
+
+/// The error object `--json` prints for a failure (Specs/m1-core.md, "The `loom` command"),
+/// with its line break. No side effects.
+QString jsonError(const QString& code, const QString& message)
+{
+    return QStringLiteral("{\"error\": {\"code\": %1, \"message\": %2}}\n").arg(jsonString(code), jsonString(message));
+}
+
+/// One entry of the usage text.
+struct UsageEntry {
+    QString subcommand; ///< As typed after `loom`.
+    QString lines;      ///< Its lines of the usage text, each ending in a line break.
+};
+
+/// The usage text, one entry per subcommand, in the order `loom help` lists them. No side effects.
+const std::vector<UsageEntry>& usageEntries()
+{
+    static const std::vector<UsageEntry> entries = {
+        {QStringLiteral("help"), QStringLiteral("  loom help [<subcommand>]\n")},
+        {QStringLiteral("--version"), QStringLiteral("  loom --version [--json]\n")},
+        {QStringLiteral("new-project"), QStringLiteral("  loom new-project <folder> --name <name> [--idea <text>] [--json]\n")},
+        {QStringLiteral("install-hooks"), QStringLiteral("  loom install-hooks\n")},
+        {QStringLiteral("new-tag"), QStringLiteral("  loom new-tag <tag> --kind equation|technique|other --title <title>\n")},
+        {QStringLiteral("new-statement"),
+         QStringLiteral("  loom new-statement --kind <kind> --title <title> (--body <text> | --body-file <path>)\n"
+                        "                     [--tag <tag>]... [--stated-using <id>]... [--origin <origin>]\n")},
+        {QStringLiteral("edit-statement"),
+         QStringLiteral("  loom edit-statement <id> [--title <title>] [--kind <kind>] [--body-file <path>]\n"
+                        "                     [--add-tag <tag>]... [--remove-tag <tag>]...\n"
+                        "                     [--add-stated-using <id>]... [--remove-stated-using <id>]...\n"
+                        "                     [--superseded-by <id>] [--verified] [--outdate-checks]\n")},
+        {QStringLiteral("new-proof"),
+         QStringLiteral("  loom new-proof <statement-id> --level sketch|heuristic|complete|failed\n"
+                        "                     (--body <text> | --body-file <path>) [--premise <id>]...\n")},
+        {QStringLiteral("edit-proof"),
+         QStringLiteral("  loom edit-proof <proof-id> [--level <level>] [--body-file <path>]\n"
+                        "                     [--add-premise <id>]... [--remove-premise <id>]... [--verified]\n"
+                        "                     [--outdate-checks]\n")},
+        {QStringLiteral("fingerprint"), QStringLiteral("  loom fingerprint <proof-id>\n")},
+        {QStringLiteral("add-check"),
+         QStringLiteral("  loom add-check <proof-id> --by dakota|agent:<model> --verdict pass|needs-changes|fail\n"
+                        "                     [--changes <text> | --changes-file <path>] [--fingerprint <fp>]\n"
+                        "                     [--record <path>] [--note <path>]\n")},
+        {QStringLiteral("merge-checks"), QStringLiteral("  loom merge-checks <base> <ours> <theirs>\n")},
+        {QStringLiteral("refute"), QStringLiteral("  loom refute <id> --by <proof-id>\n")},
+        {QStringLiteral("status"), QStringLiteral("  loom status [<id>]\n")},
+        {QStringLiteral("graph"), QStringLiteral("  loom graph --json\n")},
+        {QStringLiteral("new-paper"), QStringLiteral("  loom new-paper <draft.toml>\n")},
+        {QStringLiteral("new-stub"),
+         QStringLiteral("  loom new-stub <key> --kind <kind> --gist <text> --version <version-id> --at <locator>\n"
+                        "                     --by dakota|agent:<model> [--title <title>] [--stated-using <id>]...\n"
+                        "                     [--paper-premise <id>]...\n")},
+        {QStringLiteral("rekey"), QStringLiteral("  loom rekey <key>\n")},
+        {QStringLiteral("build-bib"), QStringLiteral("  loom build-bib [--out <path>]\n")},
+        {QStringLiteral("validate"), QStringLiteral("  loom validate [--staged]\n")},
+    };
+    return entries;
+}
+
+/// The last line of every usage text. No side effects.
+QString commonOptionsLine()
+{
+    return QStringLiteral("Every subcommand that works in a project takes --project <folder> and --json.");
+}
+
+} // namespace
+
 int fail(int exitCode, const QString& code, const QString& message, bool json)
 {
     write(stderr, message + u'\n');
     if (json)
-        write(stdout, QStringLiteral("{\"error\": {\"code\": %1, \"message\": %2}}\n").arg(jsonString(code), jsonString(message)));
+        write(stdout, jsonError(code, message));
     return exitCode;
 }
 
 QString usageText()
 {
-    return QStringLiteral(
-        "Usage:\n"
-        "  loom --version [--json]\n"
-        "  loom new-project <folder> --name <name> [--idea <text>] [--json]\n"
-        "  loom install-hooks\n"
-        "  loom new-tag <tag> --kind equation|technique|other --title <title>\n"
-        "  loom new-statement --kind <kind> --title <title> (--body <text> | --body-file <path>)\n"
-        "                     [--tag <tag>]... [--stated-using <id>]... [--origin <origin>]\n"
-        "  loom edit-statement <id> [--title <title>] [--kind <kind>] [--body-file <path>]\n"
-        "                     [--add-tag <tag>]... [--remove-tag <tag>]...\n"
-        "                     [--add-stated-using <id>]... [--remove-stated-using <id>]...\n"
-        "                     [--superseded-by <id>] [--verified] [--outdate-checks]\n"
-        "  loom new-proof <statement-id> --level sketch|heuristic|complete|failed\n"
-        "                     (--body <text> | --body-file <path>) [--premise <id>]...\n"
-        "  loom edit-proof <proof-id> [--level <level>] [--body-file <path>]\n"
-        "                     [--add-premise <id>]... [--remove-premise <id>]... [--verified]\n"
-        "                     [--outdate-checks]\n"
-        "  loom fingerprint <proof-id>\n"
-        "  loom add-check <proof-id> --by dakota|agent:<model> --verdict pass|needs-changes|fail\n"
-        "                     [--changes <text> | --changes-file <path>] [--fingerprint <fp>]\n"
-        "                     [--record <path>] [--note <path>]\n"
-        "  loom merge-checks <base> <ours> <theirs>\n"
-        "  loom refute <id> --by <proof-id>\n"
-        "  loom status [<id>]\n"
-        "  loom graph --json\n"
-        "  loom new-paper <draft.toml>\n"
-        "  loom new-stub <key> --kind <kind> --gist <text> --version <version-id> --at <locator>\n"
-        "                     --by dakota|agent:<model> [--title <title>] [--stated-using <id>]...\n"
-        "                     [--paper-premise <id>]...\n"
-        "  loom rekey <key>\n"
-        "  loom build-bib [--out <path>]\n"
-        "  loom validate [--staged]\n"
-        "Every subcommand that works in a project takes --project <folder> and --json.");
+    QString text = QStringLiteral("Usage:\n");
+    for (const UsageEntry& entry : usageEntries())
+        text += entry.lines;
+    return text + commonOptionsLine();
+}
+
+std::optional<QString> subcommandUsage(const QString& subcommand)
+{
+    for (const UsageEntry& entry : usageEntries()) {
+        if (entry.subcommand == subcommand)
+            return QStringLiteral("Usage:\n") + entry.lines + commonOptionsLine();
+    }
+    return std::nullopt;
 }
 
 int usageError(const QString& problem, bool json)
 {
-    return fail(exitUsage, QStringLiteral("usage"), problem + u'\n' + usageText(), json);
+    write(stderr, problem + u'\n' + usageText() + u'\n');
+    if (json)
+        write(stdout, jsonError(QStringLiteral("usage"), problem));
+    return exitUsage;
+}
+
+const QSet<QString>& valuelessOptions()
+{
+    static const QSet<QString> options = {QStringLiteral("--json"), QStringLiteral("--version"), QStringLiteral("--staged"),
+                                          QStringLiteral("--verified"), QStringLiteral("--outdate-checks")};
+    return options;
+}
+
+bool takeCommonOptions(QStringList& args, Context& context, bool& projectGiven, QString& error)
+{
+    QStringList rest;
+    projectGiven = false;
+    error.clear();
+    // After a problem it reads on, so that a `--json` later on still gets the error as JSON.
+    for (qsizetype i = 0; i < args.size(); ++i) {
+        const QString& arg = args[i];
+        if (arg == u"--json") {
+            context.json = true;
+        } else if (arg == u"--project") {
+            if (i + 1 >= args.size()) {
+                if (error.isEmpty())
+                    error = QStringLiteral("`--project` needs a folder.");
+                break;
+            }
+            if (projectGiven && error.isEmpty())
+                error = QStringLiteral("`--project` can be given only once.");
+            context.project = args[++i];
+            projectGiven = true;
+        } else {
+            rest << arg;
+            // The argument after an option that takes one is its value, whatever it looks like;
+            // the subcommand's own parseArgs() then decides whether it knows the option.
+            if (arg.startsWith(u"--") && !valuelessOptions().contains(arg) && i + 1 < args.size())
+                rest << args[++i];
+        }
+    }
+    args = rest;
+    return error.isEmpty();
 }
 
 std::optional<QString> Args::value(const QString& option) const
@@ -258,7 +351,7 @@ std::optional<QByteArray> readTextFile(const QString& path, bool json, int& exit
     if (const std::optional<qsizetype> bad = loom::firstInvalidUtf8(bytes)) {
         exitCode = fail(exitUsage, QStringLiteral("not-utf8"),
             QStringLiteral("`%1` isn't valid UTF-8 (the first bad byte is at offset %2). Save it as UTF-8.")
-                .arg(QDir::toNativeSeparators(path)).arg(*bad), json);
+                .arg(QDir::toNativeSeparators(path), QString::number(*bad)), json);
         return std::nullopt;
     }
     if (bytes.startsWith("\xEF\xBB\xBF"))
@@ -306,6 +399,25 @@ std::optional<std::pair<Args, QString>> start(const QStringList& args, const QSt
         return std::nullopt;
     }
     return std::pair{std::move(*parsed), *root};
+}
+
+std::optional<loom::ProjectContents> readProject(const QString& root, bool json, int& exitCode)
+{
+    exitCode = exitCantWork;
+    const loom::OpenedProject project = loom::openProject(root);
+    switch (project.status) {
+    case loom::OpenStatus::Opened: break;
+    case loom::OpenStatus::NotAProject: fail(exitCantWork, QStringLiteral("not-a-project"), project.message, json); return std::nullopt;
+    case loom::OpenStatus::Unreadable: fail(exitCantWork, QStringLiteral("unreadable"), project.message, json); return std::nullopt;
+    case loom::OpenStatus::FormatTooNew: fail(exitCantWork, QStringLiteral("format-too-new"), project.message, json); return std::nullopt;
+    }
+    loom::ContentsLoading loading = loom::loadContents(project.root);
+    if (!loading.ok) {
+        fail(exitCantWork, QStringLiteral("unreadable"), loading.message, json);
+        return std::nullopt;
+    }
+    exitCode = exitDone;
+    return std::move(loading.contents);
 }
 
 QString missing(const Args& args, const QString& name, const QStringList& required)

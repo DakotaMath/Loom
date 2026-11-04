@@ -3,6 +3,8 @@
 // What every `loom` subcommand shares (Specs/m1-core.md, "The `loom` command"): exit codes,
 // output, JSON, reading arguments and finding the project.
 
+#include "LoomCore/ProjectContents.h"
+
 #include <QByteArray>
 #include <QHash>
 #include <QSet>
@@ -55,12 +57,35 @@ QString jsonIndex(const std::optional<qsizetype>& index);
 /// @returns `exitCode`, so callers can `return fail(...);`.
 int fail(int exitCode, const QString& code, const QString& message, bool json);
 
-/// Reports wrong usage of a subcommand: the problem, then the usage text.
+/// Reports wrong usage: the problem, then the usage text, on stderr. With `--json`, the error
+/// object on stdout holds only the problem, so a program reading `message` gets one sentence.
 /// @returns exitUsage.
 int usageError(const QString& problem, bool json);
 
-/// The usage text for every subcommand.
+/// The usage text for every subcommand, starting `Usage:`. No side effects.
 QString usageText();
+
+/// The usage text for one subcommand (`loom help <subcommand>`): `Usage:`, its lines, and the
+/// line about the common options.
+/// @param subcommand E.g. `add-check`; `--version` is accepted too.
+/// @returns The text, or nothing if `subcommand` isn't one of `loom`'s. No side effects.
+std::optional<QString> subcommandUsage(const QString& subcommand);
+
+/// Takes the common options `--json` and `--project <folder>` out of the command line, but only
+/// where they stand as options: an argument right after an option that takes a value is that
+/// option's value, so `--title --json` is a title. Every option takes a value except those in
+/// valuelessOptions().
+/// @param args    The arguments after `loom`; on success, what is left for the subcommand.
+/// @param context Set from the options found.
+/// @param projectGiven Set to whether `--project` was given (its value may be empty).
+/// @param error   Set to the usage problem when it fails.
+/// @returns False on wrong usage (`--project` without a folder, or given twice). No side effects.
+bool takeCommonOptions(QStringList& args, Context& context, bool& projectGiven, QString& error);
+
+/// The options of any subcommand that take no value: `--json`, `--version`, `--staged`,
+/// `--verified` and `--outdate-checks`. A new flag must be added here, or takeCommonOptions()
+/// would take the argument after it as its value. No side effects.
+const QSet<QString>& valuelessOptions();
 
 /// Which options a subcommand takes.
 struct ArgSpec {
@@ -101,6 +126,12 @@ std::optional<QString> findProject(const Context& context, QString& message);
 /// @returns The arguments and the project folder, or nothing.
 std::optional<std::pair<Args, QString>> start(const QStringList& args, const QString& name, const ArgSpec& spec,
                                               const Context& context, int& exitCode, const QString& positionalName = {});
+
+/// Reads a project without taking the write lock, for commands that only read, or that check
+/// what they can before asking Dakota anything.
+/// @param exitCode Set to exitCantWork, after reporting the problem, when it fails; else exitDone.
+/// @returns The contents, or nothing. Reads the project's files.
+std::optional<loom::ProjectContents> readProject(const QString& root, bool json, int& exitCode);
 
 /// Checks that the options in `required` were given.
 /// @returns An empty string, or the usage problem. No side effects.

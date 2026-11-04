@@ -2,7 +2,6 @@
 
 #include "LoomCore/Edits.h"
 #include "LoomCore/ProjectContents.h"
-#include "LoomCore/ProjectToml.h"
 #include "LoomCore/Status.h"
 
 #include <algorithm>
@@ -11,28 +10,6 @@
 namespace cli {
 
 namespace {
-
-/// Reads a project without taking the write lock, since these commands only read.
-/// @param exitCode Set to exitCantWork, after reporting the problem, when it fails.
-/// @returns The contents, or nothing.
-std::optional<loom::ProjectContents> readProject(const QString& root, bool json, int& exitCode)
-{
-    exitCode = exitCantWork;
-    const loom::OpenedProject project = loom::openProject(root);
-    switch (project.status) {
-    case loom::OpenStatus::Opened: break;
-    case loom::OpenStatus::NotAProject: fail(exitCantWork, QStringLiteral("not-a-project"), project.message, json); return std::nullopt;
-    case loom::OpenStatus::Unreadable: fail(exitCantWork, QStringLiteral("unreadable"), project.message, json); return std::nullopt;
-    case loom::OpenStatus::FormatTooNew: fail(exitCantWork, QStringLiteral("format-too-new"), project.message, json); return std::nullopt;
-    }
-    loom::ContentsLoading loading = loom::loadContents(project.root);
-    if (!loading.ok) {
-        fail(exitCantWork, QStringLiteral("unreadable"), loading.message, json);
-        return std::nullopt;
-    }
-    exitCode = exitDone;
-    return std::move(loading.contents);
-}
 
 /// A status for JSON: its name, or `null` for kinds without one.
 QString jsonStatus(loom::Status status)
@@ -156,12 +133,14 @@ int runGraph(const QStringList& args, const Context& context)
     QStringList proofs;
     for (const loom::ProofNode& proof : graph.proofs) {
         const loom::CheckStanding& standing = proof.checking.standing;
+        // One .arg() call for all ten: a second call would replace a `%1` inside the values the
+        // first put in, such as a hand-edited level, and could break the JSON.
         proofs << QStringLiteral("{\"id\": %1, \"proves\": %2, \"premises\": %3, \"level\": %4, \"fingerprint\": %5, \"checked\": %6, "
                                  "\"supports\": %7, \"gives\": %8, \"counting_agent_check\": %9, \"counting_dakota_check\": %10}")
                       .arg(jsonString(proof.id), jsonString(proof.proves), jsonStringArray(proof.premises), jsonOptional(proof.level),
                            jsonOptional(proof.checking.fingerprint), jsonBool(standing.checked), jsonBool(standing.supports),
-                           jsonString(loom::givesName(proof.gives)), jsonIndex(standing.countingAgent))
-                      .arg(jsonIndex(standing.countingDakota));
+                           jsonString(loom::givesName(proof.gives)), jsonIndex(standing.countingAgent),
+                           jsonIndex(standing.countingDakota));
     }
     const auto edges = [](const std::vector<std::pair<QString, QString>>& list) {
         QStringList out;
