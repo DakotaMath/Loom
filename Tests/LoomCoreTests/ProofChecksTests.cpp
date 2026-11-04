@@ -254,7 +254,7 @@ TEST_CASE("Edits that would outdate checks need Dakota's confirmation", "[proof-
         CHECK(result.message == refusal.arg("4KX7"));
         CHECK(project.read("Statements/4KX7.tex") == statementBefore);
 
-        edit.outdateChecks = true;
+        edit.outdateChecks = QStringList{"4KX7.a"};
         result = loom::editStatement(project.root, "4KX7", edit, at(5));
         CHECK(result.outcome == loom::ChangeOutcome::Done);
         CHECK(result.outdatedChecks == QStringList{"4KX7.a"});

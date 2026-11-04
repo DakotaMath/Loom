@@ -34,13 +34,28 @@ QString listed(const QStringList& items)
     return items.first(items.size() - 1).join(u", ") + QStringLiteral(" and ") + items.last();
 }
 
+/// The refusal of a change that needs one of Dakota's clicks he hasn't given.
+/// @param what What only Dakota can do, e.g. `mark a proof failed`.
+ChangeResult dakotaOnly(const QString& what)
+{
+    return refused(QStringLiteral("dakota-only"), QStringLiteral("Only Dakota can %1, and only at a terminal.").arg(what));
+}
+
 /// Writes `bytes` to `path` if, with the file's contents replaced by `changed`, the project has no
-/// error it didn't have before, and the change outdates no checked proof's checks unless
-/// `outdateChecks` (Specs/m1-core.md, "Statements": editing text in a checked proof's fingerprint
-/// needs Dakota's confirmation, and the refusal names the proofs).
-/// @param what For the refusal: `create the statement`, …
+/// error it didn't have before, Dakota has given the click the change needs, if any, and the
+/// change outdates no checked proof's checks but those he confirmed.
+/// Rule (Specs/m1-core.md, "Statements"): editing text in a checked proof's fingerprint needs
+/// Dakota's confirmation, and the refusal names the proofs. His confirmation covers the proofs he
+/// was shown: if the change would now outdate a different set (the project changed between the
+/// question and the confirmed run), it is refused, naming both, so he can be asked again.
+/// The refusals come in that order, so Dakota is asked only about a change the rules allow.
+/// @param what          For the refusal: `create the statement`, …
+/// @param outdateChecks The proofs whose checks Dakota confirmed outdating; none: not confirmed.
+/// @param needsDakota   What only Dakota can do that this change does unconfirmed (e.g. `mark a
+///                      proof failed`); empty when it needs no click or he gave it.
 ChangeResult commit(Session& session, const QString& path, const QByteArray& bytes, const ProjectContents& changed,
-                    const QString& what, ChangeResult result, bool outdateChecks = false)
+                    const QString& what, ChangeResult result, const std::optional<QStringList>& outdateChecks = std::nullopt,
+                    const QString& needsDakota = {})
 {
     const ProjectConfig& config = session.project.config;
     const std::vector<Problem> added = addedErrors(session.problems(config, session.project.problems, session.contents),
@@ -48,6 +63,12 @@ ChangeResult commit(Session& session, const QString& path, const QByteArray& byt
     result.path = path;
     if (!added.empty()) {
         ChangeResult refusal = refusedFor(added, what);
+        refusal.id = result.id;
+        refusal.path = path;
+        return refusal;
+    }
+    if (!needsDakota.isEmpty()) {
+        ChangeResult refusal = dakotaOnly(needsDakota);
         refusal.id = result.id;
         refusal.path = path;
         return refusal;
@@ -64,11 +85,37 @@ ChangeResult commit(Session& session, const QString& path, const QByteArray& byt
                                   one ? QStringLiteral("its checks") : QStringLiteral("their checks"));
         return result;
     }
+    if (outdateChecks
+        && QSet<QString>(result.outdatedChecks.begin(), result.outdatedChecks.end())
+               != QSet<QString>(outdateChecks->begin(), outdateChecks->end())) {
+        const QString now = result.outdatedChecks.isEmpty() ? QStringLiteral("no checks")
+                                                            : QStringLiteral("the checks of ") + listed(result.outdatedChecks);
+        const QString confirmed = outdateChecks->isEmpty() ? QStringLiteral("none, as Dakota confirmed")
+                                                           : QStringLiteral("those of %1 that Dakota confirmed").arg(listed(*outdateChecks));
+        result.outcome = ChangeOutcome::Refused;
+        result.code = QStringLiteral("outdates-checks");
+        result.message = QStringLiteral("Loom didn't %1, because it would now outdate %2, not %3: the project changed in "
+                                        "between. Run the command again to see what it outdates now.")
+                             .arg(what, now, confirmed);
+        return result;
+    }
     const QString error = writeProjectFile(session.project.root, path, bytes);
     if (!error.isEmpty())
         return cantWork(QStringLiteral("write-failed"), error);
     result.outcome = ChangeOutcome::Done;
     return result;
+}
+
+/// The key of the paper a stub belongs to, for messages: the key its `paper.toml` gives, else
+/// (an entry Loom couldn't read) its folder's name. People cite papers by key, and a folder can
+/// disagree with its key until `loom rekey` puts it right.
+QString paperKeyOf(const ProjectContents& contents, const StubFile& stub)
+{
+    for (const PaperFile& paper : contents.papers) {
+        if (paper.folder == stub.paperFolder && !paper.reading.document.key.isEmpty())
+            return paper.reading.document.key;
+    }
+    return stub.paperFolder;
 }
 
 /// Where an ID typed by a person sits in a list of tags: as written, as a forgiving tag, or as
@@ -238,7 +285,7 @@ ChangeResult editStatement(const QString& root, const QString& typed, const Stat
     if (const StubFile* stub = contents.stub(*tag); stub && !contents.statement(*tag))
         return refused(QStringLiteral("ref-unknown"),
             QStringLiteral("%1 is a result from %2, not a statement of this project: its stub is `%3`.")
-                .arg(*tag, stub->paperFolder, stub->path));
+                .arg(*tag, paperKeyOf(contents, *stub), stub->path));
     const StatementFile& file = *contents.statement(*tag);
     if (!file.reading.lossless)
         return notEditable(file.path, file.reading.problems);
@@ -337,7 +384,11 @@ ChangeResult createProof(const QString& root, const NewProof& request, const Cha
     changed.proofs.push_back({path, *tag, proof.id, readProof(bytes, path)});
 
     result.id = proof.id;
-    return commit(*session, path, bytes, changed, QStringLiteral("create the proof"), result);
+    // Recording a dead end is still the `failed` judgement, which is Dakota's (Specs/m1-core.md,
+    // "Checks", verdict `fail`).
+    const bool needsDakota = proof.level == u"failed" && !request.failedConfirmed;
+    return commit(*session, path, bytes, changed, QStringLiteral("create the proof"), result, std::nullopt,
+                  needsDakota ? QStringLiteral("mark a proof failed") : QString());
 }
 
 ChangeResult editProof(const QString& root, const QString& typed, const ProofEdit& edit, const ChangeOptions& options)
@@ -393,7 +444,11 @@ ChangeResult editProof(const QString& root, const QString& typed, const ProofEdi
         if (entry.path == file.path)
             entry.reading = readProof(bytes, file.path);
     }
-    return commit(*session, file.path, bytes, changed, QStringLiteral("change %1").arg(*id), result, edit.outdateChecks);
+    // Setting `failed` is Dakota's click (Specs/m1-core.md, "Checks", verdict `fail`: "Loom doesn't
+    // set `level = "failed"` itself"); keeping it, or leaving it for a repaired proof, isn't.
+    const bool needsDakota = p.level == u"failed" && before.level != u"failed" && !edit.failedConfirmed;
+    return commit(*session, file.path, bytes, changed, QStringLiteral("change %1").arg(*id), result, edit.outdateChecks,
+                  needsDakota ? QStringLiteral("mark a proof failed") : QString());
 }
 
 CheckAdded addCheck(const QString& root, const QString& typed, const NewCheck& request, bool dakotaConfirmed,
@@ -489,24 +544,15 @@ CheckAdded addCheck(const QString& root, const QString& typed, const NewCheck& r
     return added;
 }
 
-ChangeResult refuteStatement(const QString& root, const QString& typed, const QString& typedProof, bool dakotaConfirmed,
-                             const ChangeOptions& options)
+ChangeResult checkRefutation(const ProjectContents& contents, const QString& typed, const QString& typedProof)
 {
-    ChangeResult result;
-    std::optional<Session> session = begin(root, options, result);
-    if (!session)
-        return result;
-    const ProjectContents& contents = session->contents;
-
-    if (!dakotaConfirmed)
-        return refused(QStringLiteral("dakota-only"), QStringLiteral("Only Dakota can refute a statement, and only at a terminal."));
     const std::optional<QString> tag = resolveStatement(contents, typed);
     if (!tag)
         return refused(QStringLiteral("ref-unknown"), QStringLiteral("`%1` isn't a statement in this project.").arg(typed));
     if (const StubFile* stub = contents.stub(*tag); stub && !contents.statement(*tag))
         return refused(QStringLiteral("ref-unknown"),
             QStringLiteral("%1 is a result from %2, cited from the paper; only statements of this project can be refuted.")
-                .arg(*tag, stub->paperFolder));
+                .arg(*tag, paperKeyOf(contents, *stub)));
     const std::optional<QString> proof = resolveProof(contents, typedProof);
     if (!proof)
         return refused(QStringLiteral("ref-unknown"), QStringLiteral("`%1` isn't a proof in this project.").arg(typedProof));
@@ -518,14 +564,39 @@ ChangeResult refuteStatement(const QString& root, const QString& typed, const QS
     const StatementFile& file = *contents.statement(*tag);
     if (!file.reading.lossless)
         return notEditable(file.path, file.reading.problems);
-
-    Statement s = file.reading.document;
+    const Statement& s = file.reading.document;
     if (!s.refutedBy.isEmpty() || s.refutedOn.isValid())
         return refused(QStringLiteral("already-there"),
             QStringLiteral("%1 is already refuted by %2, accepted %3.")
                 .arg(*tag, s.refutedBy.isEmpty() ? QStringLiteral("(no proof)") : s.refutedBy,
                      s.refutedOn.isValid() ? s.refutedOn.toString(Qt::ISODate) : QStringLiteral("(no date)")));
-    s.refutedBy = *proof;
+
+    ChangeResult result;
+    result.outcome = ChangeOutcome::Done;
+    result.id = *tag;
+    result.path = file.path;
+    return result;
+}
+
+ChangeResult refuteStatement(const QString& root, const QString& typed, const QString& typedProof, bool dakotaConfirmed,
+                             const ChangeOptions& options)
+{
+    ChangeResult result;
+    std::optional<Session> session = begin(root, options, result);
+    if (!session)
+        return result;
+    const ProjectContents& contents = session->contents;
+
+    if (!dakotaConfirmed)
+        return dakotaOnly(QStringLiteral("refute a statement"));
+    const ChangeResult checked = checkRefutation(contents, typed, typedProof);
+    if (checked.outcome != ChangeOutcome::Done)
+        return checked;
+    const QString& tag = checked.id;
+    const StatementFile& file = *contents.statement(tag);
+
+    Statement s = file.reading.document;
+    s.refutedBy = *resolveProof(contents, typedProof); // checkRefutation() resolved it.
     s.refutedOn = options.today;
 
     const QByteArray bytes = formatStatement(s);
@@ -534,9 +605,9 @@ ChangeResult refuteStatement(const QString& root, const QString& typed, const QS
         if (entry.path == file.path)
             entry.reading = readStatement(bytes, file.path);
     }
-    result.id = *tag;
+    result.id = tag;
     result.changed = QStringList{QStringLiteral("refuted_by"), QStringLiteral("refuted_on")};
-    return commit(*session, file.path, bytes, changed, QStringLiteral("refute %1").arg(*tag), result);
+    return commit(*session, file.path, bytes, changed, QStringLiteral("refute %1").arg(tag), result);
 }
 
 } // namespace loom

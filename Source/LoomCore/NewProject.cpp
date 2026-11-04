@@ -86,12 +86,21 @@ NewProjectResult createProject(const NewProjectRequest& request)
     GitTool git = request.git;
     git.environment = gitEnvironment(git.environment);
     const QString runIn = info.exists() ? path : parent;
-    if (!runGit(git, {QStringLiteral("--version")}, runIn).ok())
-        return failure(NewProjectOutcome::CantWork, "git-missing",
-            QStringLiteral("Loom needs git, and `git` didn't run. Install Git for Windows and try again."), path);
-    if (!runGit(git, {QStringLiteral("lfs"), QStringLiteral("version")}, runIn).ok())
-        return failure(NewProjectOutcome::CantWork, "git-lfs-missing",
-            QStringLiteral("Loom needs Git LFS, and `git lfs` didn't run. Git for Windows includes it; reinstall Git with LFS ticked."), path);
+    // A git that didn't finish in time is stuck, not missing, and says so; it must never pass for
+    // "not set" either (core.hooksPath below).
+    const auto timedOut = [&](const GitRun& run, const QStringList& arguments) {
+        return failure(NewProjectOutcome::CantWork, "git-timeout", gitDidntRunMessage(run, arguments), path);
+    };
+    const QStringList version = {QStringLiteral("--version")};
+    if (const GitRun run = runGit(git, version, runIn); !run.ok())
+        return run.timedOut ? timedOut(run, version)
+                            : failure(NewProjectOutcome::CantWork, "git-missing", gitDidntRunMessage(run, version), path);
+    const QStringList lfsVersion = {QStringLiteral("lfs"), QStringLiteral("version")};
+    if (const GitRun run = runGit(git, lfsVersion, runIn); !run.ok())
+        return run.timedOut ? timedOut(run, lfsVersion)
+                            : failure(NewProjectOutcome::CantWork, "git-lfs-missing",
+                                  QStringLiteral("Loom needs Git LFS, and `git lfs` didn't run. Git for Windows includes it; "
+                                                 "reinstall Git with LFS ticked."), path);
 
     // Ask for the identity the new repository will see: pointing GIT_DIR at its (not yet
     // existing) .git folder makes git read the system and global config only, never the config
@@ -99,7 +108,10 @@ NewProjectResult createProject(const NewProjectRequest& request)
     GitTool identityGit = git;
     identityGit.environment.insert(QStringLiteral("GIT_DIR"), path + QStringLiteral("/.git"));
     for (const char* key : {"user.name", "user.email"}) {
-        const GitRun run = runGit(identityGit, {QStringLiteral("config"), QStringLiteral("--get"), QString::fromLatin1(key)}, runIn);
+        const QStringList get = {QStringLiteral("config"), QStringLiteral("--get"), QString::fromLatin1(key)};
+        const GitRun run = runGit(identityGit, get, runIn);
+        if (run.timedOut)
+            return timedOut(run, get);
         if (!run.ok() || run.output.trimmed().isEmpty())
             return failure(NewProjectOutcome::CantWork, "git-identity-missing",
                 QStringLiteral("Git doesn't know your name and email yet, so Loom can't make the first commit. "
@@ -108,10 +120,19 @@ NewProjectResult createProject(const NewProjectRequest& request)
 
     // A1: with core.hooksPath in the global (or system) config, `git lfs install --local` and the
     // commit guard would both write their hooks into that folder, which other repositories share.
-    const GitRun hooksPath = runGit(identityGit, {QStringLiteral("config"), QStringLiteral("--get"), QStringLiteral("--type=path"),
-                                                  QStringLiteral("core.hooksPath")}, runIn);
+    // install-hooks' message can't serve here: its way out (`git config --local …` in the
+    // repository) needs a repository, and there isn't one yet.
+    const QStringList getHooksPath = {QStringLiteral("config"), QStringLiteral("--get"), QStringLiteral("--type=path"),
+                                      QStringLiteral("core.hooksPath")};
+    const GitRun hooksPath = runGit(identityGit, getHooksPath, runIn);
+    if (hooksPath.timedOut)
+        return timedOut(hooksPath, getHooksPath);
     if (hooksPath.ok() && !hooksPath.output.trimmed().isEmpty())
-        return failure(NewProjectOutcome::CantWork, "hooks-path-outside", hooksPathOutsideMessage(hooksPath.output.trimmed()), path);
+        return failure(NewProjectOutcome::CantWork, "hooks-path-outside",
+            QStringLiteral("Git runs hooks from `%1` (`core.hooksPath` in your global git config), so a new project's commit "
+                           "guard and Git LFS hooks would go there. Unset it with `git config --global --unset "
+                           "core.hooksPath`, then try again.")
+                .arg(QDir::toNativeSeparators(hooksPath.output.trimmed())), path);
 
     const std::vector<std::pair<QString, QByteArray>> kit = readKit();
     if (kit.empty())
@@ -158,7 +179,9 @@ NewProjectResult createProject(const NewProjectRequest& request)
         while (why.endsWith(u'.'))
             why.chop(1);
         if (why.isEmpty())
-            why = run.started ? QStringLiteral("it exited with code %1").arg(run.exitCode) : QStringLiteral("it didn't run");
+            why = run.started    ? QStringLiteral("it exited with code %1").arg(run.exitCode)
+                : run.timedOut ? QStringLiteral("it didn't finish in time")
+                               : QStringLiteral("it didn't run");
         const QString command = step.first() == u"commit" ? QStringLiteral("git commit") : QStringLiteral("git ") + step.join(u' ');
         return failure(NewProjectOutcome::CantWork, "git-failed",
             QStringLiteral("Loom wrote the project files, but `%1` failed: %2.").arg(command, why) + leftInPlace, path);

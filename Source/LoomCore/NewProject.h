@@ -42,7 +42,7 @@ struct NewProjectResult {
     /// A stable code for `--json`: empty when created, else one of `folder-not-empty`,
     /// `not-a-folder`, `parent-missing`, `name-empty`, `git-missing`, `git-lfs-missing`,
     /// `git-identity-missing`, `hooks-path-outside`, `kit-missing`, `write-failed`, `git-failed`,
-    /// `hooks-failed`.
+    /// `hooks-failed`, `git-timeout` (git didn't finish in time).
     QString code;
     /// What went wrong, in plain English; empty when created.
     QString message;

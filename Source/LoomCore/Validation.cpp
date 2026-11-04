@@ -317,12 +317,23 @@ ValidationResult cantWork(const char* code, const QString& message)
     return result;
 }
 
+/// The failure when git didn't run (`git-missing`) or didn't finish in time (`git-timeout`).
+/// @param arguments The command's arguments, to name it. No side effects.
+ValidationResult gitDidntRun(const GitRun& run, const QStringList& arguments)
+{
+    ValidationResult result = cantWork("git-missing", gitDidntRunMessage(run, arguments));
+    result.code = gitDidntRunCode(run, result.code);
+    return result;
+}
+
 /// Why git failed, for a message: its stderr's first line, else its exit code.
 QString whyGitFailed(const GitRun& run)
 {
     QString why = run.errors.trimmed().section(u'\n', 0, 0);
     while (why.endsWith(u'.'))
         why.chop(1);
+    if (run.timedOut)
+        return QStringLiteral("it didn't finish in time");
     return why.isEmpty() ? QStringLiteral("it exited with code %1").arg(run.exitCode) : why;
 }
 
@@ -330,9 +341,10 @@ QString whyGitFailed(const GitRun& run)
 /// @returns An empty result on success, else the failure. Side effects: runs git; writes files.
 std::optional<ValidationResult> copyIndex(const GitTool& git, const QString& root, const QString& folder)
 {
-    const GitRun listing = runGit(git, {QStringLiteral("ls-files"), QStringLiteral("--stage"), QStringLiteral("-z")}, root);
+    const QStringList list = {QStringLiteral("ls-files"), QStringLiteral("--stage"), QStringLiteral("-z")};
+    const GitRun listing = runGit(git, list, root);
     if (!listing.started)
-        return cantWork("git-missing", QStringLiteral("Loom needs git, and `git` didn't run. Install Git for Windows and try again."));
+        return gitDidntRun(listing, list);
     if (!listing.ok())
         return cantWork("not-a-repository",
             QStringLiteral("`loom validate --staged` checks what git has staged, but `%1` isn't a git repository (%2).")
@@ -389,19 +401,21 @@ std::optional<ValidationResult> readCommit(const GitTool& git, const QString& ro
     // In English, whatever the user's locale, so that "not a git repository" can be recognised.
     GitTool english = git;
     english.environment.insert(QStringLiteral("LC_ALL"), QStringLiteral("C"));
-    const GitRun repository = runGit(english, {QStringLiteral("rev-parse"), QStringLiteral("--git-dir")}, root);
+    const QStringList gitDir = {QStringLiteral("rev-parse"), QStringLiteral("--git-dir")};
+    const GitRun repository = runGit(english, gitDir, root);
     if (!repository.started)
-        return cantWork("git-missing", QStringLiteral("Loom needs git, and `git` didn't run. Install Git for Windows and try again."));
+        return gitDidntRun(repository, gitDir);
     if (!repository.ok()) {
         if (repository.errors.contains(u"not a git repository"))
             return std::nullopt;
         return commitUnreadable(QStringLiteral("git rev-parse --git-dir"), repository);
     }
 
-    const GitRun head = runGit(git, {QStringLiteral("rev-parse"), QStringLiteral("--verify"), QStringLiteral("--quiet"),
-                                     QStringLiteral("HEAD^{commit}")}, root);
+    const QStringList verifyHead = {QStringLiteral("rev-parse"), QStringLiteral("--verify"), QStringLiteral("--quiet"),
+                                    QStringLiteral("HEAD^{commit}")};
+    const GitRun head = runGit(git, verifyHead, root);
     if (!head.started)
-        return cantWork("git-missing", QStringLiteral("Loom needs git, and `git` didn't run. Install Git for Windows and try again."));
+        return gitDidntRun(head, verifyHead);
     if (!head.ok()) {
         if (head.exitCode == 1 && head.errors.trimmed().isEmpty())
             return std::nullopt; // No commit yet: the first commit through the hook.

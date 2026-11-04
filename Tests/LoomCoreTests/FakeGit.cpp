@@ -6,14 +6,18 @@
 //               fatal error (exit 128), as for a damaged repository.
 //   dubious     Every `git rev-parse` fails as git does in a repository it refuses to use
 //               ("dubious ownership", exit 128).
+//   slow        Every command but `--version` waits 30 seconds before doing anything, as a git
+//               stuck on a lock or a slow network drive does; for timeouts.
 // Everything else succeeds and does nothing; `git config --get` prints a made-up value, except
 // for `core.hooksPath`, which is unset (exit 1, as git gives for a key that isn't set).
 
 #include <QString>
 #include <QtGlobal>
 
+#include <chrono>
 #include <iostream>
 #include <string>
+#include <thread>
 #include <vector>
 
 /// Runs the stand-in.
@@ -25,6 +29,8 @@ int main(int argc, char* argv[])
     const QString mode = qEnvironmentVariable("LOOM_FAKE_GIT_MODE");
     const std::vector<std::string> args(argv + 1, argv + argc);
     const std::string command = args.empty() ? std::string() : args[0];
+    if (mode == u"slow" && command != "--version")
+        std::this_thread::sleep_for(std::chrono::seconds(30));
 
     if (command == "--version") {
         std::cout << "git version 0.0.0.fake\n";

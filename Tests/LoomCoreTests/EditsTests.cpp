@@ -1,17 +1,22 @@
 // Creating and changing statements, proofs and tags (Specs/m1-core.md, "The `loom` command":
-// new-tag, new-statement, edit-statement, new-proof, edit-proof).
+// new-tag, new-statement, edit-statement, new-proof, edit-proof), and the parts of Dakota's
+// clicks the edits take: the proofs he confirmed outdating, `failed`, and refute's early checks.
 
 #include "LoomCore/Edits.h"
 
 #include "LoomCore/Ids.h"
+#include "LoomCore/ProjectContents.h"
 #include "LoomCore/ProjectToml.h"
+#include "LoomCore/ProofChecks.h"
 #include "LoomCore/StatementsAndProofs.h"
 
+#include "PaperFixture.h"
 #include "ProjectFixture.h"
 
 #include <QDir>
 #include <QFileInfo>
 #include <QLockFile>
+#include <QTimeZone>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -36,6 +41,38 @@ QString firstTag()
 {
     QRandomGenerator random(20261103);
     return *loom::generateTag([](const QString&) { return false; }, random);
+}
+
+/// Change options at a fixed time, 2026-11-04 10:12:44 Central, plus `minutes`, so checks
+/// added one after another keep their order.
+loom::ChangeOptions at(int minutes)
+{
+    loom::ChangeOptions options;
+    options.today = QDate(2026, 11, 4);
+    options.now = QDateTime(QDate(2026, 11, 4), QTime(10, 12, 44), QTimeZone::fromSecondsAheadOfUtc(-6 * 3600)).addSecs(minutes * 60);
+    return options;
+}
+
+/// What `id`'s checks say, as the project is now.
+loom::CheckStanding standing(const ProjectFixture& project, const QString& id)
+{
+    return loom::proofChecking(loom::loadContents(project.root).contents, id).standing;
+}
+
+/// Makes `id` checked: an agent's pass at `minutes`, then Dakota's (confirmed) a minute later.
+/// Side effects: writes the proof's check history; fails the test if either check is refused.
+void makeChecked(const ProjectFixture& project, const QString& id, int minutes)
+{
+    loom::NewCheck agent;
+    agent.by = "agent:claude-opus-5-5";
+    agent.verdict = "pass";
+    agent.fingerprint = loom::proofFingerprint(loom::loadContents(project.root).contents, id).value_or(QString());
+    agent.record = "Records/2026-11/job-0142.md";
+    REQUIRE(loom::addCheck(project.root, id, agent, false, at(minutes)).change.outcome == loom::ChangeOutcome::Done);
+    loom::NewCheck dakota;
+    dakota.by = "dakota";
+    dakota.verdict = "pass";
+    REQUIRE(loom::addCheck(project.root, id, dakota, true, at(minutes + 1)).standing.checked);
 }
 
 /// A statement request that is fine in ProjectFixture.
@@ -391,6 +428,231 @@ TEST_CASE("edit-proof refusals", "[edits]")
         CHECK(result.message == "`4KX7.b` isn't a proof in this project.");
     }
     CHECK(project.read("Proofs/4KX7/4KX7.a.tex") == before);
+}
+
+TEST_CASE("Dakota's --outdate-checks covers only the proofs he confirmed", "[edits][dakota]")
+{
+    // Dakota is shown the proofs an edit would outdate and confirms them; the confirmed edit runs
+    // later, after the project may have changed (Specs/m1-core.md, "Statements").
+    const ProjectFixture project;
+    project.statement("4KX7", "theorem");
+    project.statement("6BWT", "theorem");
+    project.statement("5HN8", "lemma");
+    project.proof("4KX7", "4KX7.a", "4KX7", "[\"5HN8\"]");
+    project.proof("6BWT", "6BWT.a", "6BWT", "[\"5HN8\"]");
+    makeChecked(project, "4KX7.a", 0);
+    const QByteArray before = project.read("Statements/5HN8.tex");
+
+    loom::StatementEdit edit;
+    edit.body = "A weaker lemma.";
+    const loom::ChangeResult shown = loom::editStatement(project.root, "5HN8", edit, at(5));
+    REQUIRE(shown.code == "outdates-checks");
+    REQUIRE(shown.outdatedChecks == QStringList{"4KX7.a"});
+
+    // Between the question and the confirmed run, 6BWT.a becomes checked too.
+    makeChecked(project, "6BWT.a", 6);
+    edit.outdateChecks = shown.outdatedChecks;
+    const loom::ChangeResult confirmed = loom::editStatement(project.root, "5HN8", edit, at(10));
+    CHECK(confirmed.outcome == loom::ChangeOutcome::Refused);
+    CHECK(confirmed.code == "outdates-checks");
+    CHECK(confirmed.outdatedChecks == QStringList{"4KX7.a", "6BWT.a"});
+    CHECK(confirmed.message
+          == "Loom didn't change 5HN8, because it would now outdate the checks of 4KX7.a and 6BWT.a, not those of 4KX7.a "
+             "that Dakota confirmed: the project changed in between. Run the command again to see what it outdates now.");
+    CHECK(project.read("Statements/5HN8.tex") == before);
+    CHECK(standing(project, "6BWT.a").checked);
+
+    SECTION("confirming the set it outdates now")
+    {
+        edit.outdateChecks = confirmed.outdatedChecks;
+        const loom::ChangeResult done = loom::editStatement(project.root, "5HN8", edit, at(11));
+        CHECK(done.outcome == loom::ChangeOutcome::Done);
+        CHECK(done.outdatedChecks == QStringList{"4KX7.a", "6BWT.a"});
+        CHECK_FALSE(standing(project, "6BWT.a").checked);
+    }
+    SECTION("a confirmed proof it no longer outdates is refused too")
+    {
+        edit.outdateChecks = QStringList{"4KX7.a", "6BWT.a", "9D3F.a"};
+        CHECK(loom::editStatement(project.root, "5HN8", edit, at(11)).code == "outdates-checks");
+        CHECK(project.read("Statements/5HN8.tex") == before);
+    }
+    SECTION("the same for a proof's body")
+    {
+        loom::ProofEdit proofEdit;
+        proofEdit.body = "A different proof.";
+        proofEdit.outdateChecks = QStringList{};
+        const loom::ChangeResult refused = loom::editProof(project.root, "6BWT.a", proofEdit, at(11));
+        CHECK(refused.code == "outdates-checks");
+        CHECK(refused.outdatedChecks == QStringList{"6BWT.a"});
+        proofEdit.outdateChecks = refused.outdatedChecks;
+        CHECK(loom::editProof(project.root, "6BWT.a", proofEdit, at(12)).outcome == loom::ChangeOutcome::Done);
+    }
+}
+
+TEST_CASE("Setting a proof's level to failed is Dakota's click", "[edits][dakota]")
+{
+    // Specs/m1-core.md, "Checks", verdict `fail`: "Loom doesn't set `level = \"failed\"` itself;
+    // that's Dakota's click".
+    const ProjectFixture project;
+    project.statement("4KX7", "theorem");
+    project.proof("4KX7", "4KX7.a", "4KX7", "[]");
+    const QByteArray before = project.read("Proofs/4KX7/4KX7.a.tex");
+    Options o;
+    const QString refusal = "Only Dakota can mark a proof failed, and only at a terminal.";
+
+    SECTION("edit-proof")
+    {
+        loom::ProofEdit edit;
+        edit.level = "failed";
+        const loom::ChangeResult refused = loom::editProof(project.root, "4KX7.a", edit, o.options);
+        CHECK(refused.outcome == loom::ChangeOutcome::Refused);
+        CHECK(refused.code == "dakota-only");
+        CHECK(refused.message == refusal);
+        CHECK(project.read("Proofs/4KX7/4KX7.a.tex") == before);
+
+        edit.failedConfirmed = true;
+        const loom::ChangeResult done = loom::editProof(project.root, "4KX7.a", edit, o.options);
+        REQUIRE(done.outcome == loom::ChangeOutcome::Done);
+        CHECK(done.changed == QStringList{"level"});
+
+        // Already failed: nothing to confirm. Leaving `failed` isn't a click either.
+        loom::ProofEdit again;
+        again.level = "failed";
+        CHECK(loom::editProof(project.root, "4KX7.a", again, o.options).outcome == loom::ChangeOutcome::Done);
+        loom::ProofEdit repaired;
+        repaired.level = "sketch";
+        CHECK(loom::editProof(project.root, "4KX7.a", repaired, o.options).outcome == loom::ChangeOutcome::Done);
+    }
+    SECTION("a rule's refusal comes before Dakota is asked")
+    {
+        loom::ProofEdit edit;
+        edit.level = "failed";
+        edit.addPremises = {"4KX7"};
+        CHECK(loom::editProof(project.root, "4KX7.a", edit, o.options).code == "premise-self");
+    }
+    SECTION("new-proof")
+    {
+        loom::NewProof request;
+        request.statement = "4KX7";
+        request.level = "failed";
+        request.body = "Tried the energy method; the boundary term has the wrong sign.";
+        const loom::ChangeResult refused = loom::createProof(project.root, request, o.options);
+        CHECK(refused.outcome == loom::ChangeOutcome::Refused);
+        CHECK(refused.code == "dakota-only");
+        CHECK(refused.message == refusal);
+        CHECK_FALSE(QFileInfo::exists(project.root + "/Proofs/4KX7/4KX7.b.tex"));
+
+        request.failedConfirmed = true;
+        const loom::ChangeResult done = loom::createProof(project.root, request, o.options);
+        REQUIRE(done.outcome == loom::ChangeOutcome::Done);
+        CHECK(done.id == "4KX7.b");
+    }
+}
+
+TEST_CASE("Edits refuse a premise cycle, a stub, an empty title and a superseded_by that names nothing", "[edits]")
+{
+    const ProjectFixture project;
+    project.statement("4KX7", "theorem");
+    project.statement("5HN8", "lemma");
+    project.statement("6BWT", "theorem");
+    project.proof("4KX7", "4KX7.a", "4KX7", "[\"5HN8\"]");
+    project.proof("5HN8", "5HN8.a", "5HN8", "[]");
+    // The paper's folder isn't its key, so a message that names the folder shows.
+    project.write("Papers/OldName/paper.toml", loomtest::smithJones24());
+    project.write("Papers/OldName/Statements/7RT2.toml", loomtest::stubToml("7RT2", "theorem", true));
+    Options o;
+
+    SECTION("edit-proof: a premise that closes a cycle")
+    {
+        const QByteArray before = project.read("Proofs/5HN8/5HN8.a.tex");
+        loom::ProofEdit edit;
+        edit.addPremises = {"4KX7"};
+        const loom::ChangeResult result = loom::editProof(project.root, "5HN8.a", edit, o.options);
+        CHECK(result.outcome == loom::ChangeOutcome::Refused);
+        CHECK(result.code == "premise-cycle");
+        CHECK(project.read("Proofs/5HN8/5HN8.a.tex") == before);
+    }
+    SECTION("new-proof: a premise that closes a cycle")
+    {
+        loom::NewProof request;
+        request.statement = "5HN8";
+        request.level = "complete";
+        request.body = "From the theorem.";
+        request.premises = {"4KX7"};
+        CHECK(loom::createProof(project.root, request, o.options).code == "premise-cycle");
+        CHECK_FALSE(QFileInfo::exists(project.root + "/Proofs/5HN8/5HN8.b.tex"));
+    }
+    SECTION("a proof of a paper stub")
+    {
+        loom::NewProof request;
+        request.statement = "7RT2";
+        request.level = "complete";
+        request.body = "Proof.";
+        const loom::ChangeResult result = loom::createProof(project.root, request, o.options);
+        CHECK(result.outcome == loom::ChangeOutcome::Refused);
+        CHECK(result.code == "proof-of-stub");
+        CHECK_FALSE(QFileInfo::exists(project.root + "/Proofs/7RT2"));
+    }
+    SECTION("a paper stub as a premise is fine")
+    {
+        loom::NewProof request;
+        request.statement = "6BWT";
+        request.level = "complete";
+        request.body = "By the paper's theorem.";
+        request.premises = {"7rt2"};
+        const loom::ChangeResult result = loom::createProof(project.root, request, o.options);
+        CHECK(result.outcome == loom::ChangeOutcome::Done);
+        CHECK(project.read("Proofs/6BWT/6BWT.a.tex").contains("\npremises = [\"7RT2\"]\n"));
+    }
+    SECTION("an empty title")
+    {
+        const QByteArray before = project.read("Statements/5HN8.tex");
+        loom::StatementEdit edit;
+        edit.title = "";
+        CHECK(loom::editStatement(project.root, "5HN8", edit, o.options).code == "missing-field");
+        CHECK(project.read("Statements/5HN8.tex") == before);
+    }
+    SECTION("editing a paper stub names its paper by key")
+    {
+        loom::StatementEdit edit;
+        edit.title = "X";
+        const loom::ChangeResult result = loom::editStatement(project.root, "7RT2", edit, o.options);
+        CHECK(result.code == "ref-unknown");
+        CHECK(result.message == "7RT2 is a result from SmithJones24, not a statement of this project: its stub is "
+                                "`Papers/OldName/Statements/7RT2.toml`.");
+    }
+    SECTION("refuting a paper stub names its paper by key")
+    {
+        const loom::ChangeResult result = loom::refuteStatement(project.root, "7RT2", "4KX7.a", true, o.options);
+        CHECK(result.code == "ref-unknown");
+        CHECK(result.message == "7RT2 is a result from SmithJones24, cited from the paper; only statements of this "
+                                "project can be refuted.");
+    }
+    SECTION("superseded_by")
+    {
+        loom::StatementEdit edit;
+        edit.supersededBy = "zzzz";
+        CHECK(loom::editStatement(project.root, "5HN8", edit, o.options).code == "ref-unknown");
+        edit.supersededBy = "6bwt";
+        const loom::ChangeResult done = loom::editStatement(project.root, "5HN8", edit, o.options);
+        REQUIRE(done.outcome == loom::ChangeOutcome::Done);
+        CHECK(done.changed == QStringList{"superseded_by"});
+        CHECK(project.read("Statements/5HN8.tex").contains("\nsuperseded_by = \"6BWT\"\n"));
+    }
+}
+
+TEST_CASE("refute's checks can run before Dakota is asked", "[edits][dakota]")
+{
+    const ProjectFixture project;
+    project.statement("G5TZ", "proposition");
+    project.proof("G5TZ", "G5TZ.a", "G5TZ", "[]");
+    project.statement("F2NS", "lemma");
+    const loom::ProjectContents contents = loom::loadContents(project.root).contents;
+
+    CHECK(loom::checkRefutation(contents, "f2ns", "g5tz.A").outcome == loom::ChangeOutcome::Done);
+    CHECK(loom::checkRefutation(contents, "ZZZZ", "G5TZ.a").code == "ref-unknown");
+    CHECK(loom::checkRefutation(contents, "F2NS", "G5TZ.b").code == "ref-unknown");
+    CHECK(loom::checkRefutation(contents, "G5TZ", "G5TZ.a").code == "refuted-self");
 }
 
 TEST_CASE("new-tag adds a [[tags]] table and keeps the rest of loom.toml", "[edits]")
