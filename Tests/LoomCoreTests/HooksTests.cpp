@@ -41,13 +41,17 @@ struct Repository {
 
 TEST_CASE("the pre-commit hook runs loom validate --staged, from PATH or where loom was", "[hooks]")
 {
-    const QByteArray hook = loom::preCommitHook("C:\\Program Files\\Loom's\\loom.exe");
+    const QByteArray hook = loom::preCommitHook("/opt/Loom's tools/loom");
     CHECK(hook.startsWith("#!/bin/sh\n"));
     CHECK(loom::isLoomHook(hook));
     CHECK_FALSE(hook.contains('\r'));
     CHECK(hook.contains("exec loom validate --staged\n"));
-    // Git's sh reads `C:/…`; a quote in the path is closed, escaped and reopened.
-    CHECK(hook.contains("loom='C:/Program Files/Loom'\\''s/loom.exe'\n"));
+    // A quote in the path is closed, escaped and reopened.
+    CHECK(hook.contains("loom='/opt/Loom'\\''s tools/loom'\n"));
+#ifdef Q_OS_WIN
+    // Git's sh reads `C:/…`; `\` is a separator only on Windows, so only there is it turned into `/`.
+    CHECK(loom::preCommitHook("C:\\Program Files\\Loom\\loom.exe").contains("loom='C:/Program Files/Loom/loom.exe'\n"));
+#endif
     CHECK(hook.contains("exec \"$loom\" validate --staged\n"));
     CHECK(hook.contains("Loom's checks couldn't run because \\`loom\\` wasn't found. Put Loom on PATH, or run \\`loom install-hooks\\` again."));
     CHECK(hook.endsWith("exit 1\n"));
