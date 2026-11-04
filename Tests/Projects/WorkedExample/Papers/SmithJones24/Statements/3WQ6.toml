@@ -1,0 +1,9 @@
+id = "3WQ6"
+kind = "lemma"
+gist = "The energy is non-increasing along weak solutions"
+extracted_from = "arxiv-v1"
+extracted_by = "agent:claude-opus-5-5"
+created = 2026-10-18
+
+[locators]
+arxiv-v1 = { at = "Lemma 2.1, p. 7", checked_against_pdf = false }

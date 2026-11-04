@@ -489,4 +489,49 @@ CheckAdded addCheck(const QString& root, const QString& typed, const NewCheck& r
     return added;
 }
 
+ChangeResult refuteStatement(const QString& root, const QString& typed, const QString& typedProof, bool dakotaConfirmed,
+                             const ChangeOptions& options)
+{
+    ChangeResult result;
+    std::optional<Session> session = begin(root, options, result);
+    if (!session)
+        return result;
+    const ProjectContents& contents = session->contents;
+
+    if (!dakotaConfirmed)
+        return refused(QStringLiteral("dakota-only"), QStringLiteral("Only Dakota can refute a statement, and only at a terminal."));
+    const std::optional<QString> tag = resolveStatement(contents, typed);
+    if (!tag)
+        return refused(QStringLiteral("ref-unknown"), QStringLiteral("`%1` isn't a statement in this project.").arg(typed));
+    if (const StubFile* stub = contents.stub(*tag); stub && !contents.statement(*tag))
+        return refused(QStringLiteral("ref-unknown"),
+            QStringLiteral("%1 is a result from %2, cited from the paper; only statements of this project can be refuted.")
+                .arg(*tag, stub->paperFolder));
+    const std::optional<QString> proof = resolveProof(contents, typedProof);
+    if (!proof)
+        return refused(QStringLiteral("ref-unknown"), QStringLiteral("`%1` isn't a proof in this project.").arg(typedProof));
+    const StatementFile& file = *contents.statement(*tag);
+    if (!file.reading.lossless)
+        return notEditable(file.path, file.reading.problems);
+
+    Statement s = file.reading.document;
+    if (!s.refutedBy.isEmpty() || s.refutedOn.isValid())
+        return refused(QStringLiteral("already-there"),
+            QStringLiteral("%1 is already refuted by %2, accepted %3.")
+                .arg(*tag, s.refutedBy.isEmpty() ? QStringLiteral("(no proof)") : s.refutedBy,
+                     s.refutedOn.isValid() ? s.refutedOn.toString(Qt::ISODate) : QStringLiteral("(no date)")));
+    s.refutedBy = *proof;
+    s.refutedOn = options.today;
+
+    const QByteArray bytes = formatStatement(s);
+    ProjectContents changed = contents;
+    for (StatementFile& entry : changed.statements) {
+        if (entry.path == file.path)
+            entry.reading = readStatement(bytes, file.path);
+    }
+    result.id = *tag;
+    result.changed = QStringList{QStringLiteral("refuted_by"), QStringLiteral("refuted_on")};
+    return commit(*session, file.path, bytes, changed, QStringLiteral("refute %1").arg(*tag), result);
+}
+
 } // namespace loom

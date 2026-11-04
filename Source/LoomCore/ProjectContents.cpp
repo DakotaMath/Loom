@@ -4,6 +4,7 @@
 #include "LoomCore/Ids.h"
 #include "LoomCore/PaperKeys.h"
 #include "LoomCore/ProjectFiles.h"
+#include "LoomCore/Status.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -323,9 +324,24 @@ struct ContentsChecker {
         }
     }
 
-    /// `stated_using` and `superseded_by` mustn't go round in a circle.
+    /// `stated_using`, `superseded_by` and premises mustn't go round in a circle.
     void circles()
     {
+        // Premises (Specs/m1-core.md, "Cycles"): reported on the first proof, in path order, of
+        // the cycle's first statement that lists the next one.
+        for (const QStringList& cycle : premiseCycles(contents)) {
+            for (const ProofFile& file : contents.proofs) {
+                if (file.folder != cycle[0] || !file.reading.parsed)
+                    continue;
+                const qsizetype element = file.reading.document.premises.indexOf(cycle[1]);
+                if (element < 0)
+                    continue;
+                add("premise-cycle", file.path, file.reading.lines.of(QStringLiteral("premises"), element),
+                    QStringLiteral("Premises go round in a circle: %1. A statement can't help prove itself.").arg(cycle.join(u" → ")));
+                break;
+            }
+        }
+
         QMap<QString, QStringList> statedUsing;
         QMap<QString, QStringList> supersededBy;
         for (const Node& n : nodeByTag) {

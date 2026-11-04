@@ -8,6 +8,8 @@ add_executable(loom
     PaperCommands.h
     StatementCommands.cpp
     StatementCommands.h
+    StatusCommands.cpp
+    StatusCommands.h
     main.cpp)
 target_link_libraries(loom PRIVATE LoomCore)
 loom_set_compiler_options(loom)

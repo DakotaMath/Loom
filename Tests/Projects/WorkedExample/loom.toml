@@ -1,0 +1,14 @@
+format = 1
+name = "Worked example"
+idea = """
+The worked example of Specs/m1-core.md: one statement for each way a status can come about.
+"""
+created = 2026-11-03
+
+[tex]
+preamble = ["TeX/preamble.tex"]
+
+[[tags]]
+id = "model-system"
+kind = "equation"
+title = "The model system"

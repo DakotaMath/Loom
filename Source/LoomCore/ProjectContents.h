@@ -118,12 +118,12 @@ ContentsLoading loadContents(const QString& root);
 /// the listing's, and those that need several files (`tag-unknown`, `id-syntax` and `ref-alias`
 /// in references, `id-duplicate`, `alias-duplicate`, `ref-unknown`, `stated-using-self`,
 /// `stated-using-cycle`, `superseded-invalid`, `refuted-unknown`, `refuted-no-status`,
-/// `proof-folder-unknown`, `proves-mismatch`, `proof-of-no-status`, `premise-no-status`,
+/// `proof-folder-unknown`, `proves-mismatch`, `proof-of-no-status`, `premise-no-status`, `premise-cycle`,
 /// `verbose-orphan`, `checks-orphan`), with each check history's own problems; and for papers
 /// and stubs, each file's own problems and `paper-key-mismatch`, `paper-key-rule` (a warning),
 /// `paper-key-duplicate`, `session-missing` (a warning), `version-unknown`, `stub-paper-premise`
 /// and `proof-of-stub`. Stubs join statements in every check of tags, aliases and references.
-/// Status and bodies are checked by later issues.
+/// The warnings that need statuses, and bodies, are checked by later issues.
 /// @param config   The project's `loom.toml`, for its tags.
 /// @param contents The statements and proofs.
 /// @returns The problems, sorted with sortProblems(). No side effects.

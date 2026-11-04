@@ -1,0 +1,32 @@
+key = "SmithJones24"
+cite = "published"
+relevance = 1
+relevance_why = "Proves the estimate the project wants to extend"
+tags = ["model-system"]
+summary = "Proves energy decay for weak solutions of the model system with L^2 data."
+created = 2026-10-18
+verified = 2026-11-03
+
+[work]
+type = { value = "article", source = "https://doi.org/10.0000/jea.2024.17", verified = 2026-11-03 }
+title = { value = "Energy decay for a model parabolic system", source = "https://doi.org/10.0000/jea.2024.17", verified = 2026-11-03 }
+authors = { value = [{ last = "Smith", first = "Alice" }, { last = "Jones", first = "Bob" }], source = "https://doi.org/10.0000/jea.2024.17", verified = 2026-11-03 }
+
+[[versions]]
+id = "arxiv-v1"
+kind = "arxiv"
+arxiv_id = { value = "2401.99999", source = "https://arxiv.org/abs/2401.99999v1", verified = 2026-11-03 }
+arxiv_version = { value = 1, source = "https://arxiv.org/abs/2401.99999v1", verified = 2026-11-03 }
+posted = { value = 2023-01-15, source = "https://arxiv.org/abs/2401.99999v1", verified = 2026-11-03 }
+primary_class = { value = "math.AP", source = "https://arxiv.org/abs/2401.99999v1", verified = 2026-11-03 }
+page_count = { value = 18, source = "https://arxiv.org/abs/2401.99999v1", verified = 2026-11-03 }
+
+[[versions]]
+id = "published"
+kind = "published"
+journal = { value = "Journal of Example Analysis", source = "https://doi.org/10.0000/jea.2024.17", verified = 2026-11-03 }
+volume = { value = "12", source = "https://doi.org/10.0000/jea.2024.17", verified = 2026-11-03 }
+number = { value = "3", source = "https://doi.org/10.0000/jea.2024.17", verified = 2026-11-03 }
+pages = { value = "101--130", source = "https://doi.org/10.0000/jea.2024.17", verified = 2026-11-03 }
+year = { value = 2024, source = "https://doi.org/10.0000/jea.2024.17", verified = 2026-11-03 }
+doi = { value = "10.0000/jea.2024.17", source = "https://doi.org/10.0000/jea.2024.17", verified = 2026-11-03 }

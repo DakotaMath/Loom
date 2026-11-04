@@ -1,11 +1,12 @@
 // The `loom` command (Specs/m1-core.md, "The `loom` command"). It knows `--version`,
-// `new-project`, the statement and proof subcommands, the check subcommands and the paper
-// subcommands; the others arrive with their build issues (#7, #9).
+// `new-project`, the statement and proof subcommands, the check subcommands, `refute`, `status`,
+// `graph` and the paper subcommands; `validate` and `install-hooks` arrive with #9.
 
 #include "CheckCommands.h"
 #include "Cli.h"
 #include "PaperCommands.h"
 #include "StatementCommands.h"
+#include "StatusCommands.h"
 
 #include "LoomCore/NewProject.h"
 #include "LoomCore/Version.h"
@@ -148,6 +149,12 @@ int main(int argc, char* argv[])
         return runAddCheck(args, context);
     if (subcommand == u"merge-checks")
         return runMergeChecks(args, context);
+    if (subcommand == u"refute")
+        return runRefute(args, context);
+    if (subcommand == u"status")
+        return runStatus(args, context);
+    if (subcommand == u"graph")
+        return runGraph(args, context);
     if (subcommand == u"new-paper")
         return runNewPaper(args, context);
     if (subcommand == u"new-stub")
