@@ -52,6 +52,7 @@ The M1 code review (`Reviews/M1/` on branch `m1/review`) found places where the 
 | A13 | The deciding proof of a proved statement; "What a proof gives"; a fingerprint Loom can't compute; git failing to read the last commit | The proof that brought it into the proved set; either counting check's `fail`; the explanation says why; exit 3, `git-failed` (How status is computed; Checks) |
 | A14 | `paper-key-rule` when no key can be made; `primary_class`'s form; an `http://` source | Skipped when `authors-missing` covers it, else the key rule's own message; an arXiv category; `field-source` with its own message (Papers; Validation) |
 | A15 | The JSON every subcommand prints | As listed under JSON shapes (The `loom` command) |
+| A16 | Which proofs Dakota's `--outdate-checks` covers; whether `level = "failed"` is his click; what `new-paper` does with a draft's `verified` dates; a git command that hangs | Exactly the proofs he was shown; yes, when setting it, in `new-proof` and `edit-proof`; written as `false`, and it says so; stopped, code `git-timeout` (Statements; Proofs; Papers; The `loom` command) |
 
 ## Decisions this spec makes
 | Decision | Choice | Why |
@@ -217,6 +218,7 @@ Let $u_0\in L^2(\R^n)$ and let $u$ be a weak solution with data $u_0$ ...
 - **Statuses by kind:** `definition`, `question`, `remark` and `example` have no status, no proofs, and can't be premises or refuted. The other five kinds (the **provable kinds**) can.
 - **The body** must not be empty (only whitespace counts as empty).
 - **Editing a statement whose text is in a checked proof's fingerprint** (a proof of it, or one using it as a premise) is refused by `LoomCore` unless the caller passes the confirmation that stands for Dakota's click; the refusal names the proofs whose checks it would outdate. Title, tags and other front matter aren't in any fingerprint and edit freely.
+- **The confirmation names the proofs Dakota was shown** (A16), and covers exactly those. If, by the time the edit runs, it would outdate a different set (the project changed in between), it is refused as `outdates-checks` and nothing is written: *"Loom didn't change {id}, because it would now outdate the checks of {proofs}, not those of {confirmed} that Dakota confirmed: the project changed in between. Run the command again to see what it outdates now."* The same holds for `edit-proof`.
 
 ### Proofs
 `Proofs/<statement-id>/<proof-id>.tex`.
@@ -238,7 +240,7 @@ By Fact \ref{7RT2} with $k=0$, ...
 | `id` | yes | `<statement-id>.<letters>`, equal to the file name without `.tex` |
 | `proves` | yes | The statement's tag, equal to the folder name. Must be a provable kind and not a stub |
 | `premises` | yes (may be `[]`) | Array of tags of provable statements or stubs; no repeats; not the proved statement itself |
-| `level` | yes | `sketch`, `heuristic`, `complete` or `failed` |
+| `level` | yes | `sketch`, `heuristic`, `complete` or `failed`. Setting `failed` (in `new-proof` or `edit-proof`) is Dakota's click (A16); without his confirmation it is refused, `dakota-only`: *"Only Dakota can mark a proof failed, and only at a terminal."* Changing a failed proof back to another level is not a click |
 | `created` | yes | Date |
 | `verified` | no | Date the premises and level were last checked against the body |
 
@@ -726,6 +728,8 @@ Other types, cited version `published`:
 | 2 | Wrong usage: unknown subcommand, missing or bad argument |
 | 3 | Can't work here: no project found, a newer project format, a file Loom can't read or write, `git` missing or failing |
 
+**Git that doesn't finish.** Loom stops a git command that runs too long and exits 3 with code `git-timeout` (A16): *"`{git command}` didn't finish in time, so Loom stopped it. Git may be waiting for something, such as another git's lock or a slow network drive; try again."*
+
 **Dakota's clicks.** Subcommands marked *(Dakota)* ask *"This is Dakota's decision: {what it does}. Type yes to go ahead:"* and go ahead only on `yes`. If input isn't a terminal they refuse (exit 1): *"Only Dakota can {do this}, and only at a terminal."* `LoomCore` itself takes an explicit confirmation argument; the terminal prompt is how `loom` supplies it.
 
 | Subcommand | Arguments | Does | Prints (text; `--json`) |
@@ -737,14 +741,14 @@ Other types, cited version `published`:
 | `new-tag` | `<tag> --kind equation\|technique\|other --title <title>` | Adds a tag to `loom.toml` | The tag |
 | `new-statement` | `--kind <kind> --title <title> (--body <text> \| --body-file <path>) [--tag <tag>]… [--stated-using <id>]… [--origin <origin>]` | Creates `Statements/<new tag>.tex`, `created` today | The new tag; `{"id", "path"}` |
 | `edit-statement` | `<id> [--title …] [--kind …] [--body-file <path>] [--add-tag …] [--remove-tag …] [--add-stated-using …] [--remove-stated-using …] [--superseded-by <id>] [--verified] [--outdate-checks]` | Changes the statement. A change to the body that would outdate checks (see Statements) is refused unless `--outdate-checks` *(Dakota)*. `--verified` sets `verified` to today | The changed fields; with `--json`, also `outdated_checks` |
-| `new-proof` | `<statement-id> --level <level> (--body <text> \| --body-file <path>) [--premise <id>]…` | Creates the next proof of the statement | The new proof ID; `{"id", "path"}` |
-| `edit-proof` | `<proof-id> [--level …] [--body-file <path>] [--add-premise …] [--remove-premise …] [--verified] [--outdate-checks]` | Changes the proof. Changing the body or premises of a checked proof is refused unless `--outdate-checks` *(Dakota)* | The changed fields |
+| `new-proof` | `<statement-id> --level <level> (--body <text> \| --body-file <path>) [--premise <id>]…` | Creates the next proof of the statement. `--level failed` is *(Dakota)* (A16) | The new proof ID; `{"id", "path"}` |
+| `edit-proof` | `<proof-id> [--level …] [--body-file <path>] [--add-premise …] [--remove-premise …] [--verified] [--outdate-checks]` | Changes the proof. Changing the body or premises of a checked proof is refused unless `--outdate-checks` *(Dakota)*. `--level failed` is *(Dakota)* (A16) | The changed fields |
 | `fingerprint` | `<proof-id>` | | The current fingerprint; `{"proof", "fingerprint"}` |
 | `add-check` | `<proof-id> --by <dakota\|agent:model> --verdict <pass\|needs-changes\|fail> [--changes <text> \| --changes-file <path>] [--fingerprint <fp>] [--record <path>] [--note <path>]` | Appends a check with the current fingerprint and time. Agents must give `--fingerprint` (refused if the proof has changed) and `--record`. `--by dakota` is *(Dakota)*; with `needs-changes` and no `--changes`, it asks for the message at the terminal | The entry and whether the proof is now checked |
 | `refute` | `<id> --by <proof-id>` *(Dakota)* | Sets `refuted_by` and `refuted_on` (today). Refuses a proof of `<id>` itself (A12, code `refuted-self`): *{proof} is a proof of {id} itself, so it can't refute it. A statement is refuted by a proof of another statement, such as its negation.* | The new status |
 | `status` | `[<id>]` | Computes status | One line per statement (`ID  status  title`) and the counts by status; with an ID, the explanation sentence. JSON below |
 | `graph` | `--json` | | The graph (below) |
-| `new-paper` | `<draft.toml>` | Reads a draft `paper.toml` without `key` (or with a `key` that is checked against the rule), computes the key, creates `Papers/<Key>/paper.toml` in canonical form (`cite` defaulted if absent, `created` today), renaming a paper that now shares its key. Never replaces a file: if `Papers/<Key>/` already exists (compared ignoring case), whatever is in it, it refuses and writes nothing: *"`Papers/{Key}/` already exists. Fix or remove what's there first; `loom validate` shows its problems."* (A3, code `paper-exists`; `{Key}` is the folder as it is on disk, which may differ in case) | The key; `{"key", "path", "renamed": [{from, to}]}` |
+| `new-paper` | `<draft.toml>` | Reads a draft `paper.toml` without `key` (or with a `key` that is checked against the rule), computes the key, creates `Papers/<Key>/paper.toml` in canonical form (`cite` defaulted if absent, `created` today), renaming a paper that now shares its key. Never replaces a file: if `Papers/<Key>/` already exists (compared ignoring case), whatever is in it, it refuses and writes nothing: *"`Papers/{Key}/` already exists. Fix or remove what's there first; `loom validate` shows its problems."* (A3, code `paper-exists`; `{Key}` is the folder as it is on disk, which may differ in case). Setting `verified` and `checked` dates is Dakota's click, so a draft's are written as `false` (a top-level `verified` is left out), and `new-paper` says so on stderr (A16): *"Set to false, since verifying is Dakota's click: {fields}."* | The key; `{"key", "path", "renamed": [{from, to}]}` |
 | `new-stub` | `<key> --kind <kind> --gist <text> --version <version-id> --at <locator> --by <dakota\|agent:model> [--title …] [--stated-using <id>]… [--paper-premise <id>]…` | Creates a stub with a new tag, its locator `checked_against_pdf = false` | The new tag |
 | `rekey` | `<key>` | Renames the paper to the key the rule gives (see the key rule) | `old → new`, or "already right" |
 | `build-bib` | `[--out <path>]` | Writes the bibliography. Refuses (exit 1, code `bib-out-project-file`, A10) an `--out` that is one of the project's own files or in a folder Loom keeps them in (`loom.toml`, `CLAUDE.md`, `.gitignore`, `.gitattributes`, the preambles, `.loom/write.lock`, anything in `Statements/`, `Proofs/`, `Papers/` or `.git/`; compared ignoring case): *"`{path}` is one of the project's own files, or in a folder Loom keeps them in, so Loom won't write the bibliography there. Give `--out` a path of its own, such as `TeX/refs.bib`."* | The path and any warnings |
@@ -797,7 +801,7 @@ Other types, cited version `published`:
 | `fingerprint` | `{"proof", "fingerprint"}` |
 | `add-check` | `{"proof", "path", "index", "check": {"by", "date", "fingerprint", "verdict", "changes", "record", "note"}, "checked", "supports", "counting_agent_check", "counting_dakota_check"}` |
 | `refute` | `{"id", "path", "status", "explanation"}` |
-| `new-paper` | `{"key", "path", "renamed": [{"from", "to"}…]}` |
+| `new-paper` | `{"key", "path", "renamed": [{"from", "to"}…], "unclicked": [field…]}` |
 | `rekey` | `{"from", "to", "renamed": [{"from", "to"}…]}`; `from` equals `to` when the key was already right |
 | `build-bib` | `{"path", "problems": [{"severity", "code", "file", "line", "message"}…]}` |
 | `merge-checks` | Nothing; it is run by git |
