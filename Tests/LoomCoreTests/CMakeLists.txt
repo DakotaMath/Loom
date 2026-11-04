@@ -19,9 +19,12 @@ add_executable(LoomCoreTests
     ProjectTomlTests.cpp
     ProofChecksTests.cpp
     StatementsAndProofsTests.cpp
+    StatusTests.cpp
     TestSupport.cpp
     TestSupport.h)
 target_link_libraries(LoomCoreTests PRIVATE LoomCore Catch2::Catch2WithMain)
+# The worked example of Specs/m1-core.md, a project folder the status tests read (and never write).
+target_compile_definitions(LoomCoreTests PRIVATE LOOM_WORKED_EXAMPLE="${PROJECT_SOURCE_DIR}/Tests/Projects/WorkedExample")
 loom_set_compiler_options(LoomCoreTests)
 
 # A stand-in for git, for the new-project failures a real git can't show on demand.

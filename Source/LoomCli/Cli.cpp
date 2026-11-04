@@ -52,6 +52,16 @@ QString jsonStringArray(const QStringList& items)
     return u'[' + quoted.join(u", ") + u']';
 }
 
+QString jsonOptional(const QString& text)
+{
+    return text.isEmpty() ? QStringLiteral("null") : jsonString(text);
+}
+
+QString jsonIndex(const std::optional<qsizetype>& index)
+{
+    return index ? QString::number(*index) : QStringLiteral("null");
+}
+
 int fail(int exitCode, const QString& code, const QString& message, bool json)
 {
     write(stderr, message + u'\n');
@@ -83,6 +93,9 @@ QString usageText()
         "                     [--changes <text> | --changes-file <path>] [--fingerprint <fp>]\n"
         "                     [--record <path>] [--note <path>]\n"
         "  loom merge-checks <base> <ours> <theirs>\n"
+        "  loom refute <id> --by <proof-id>\n"
+        "  loom status [<id>]\n"
+        "  loom graph --json\n"
         "  loom new-paper <draft.toml>\n"
         "  loom new-stub <key> --kind <kind> --gist <text> --version <version-id> --at <locator>\n"
         "                     --by dakota|agent:<model> [--title <title>] [--stated-using <id>]...\n"

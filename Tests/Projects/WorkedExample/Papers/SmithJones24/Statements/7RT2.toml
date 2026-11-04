@@ -1,0 +1,9 @@
+id = "7RT2"
+kind = "theorem"
+gist = "Weak solutions with L^2 data lose energy at rate t^(-n/4)"
+extracted_from = "arxiv-v1"
+extracted_by = "agent:claude-opus-5-5"
+created = 2026-10-18
+
+[locators]
+arxiv-v1 = { at = "Theorem 1.2, p. 4", checked_against_pdf = 2026-10-20 }

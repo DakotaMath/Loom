@@ -15,18 +15,6 @@ namespace cli {
 
 namespace {
 
-/// A JSON number for an index, or `null`. No side effects.
-QString jsonIndex(const std::optional<qsizetype>& index)
-{
-    return index ? QString::number(*index) : QStringLiteral("null");
-}
-
-/// A JSON string, or `null` for an empty one. No side effects.
-QString jsonOptional(const QString& text)
-{
-    return text.isEmpty() ? QStringLiteral("null") : jsonString(text);
-}
-
 /// A check as a JSON object, its fields as in the file, absent ones `null`. No side effects.
 QString jsonCheck(const loom::Check& check)
 {

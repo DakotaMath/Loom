@@ -45,6 +45,12 @@ QString jsonString(const QString& text);
 /// Writes a JSON array of strings, e.g. `["title", "body"]`. No side effects.
 QString jsonStringArray(const QStringList& items);
 
+/// A JSON string, or `null` for an empty one. No side effects.
+QString jsonOptional(const QString& text);
+
+/// A JSON number for an index, or `null`. No side effects.
+QString jsonIndex(const std::optional<qsizetype>& index);
+
 /// Reports a failure: the message on stderr and, with `--json`, the error object on stdout.
 /// @returns `exitCode`, so callers can `return fail(...);`.
 int fail(int exitCode, const QString& code, const QString& message, bool json);

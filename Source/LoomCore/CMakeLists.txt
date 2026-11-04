@@ -42,6 +42,8 @@ add_library(LoomCore STATIC
     ProofChecks.h
     StatementsAndProofs.cpp
     StatementsAndProofs.h
+    Status.cpp
+    Status.h
     TomlFields.cpp
     TomlFields.h
     TomlWriter.cpp
