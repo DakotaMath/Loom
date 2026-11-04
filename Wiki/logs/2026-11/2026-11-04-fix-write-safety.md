@@ -8,7 +8,7 @@ tags: [m1, review, papers, hooks, cli]
 > **Summary:** Fixed the M1 review's write-safety batch (F1, F2/F8, M1, M2, M7) against amendments A1 and A3: `new-paper` never replaces a folder, `install-hooks` and `new-project` never write hooks outside the project's own git directory, failed paper renames are undone, and `build-bib` never writes over a project file; each fix's test failed on `main` first, and all 177 `ctest` tests pass on Windows.
 
 **Session model:** Opus 5.5
-**Issues and PRs:** no issue (batch 1 of `Reviews/M1` on `m1/review`), PR #PR_NUMBER
+**Issues and PRs:** no issue (batch 1 of `Reviews/M1` on `m1/review`), PR #21
 
 ## Done
 - F1: `createPaper` refuses `paper-exists` when anything named `Papers/<Key>` is there, compared ignoring case, by listing `Papers/` (so Linux behaves as Windows).
