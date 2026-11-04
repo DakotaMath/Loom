@@ -7,7 +7,7 @@ tags: [bibtex, bibliography, papers]
 
 > **Summary:** BibTeX reads a name with no comma as "First von Last", so `author = {Garcia Lopez}` becomes first name Garcia, surname Lopez; write such a name braced, `{Garcia Lopez}`. Its parser also counts every `{` and `}` in a value, `\{` and `\}` included, so a lone `\{` breaks the rest of the file. Loom's `build-bib` does both (Specs/m1-core.md, A5 and A6).
 
-**Last verified:** 2026-11-04 · commit be0d3a7
+**Last verified:** 2026-11-04 · commit c688de4
 
 ## Symptom
 - A paper whose author has an empty `first` (`last = "Garcia Lopez"`, or an institution) is cited as "G. Lopez" and sorted under L.
@@ -22,6 +22,8 @@ These come from BibTeX's documentation; they weren't run through BibTeX when Loo
 ## Fix
 - Write a name as `Last, First`, and one with no first name as `{Last}`: `bibNames()` in `Source/LoomCore/Bibliography.cpp`.
 - Count every brace when checking a value (`bracesBalanced()`), and skip an entry whose braces don't balance, with an error, rather than write it. A literal brace in a title needs its partner: `\{x > 0\}`.
+- Skip, the same way, a value that ends in an odd run of backslashes (`endsInEscape()`): written as `{foo\}`, its last `\` escapes the closing brace once LaTeX reads it. An even run (`\\`, a line break) is fine.
+- When escaping `&`, `%` and `#` outside math (`escapeBibValue()`), read `$$` as one delimiter: taken as two `$`, it opens and closes math at once and leaves a display formula outside it.
 
 ## See also
 - Up: [Gotchas](../README.md)

@@ -114,3 +114,19 @@ TEST_CASE("Aliases", "[ids]")
     CHECK(loom::aliasProblem("lOil") == "it is shaped like a tag");
     CHECK(loom::aliasProblem(QString(101, u'a')) == "it's over 100 characters");
 }
+
+TEST_CASE("A proof letter run too long to count is no number, not an overflow", "[ids]")
+{
+    // 26^13 still fits in 64 bits; a fourteenth letter doesn't.
+    CHECK(loom::proofNumber(QString(13, u'a')) > 0);
+    CHECK(loom::proofNumber(QString(14, u'z')) == 0);
+    CHECK(loom::proofNumber(QString(40, u'a')) == 0);
+}
+
+TEST_CASE("An alias's length counts characters, not UTF-16 units", "[ids]")
+{
+    // U+1D53C is two UTF-16 units; 100 of them are still 100 characters.
+    const QString doubleStruck = QString::fromUtf8("\xF0\x9D\x94\xBC");
+    CHECK(loom::aliasProblem(doubleStruck.repeated(100)).isEmpty());
+    CHECK(loom::aliasProblem(doubleStruck.repeated(101)) == "it's over 100 characters");
+}

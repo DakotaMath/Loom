@@ -209,16 +209,19 @@ private:
         node.status = Status::Open;
     }
 
-    /// "is proved", "is extracted (not yet checked against the paper's PDF)", … for a premise.
+    /// "is unchecked", "is extracted (not yet checked against the paper's PDF)", "is a definition
+    /// and has no status", …: what a premise is, as the rest of "rests on 3WQ6, which …". The
+    /// verb is part of it, so that a premise that isn't there reads "which isn't …".
+    /// No side effects.
     QString premiseState(const QString& tag) const
     {
         const StatementNode* node = m_nodes.value(tag);
         if (!node)
             return QStringLiteral("isn't a statement in this project");
         switch (node->status) {
-        case Status::None: return QStringLiteral("a %1, which has no status").arg(node->kind);
-        case Status::Extracted: return QStringLiteral("extracted (not yet checked against the paper's PDF)");
-        default: return statusName(node->status);
+        case Status::None: return QStringLiteral("is a %1 and has no status").arg(node->kind);
+        case Status::Extracted: return QStringLiteral("is extracted (not yet checked against the paper's PDF)");
+        default: return QStringLiteral("is ") + statusName(node->status);
         }
     }
 
@@ -304,7 +307,7 @@ private:
         case Status::Conditional: {
             QStringList parts;
             for (const QString& tag : node.restsOn)
-                parts << QStringLiteral("%1, which is %2").arg(tag, premiseState(tag));
+                parts << QStringLiteral("%1, which %2").arg(tag, premiseState(tag));
             return head + QStringLiteral("%1 is complete and checked, but rests on %2.").arg(deciding->id, listed(parts));
         }
         case Status::Unchecked: {

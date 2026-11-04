@@ -118,6 +118,38 @@ TEST_CASE("UTF-8 validation", "[front-matter]")
     CHECK(loom::firstInvalidUtf8("\xF0\x9D\x28\xBC") == 2); // a bad third byte
 }
 
+TEST_CASE("A byte-order mark and CRLF together", "[front-matter]")
+{
+    const loom::FrontMatterSplit split = loom::splitFrontMatter("\xEF\xBB\xBF+++\r\nid = \"4KX7\"\r\n+++\r\nBody\r\n", path);
+    CHECK(split.found);
+    REQUIRE(split.problems.size() == 1);
+    CHECK(split.problems[0].code == "bom");
+    CHECK(split.toml == "id = \"4KX7\"\n");
+    CHECK(split.body == "Body\n");
+    CHECK(split.bodyLine == 4);
+}
+
+TEST_CASE("Empty front matter is found, and empty", "[front-matter]")
+{
+    const loom::FrontMatterSplit split = loom::splitFrontMatter("+++\n+++\nBody\n", path);
+    CHECK(split.found);
+    CHECK(split.problems.empty());
+    CHECK(split.toml.isEmpty());
+    CHECK(split.body == "Body\n");
+    CHECK(split.bodyLine == 3);
+}
+
+TEST_CASE("A bad byte in a CRLF file is reported on its line, at its offset in the file", "[front-matter]")
+{
+    // The offset counts the file's own bytes, CRs included.
+    const loom::FrontMatterSplit split = loom::splitFrontMatter("+++\r\nid = \"4KX7\"\r\n+++\r\nCaf\xE9\r\n", path);
+    CHECK_FALSE(split.found);
+    REQUIRE(split.problems.size() == 1);
+    CHECK(split.problems[0].code == "not-utf8");
+    CHECK(split.problems[0].line == 4);
+    CHECK(split.problems[0].message == "This file isn't valid UTF-8 (the first bad byte is at offset 26). Save it as UTF-8.");
+}
+
 TEST_CASE("Blank bodies", "[front-matter]")
 {
     CHECK(loom::isBlankBody(""));

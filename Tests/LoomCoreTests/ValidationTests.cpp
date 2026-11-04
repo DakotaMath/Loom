@@ -43,6 +43,8 @@ struct Copy {
     QString root;
     loom::GitTool git;
 
+    /// Copies `project` to `<temp>/Project`, so a test can change and commit it without touching
+    /// the checked-in fixture. Side effects: creates the folder and a git config file.
     explicit Copy(const QString& project)
     {
         REQUIRE(temp.isValid());
@@ -375,6 +377,53 @@ TEST_CASE("body references: what counts as a reference", "[validate]")
     CHECK(found == QStringList{
         "ref-not-listed:12 The text refers to 9D3F (`\\ref`) but `premises` doesn't list it.",
         "ref-not-listed:12 The text refers to 3WQ6 (`\\paperref`) but `premises` doesn't list it."});
+}
+
+TEST_CASE("body references: a \\cite key in another case is warned about, naming the spelling", "[validate]")
+{
+    // Keys compare ignoring case (A3), so `smithjones24` is SmithJones24's key; but BibTeX and
+    // biber match `.bib` keys by exact spelling, so the citation wouldn't resolve as written.
+    const Copy copy(QStringLiteral(LOOM_WORKED_EXAMPLE));
+    const QString paper = copy.root + "/Papers/SmithJones24/paper.toml";
+    QByteArray toml = readFile(paper);
+    REQUIRE(toml.startsWith("key = \"SmithJones24\"\n"));
+    writeFile(paper, toml.replace("key = \"SmithJones24\"\n", "key = \"SmithJones24\"\naliases = [\"SmithJones23\"]\n"));
+    const QString path = copy.root + "/Proofs/5HN8/5HN8.a.tex";
+    QByteArray proof = readFile(path);
+    proof.append("As in \\cite{SmithJones24, smithjones24, SMITHJONES24} and \\cite{SmithJones23, smithJones23}.\n");
+    writeFile(path, proof);
+    QStringList found;
+    for (const loom::Problem& problem : copy.validate().problems) {
+        if (problem.file == u"Proofs/5HN8/5HN8.a.tex")
+            found << QStringLiteral("%1:%2:%3 %4").arg(problem.code).arg(problem.line)
+                         .arg(problem.severity == loom::Severity::Error ? "error" : "warning", problem.message);
+    }
+    CHECK(found == QStringList{
+        "cite-alias:9:warning `\\cite{smithjones24}` spells the key of SmithJones24 in another case. BibTeX matches keys "
+        "exactly, so write `SmithJones24`.",
+        "cite-alias:9:warning `\\cite{SMITHJONES24}` spells the key of SmithJones24 in another case. BibTeX matches keys "
+        "exactly, so write `SmithJones24`.",
+        "cite-alias:9:warning `\\cite{SmithJones23}` uses an old key of SmithJones24. It still works; `SmithJones24` is "
+        "its current key.",
+        "cite-alias:9:warning `\\cite{smithJones23}` spells an old key of SmithJones24 in another case. BibTeX matches "
+        "keys exactly, so write `SmithJones24`."});
+}
+
+TEST_CASE("body references: an old name in a verbose proof is warned about too", "[validate]")
+{
+    const Copy copy(QStringLiteral(LOOM_WORKED_EXAMPLE));
+    const QString statement = copy.root + "/Statements/4KX7.tex";
+    QByteArray text = readFile(statement);
+    REQUIRE(text.contains("stated_using = [\"2M9Q\"]\n"));
+    writeFile(statement, text.replace("stated_using = [\"2M9Q\"]\n", "stated_using = [\"2M9Q\"]\naliases = [\"thm:energy-decay\"]\n"));
+    writeFile(copy.root + "/Proofs/5HN8/5HN8.a.verbose.tex",
+              "+++\nproof = \"5HN8.a\"\nfingerprint = \"3c8e1f0a92d4\"\ncreated = 2026-11-05\n+++\nStep 1, as in \\ref{thm:energy-decay}.\n");
+    QStringList found;
+    for (const loom::Problem& problem : copy.validate().problems) {
+        if (problem.code == u"ref-alias")
+            found << QStringLiteral("%1:%2 %3").arg(problem.file).arg(problem.line).arg(problem.message);
+    }
+    CHECK(found == QStringList{"Proofs/5HN8/5HN8.a.verbose.tex:6 `thm:energy-decay` is an old name of 4KX7. Write `4KX7` here."});
 }
 
 TEST_CASE("body references: \\paperref names a paper stub", "[validate]")

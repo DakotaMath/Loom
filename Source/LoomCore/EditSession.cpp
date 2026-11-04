@@ -28,7 +28,6 @@ ChangeResult cantWork(const QString& code, const QString& message)
     return failure(ChangeOutcome::CantWork, code, message);
 }
 
-/// `<file>:<line>: <severity>: <message>`, as `loom validate` prints a problem.
 /// Opens a project for a change, in the order that writes nothing to a project Loom mustn't
 /// touch: read `loom.toml` (stopping on a newer format), then take the lock (creating `.loom/`),
 /// then read everything again, now that no other `loom` can be changing it.

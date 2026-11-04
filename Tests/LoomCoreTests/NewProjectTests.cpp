@@ -26,6 +26,8 @@ struct Workspace {
     QString dir;
     loom::GitTool git;
 
+    /// @param withIdentity Whether git knows a name and email, for the test of the refusal
+    ///                     without them. Side effects: creates the folder and a git config file.
     explicit Workspace(bool withIdentity = true)
     {
         REQUIRE(temp.isValid());
@@ -164,6 +166,22 @@ TEST_CASE("new-project works in an existing empty folder, and without an idea", 
     REQUIRE(result.outcome == loom::NewProjectOutcome::Created);
     CHECK_FALSE(readFile(folder + "/loom.toml").contains("idea"));
     CHECK(loom::openProject(folder).problems.empty());
+}
+
+TEST_CASE("new-project keeps a name with quotes, a backslash and non-ASCII letters whole", "[new-project]")
+{
+    // The name goes into loom.toml, escaped, and into the commit message as typed.
+    const Workspace workspace;
+    const QString folder = workspace.dir + "/Quoted";
+    loom::NewProjectRequest request = workspace.request(folder);
+    request.name = QString::fromUtf8("Décroissance \"rapide\" \\ C:\\path");
+    const loom::NewProjectResult result = loom::createProject(request);
+    INFO(result.message.toStdString());
+    REQUIRE(result.outcome == loom::NewProjectOutcome::Created);
+    const loom::OpenedProject opened = loom::openProject(folder);
+    CHECK(opened.problems.empty());
+    CHECK(opened.config.name == request.name);
+    CHECK(gitOutput(workspace.git, {"log", "-1", "--format=%s"}, folder) == "Create project " + request.name);
 }
 
 TEST_CASE("new-project refuses a folder it can't use, and writes nothing", "[new-project]")

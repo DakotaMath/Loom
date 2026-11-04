@@ -70,24 +70,31 @@ QString baseName(const QString& path, QStringView suffix)
     return name;
 }
 
-/// `key = value` lines, appended in order.
+/// `key = value` lines, appended in order. The callers give the fields in the spec's order
+/// (Specs/m1-core.md, "Front matter": Loom's order, not toml++'s alphabetical one), so the
+/// writer only formats and leaves out what has no value.
 struct Writer {
-    QString text;
+    QString text;   ///< The lines so far, each ending in a line break.
 
+    /// Appends `key = "value"`, left out when the value is empty: an empty optional field means
+    /// the same as a missing one, and an empty required one was reported on reading.
     void string(const char* key, const QString& value)
     {
         if (!value.isEmpty())
             text += QStringLiteral("%1 = %2\n").arg(QLatin1StringView(key), tomlBasicString(value));
     }
+    /// Appends `key = ["a", "b"]`, left out when empty unless `always`: a proof's `premises` is
+    /// required, so its `premises = []` must be written.
     void list(const char* key, const QStringList& values, bool always = false)
     {
         if (always || !values.isEmpty())
             text += QStringLiteral("%1 = %2\n").arg(QLatin1StringView(key), tomlStringArray(values));
     }
+    /// Appends `key = YYYY-MM-DD`, left out when the date is invalid (an optional date not set).
     void date(const char* key, const QDate& value)
     {
         if (value.isValid())
-            text += QStringLiteral("%1 = %2\n").arg(QLatin1StringView(key), tomlDate(value));
+            text +=QStringLiteral("%1 = %2\n").arg(QLatin1StringView(key), tomlDate(value));
     }
 };
 

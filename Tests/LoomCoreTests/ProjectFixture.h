@@ -13,10 +13,15 @@
 
 namespace loomtest {
 
+/// A throwaway project: each test gets its own folder, deleted when the fixture goes, so tests
+/// never see each other's files. Not a git repository; the tests that need one make it.
 struct ProjectFixture {
     QTemporaryDir temp;
-    QString root;
+    QString root;   ///< The project's absolute path.
 
+    /// Writes `loom.toml` (one tag, `model-system`, and the preamble) and `TeX/preamble.tex`,
+    /// the least a project needs to validate clean, so a test adds only the files it is about.
+    /// Side effects: creates the temporary folder and the two files; fails the test if it can't.
     ProjectFixture()
     {
         REQUIRE(temp.isValid());

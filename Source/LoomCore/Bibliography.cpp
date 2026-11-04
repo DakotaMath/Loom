@@ -41,6 +41,9 @@ struct EntryBuilder {
             return;
         if (!bracesBalanced(value) && error.isEmpty())
             error = QStringLiteral("%1's `%2` has unbalanced braces, so its BibTeX entry was left out of refs.bib.").arg(paper.key, bibName);
+        if (endsInEscape(value) && error.isEmpty())
+            error = QStringLiteral("%1's `%2` ends in a `\\` that would escape its closing brace, so its BibTeX entry was "
+                                   "left out of refs.bib.").arg(paper.key, bibName);
         fields.emplace_back(bibName, escapeBibValue(value));
     }
 
@@ -118,20 +121,40 @@ QString escapeBibValue(const QString& value)
 {
     QString out;
     out.reserve(value.size());
-    bool math = false;
+    // Outside math, in `$…$`, or in `$$…$$`. `$$` is one delimiter: read as two `$`, it would
+    // open and close math at once and leave the display formula outside it.
+    enum class Math { None, Inline, Display } math = Math::None;
     // The backslashes just before the character: an odd run escapes it, an even run is that many
     // halves of LaTeX line breaks (`\\`), so `A\\% B` still needs its `%` escaped.
     qsizetype backslashes = 0;
-    for (const QChar c : value) {
+    for (qsizetype i = 0; i < value.size(); ++i) {
+        const QChar c = value[i];
         const bool escaped = backslashes % 2 == 1;
-        if (c == u'$' && !escaped)
-            math = !math;
-        if ((c == u'&' || c == u'%' || c == u'#') && !escaped && !math)
+        if (c == u'$' && !escaped) {
+            const bool doubled = i + 1 < value.size() && value[i + 1] == u'$';
+            if (math == Math::Inline)
+                math = Math::None; // Closes `$…$`; a `$` right after opens the next formula.
+            else if (doubled) {
+                math = math == Math::Display ? Math::None : Math::Display;
+                out += c;
+                ++i; // The second `$` of the pair.
+            } else if (math == Math::None)
+                math = Math::Inline;
+        }
+        if ((c == u'&' || c == u'%' || c == u'#') && !escaped && math == Math::None)
             out += u'\\';
-        out += c;
+        out += value[i];
         backslashes = c == u'\\' ? backslashes + 1 : 0;
     }
     return out;
+}
+
+bool endsInEscape(const QString& value)
+{
+    qsizetype backslashes = 0;
+    for (qsizetype i = value.size() - 1; i >= 0 && value[i] == u'\\'; --i)
+        ++backslashes;
+    return backslashes % 2 == 1;
 }
 
 bool bracesBalanced(const QString& value)
@@ -158,9 +181,9 @@ BibEntry bibEntry(const Paper& paper)
     }
 
     EntryBuilder b{paper, *cited, {}, {}, {}};
+    // `type` chooses the entry type but isn't written as a field, so an unverified one isn't
+    // listed: the warning names fields written (Specs/m1-core.md, "The bibliography").
     const QString type = paper.work.typeName();
-    if (paper.work.type)
-        b.used(*paper.work.type, QStringLiteral("type"));
     QString entryType;
     if (cited->kind == u"arxiv") {
         // An arXiv-only paper, whatever its type: the identifier carries the cited version.

@@ -77,14 +77,15 @@ struct NewStub {
 ChangeResult createStub(const QString& root, const NewStub& request, const ChangeOptions& options = {});
 
 /// `loom rekey <key>`: renames a paper to the key the rule gives (Specs/m1-core.md, "The key
-/// rule", step 5): the folder is renamed, `key` changes, and the old key is added to `aliases`.
+/// rule", step 5): the folder is renamed, `key` changes, and the old key is added to `aliases`,
+/// unless only its case changed: keys compare ignoring case (A3), so it would be the key itself.
 /// `\cite{…}` in bodies isn't rewritten (D9): old keys keep working through the alias. A key that
 /// already follows the rule (keyFollowsRule(): its base, or its base and a letter, and lettered
 /// when another paper has its base with a letter) is left alone; one whose folder disagrees has
 /// its folder renamed to match. Refuses (`paper-exists`), before renaming anything, when
 /// something is already where a rename goes, compared ignoring case (A3). If a write fails part
 /// way, the renames already done are undone.
-/// @param typed The paper's key or old key.
+/// @param typed The paper's key or old key, in any case (A3).
 /// @returns The result; `renamed` is empty when the key was already right. Side effects: renames
 ///          paper folders and rewrites their `paper.toml`.
 PaperChange rekeyPaper(const QString& root, const QString& typed, const ChangeOptions& options = {});
@@ -98,7 +99,9 @@ struct BibliographyBuilt {
 };
 
 /// `loom build-bib [--out <path>]`: writes the bibliography (Specs/m1-core.md, "The bibliography")
-/// of every paper Loom can read. The file is written even when some entries are skipped.
+/// of every paper Loom can read. An entry Loom can't read, or whose paper.toml has errors of
+/// its own, is skipped (`bib-entry-skipped`), like one with unbalanced braces. The file is
+/// written even when some entries are skipped.
 /// Refuses (`bib-out-project-file`) an `out` that is one of the project's own files or in a
 /// folder Loom reads every file of: `loom.toml`, `CLAUDE.md`, `.gitignore`, `.gitattributes`,
 /// the preamble files, `.loom/write.lock`, and anything in `Statements/`, `Proofs/`, `Papers/`

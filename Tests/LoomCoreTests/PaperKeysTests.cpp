@@ -12,6 +12,7 @@ using loomtest::paperBy;
 
 namespace {
 
+/// The key the rule gives a paper alone, before any lettering (steps 1–3); empty if none.
 QString keyOf(const loom::Paper& paper)
 {
     return loom::baseKey(paper).key;
@@ -40,6 +41,29 @@ TEST_CASE("Surnames in ASCII CamelCase", "[keys]")
     CHECK(loom::camelSurname(QString::fromUtf8("Þórsson")) == "Thorsson");
     CHECK(loom::camelSurname(QString::fromUtf8("Yıldırım")) == "Yildirim");
     CHECK(loom::camelSurname(QString::fromUtf8("张")).isEmpty());
+}
+
+TEST_CASE("Surnames: lower-case letters that don't decompose, and Unicode hyphens", "[keys]")
+{
+    // Specs/m1-core.md, "The key rule", step 1, in lower case inside a name.
+    CHECK(loom::camelSurname(QString::fromUtf8("Guðmundsdóttir")) == "Gudmundsdottir");
+    CHECK(loom::camelSurname(QString::fromUtf8("Lađević")) == "Ladevic");
+    CHECK(loom::camelSurname(QString::fromUtf8("Brœnd")) == "Broend");
+    CHECK(loom::camelSurname(QString::fromUtf8("Mærsk")) == "Maersk");
+    CHECK(loom::camelSurname(QString::fromUtf8("Ásþór")) == "Asthor");
+    // U+2010 HYPHEN and U+2011 NON-BREAKING HYPHEN split a name as `-` does.
+    CHECK(loom::camelSurname(QString::fromUtf8("Smith‐jones")) == "SmithJones");
+    CHECK(loom::camelSurname(QString::fromUtf8("Smith‑jones")) == "SmithJones");
+}
+
+TEST_CASE("A published version without a year: the key's year comes from arXiv", "[keys]")
+{
+    loom::Paper paper = paperBy({"Smith"}, std::nullopt, QDate(2023, 1, 15));
+    loom::PaperVersion published;
+    published.id = "published";
+    published.kind = "published";
+    paper.versions.push_back(published);
+    CHECK(keyOf(paper) == "Smith23");
 }
 
 TEST_CASE("Every row of the key table", "[keys]")

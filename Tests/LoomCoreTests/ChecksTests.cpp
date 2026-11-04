@@ -265,6 +265,40 @@ TEST_CASE("Problems a check history shows on its own", "[checks]")
             "unknown-field 2 `note` isn't a field of a check history. Is it misspelt? The fields are: checks."});
         CHECK_FALSE(other.lossless);
     }
+    SECTION("an element of checks that isn't a table")
+    {
+        const loom::ChecksReading other = loom::readChecks("checks = [1]\n", "x.checks.toml");
+        CHECK_FALSE(other.lossless);
+        CHECK(other.checks.empty());
+        CHECK_FALSE(other.problems.empty());
+    }
+    SECTION("dates with fractions of a second, or without a time")
+    {
+        // D1: a check's date is to the second, with its offset.
+        const QByteArray entry = loom::formatCheck(agent("pass", true, 1));
+        REQUIRE(entry.contains("date = 2026-11-04T10:01:00-06:00\n"));
+        QByteArray fraction = entry;
+        fraction.replace("date = 2026-11-04T10:01:00-06:00", "date = 2026-11-04T10:01:00.5-06:00");
+        QByteArray plain = entry;
+        plain.replace("date = 2026-11-04T10:01:00-06:00", "date = 2026-11-04");
+        for (const QByteArray& variant : {fraction, plain}) {
+            const loom::ChecksReading read = loom::readChecks(variant, "x.checks.toml");
+            INFO(variant.toStdString());
+            CHECK_FALSE(read.lossless);
+            const QStringList problems = describe(read.problems);
+            REQUIRE(problems.size() == 1);
+            CHECK(problems[0].startsWith("wrong-type 3 `date` should be a date and time to the second with its offset from UTC"));
+        }
+    }
+    SECTION("changes that are only spaces")
+    {
+        QByteArray entry = loom::formatCheck(dakota("needs-changes", true, 1));
+        REQUIRE(entry.contains("changes = \"Start the induction at k = 1.\""));
+        entry.replace("changes = \"Start the induction at k = 1.\"", "changes = \"  \\n \"");
+        const QStringList problems = describe(loom::readChecks(entry, "x.checks.toml").problems);
+        REQUIRE(problems.size() == 1);
+        CHECK(problems[0].startsWith("wrong-type 6 `changes` should be a non-empty string"));
+    }
     SECTION("not TOML")
     {
         const loom::ChecksReading broken = loom::readChecks("[[checks]\n", "x.checks.toml");
@@ -359,6 +393,31 @@ TEST_CASE("Merging two check lists", "[checks][merge]")
         const loom::ChecksMerge merge = loom::mergeChecks("", loom::formatChecks({a2}), loom::formatChecks({a1}));
         REQUIRE(merge.ok);
         CHECK(merge.merged == loom::formatChecks({a1, a2}));
+    }
+    SECTION("an undated entry is left for a person, since its place can't be found")
+    {
+        const QByteArray undated = "[[checks]]\nby = \"dakota\"\nfingerprint = \"" + nowFp.toUtf8() + "\"\nverdict = \"pass\"\n";
+        for (int side = 0; side < 3; ++side) {
+            QByteArray versions[3] = {loom::formatChecks({a1}), loom::formatChecks({a1, d3}), loom::formatChecks({a1, a4})};
+            versions[side] += "\n" + undated;
+            const loom::ChecksMerge merge = loom::mergeChecks(versions[0], versions[1], versions[2]);
+            INFO(side);
+            CHECK_FALSE(merge.ok);
+            CHECK(merge.merged.isEmpty());
+            CHECK(merge.message.startsWith(QStringLiteral("Loom couldn't merge the check histories: %1 version isn't one it can read in full")
+                                               .arg(side == 0 ? "the common ancestor's" : side == 1 ? "our" : "their")));
+            CHECK(merge.message.endsWith("Resolve the conflict by hand, keeping every check."));
+        }
+    }
+    SECTION("a base entry one side edited comes back, and the edited one stays as new")
+    {
+        // Rule 1: no entry is ever edited; an edit reads as removing one entry and adding another.
+        loom::Check edited = a1;
+        edited.verdict = QStringLiteral("fail");
+        const loom::ChecksMerge merge = merged({a1}, {edited}, {a1, d3});
+        REQUIRE(merge.ok);
+        CHECK(merge.restored);
+        CHECK(merge.merged == loom::formatChecks({edited, a1, d3}));
     }
     SECTION("a version Loom can't read in full is left for a person")
     {

@@ -7,7 +7,7 @@ tags: [validate, problems, pre-commit, checks, m1]
 
 > **Summary:** Run `loom validate` (or read what the refused commit printed), find each problem's code in the tables below, and fix the file and line it names; errors block a commit, warnings don't. With `--json` every problem carries its `code`. After a clone, run `loom install-hooks` so commits are checked.
 
-**Last verified:** 2026-11-04 · commit be0d3a7
+**Last verified:** 2026-11-04 · commit c688de4
 
 ## Before you start
 - A Loom project (a folder with `loom.toml`), and `loom` on `PATH`.
@@ -57,13 +57,13 @@ tags: [validate, problems, pre-commit, checks, m1]
 | `id-mismatch` | error | A file's `id` isn't its file name. | Make them agree. Tags never change after merging, so usually the `id` field is the one to fix. |
 | `id-duplicate` | error | Two files claim the same tag. | Keep the tag on one; the other needs its own (create it again with `loom new-statement`). |
 | `alias-invalid` | error | An alias has whitespace or `{}[],"`, looks like a tag, or is over 100 characters. | Change or drop it. |
-| `alias-duplicate` | error | Two statements or stubs share an alias (or an alias is also a tag). | Keep it on the one it names. |
+| `alias-duplicate` | error | Two statements or stubs share an alias (or an alias is also a tag). In `paper.toml`: an old key in `aliases` is the paper's own key, or another of its old keys, in another case (`smithjones24` beside `key = "SmithJones24"`); keys compare ignoring case. | Keep it on the one it names. In `paper.toml`, delete the extra spelling from `aliases`. |
 | `ref-unknown` | error | Front matter names a tag no statement or stub has. | Fix the tag, or create the statement first. |
 | `ref-alias` | error in front matter, warning in a body | An old name (alias) is used where the tag should be. | Write the tag the message gives. In a body it still works, but the tag is clearer. |
 | `ref-not-listed` | warning | The body `\ref`s or `\paperref`s a statement that `premises` (a proof) or `stated_using` (a statement) doesn't list. A proof's refs to the statement it proves, and to definitions and other statements without a status, don't count. | If the proof relies on it, add it: `loom edit-proof <id> --add-premise <tag>` (or `--add-stated-using` for a statement). Otherwise rephrase the reference. |
 | `ref-dangling` | warning | `\ref{…}` points at nothing: not a tag, an alias, or a `\label` in any body. Or `\paperref{…}` points at no paper stub (a `\label` doesn't count for it). | Fix the label, or add the `\label` it means. For `\paperref`, write the stub's tag. |
 | `paperref-not-stub` | error | `\paperref{…}` names a statement of this project (by tag or alias). `\paperref` cites a paper's result, so it must name a stub. | Write `\ref{<tag>}` for a statement of the project; keep `\paperref` for stubs. |
-| `cite-alias` | warning | `\cite{…}` uses a paper's old key. It still works, through the alias. | Write the current key the message gives, when you're next editing the text (it changes the fingerprint, so do it before checks, not after). |
+| `cite-alias` | warning | `\cite{…}` uses a paper's old key. It still works, through the alias. Or it spells a key (or old key) in another case, `\cite{smithjones24}` for `SmithJones24`: the same paper to Loom, but BibTeX matches keys exactly, so it wouldn't be found. | Write the current key the message gives, when you're next editing the text (it changes the fingerprint, so do it before checks, not after). |
 
 ### Statements
 | Code | Sev. | What it means | How to fix |

@@ -106,6 +106,25 @@ TEST_CASE("A link that stays inside the project is followed", "[paths]")
     CHECK(loom::readProjectFile(root, "Alias/preamble.tex") == QByteArray("x"));
 }
 
+TEST_CASE("A dangling link is refused, wherever it would have led", "[paths]")
+{
+    // Its target can't be checked, and could be created outside the project later.
+    QTemporaryDir temp;
+    REQUIRE(temp.isValid());
+    const QString root = temp.path() + "/Project";
+    const QString gone = temp.path() + "/Gone";
+    writeFile(root + "/TeX/preamble.tex", "x");
+    REQUIRE(QDir().mkpath(gone));
+    if (!loomtest::makeDirectoryLink(gone, root + "/Link"))
+        SKIP("This system can make neither a symbolic link nor a junction.");
+    REQUIRE(QDir(gone).removeRecursively());
+
+    CHECK_FALSE(loom::resolveProjectPath(root, "Link"));
+    CHECK_FALSE(loom::resolveProjectPath(root, "Link/new.tex"));
+    CHECK_FALSE(loom::writeProjectFile(root, "Link/new.tex", "x").isEmpty());
+    CHECK_FALSE(QFileInfo::exists(gone));
+}
+
 TEST_CASE("A project reached through a link still works", "[paths]")
 {
     QTemporaryDir temp;

@@ -79,11 +79,13 @@ std::vector<P> summary(const std::vector<loom::Problem>& problems, const QString
     return out;
 }
 
+/// The problems of a statement file read as `statementPath`, as summary() gives them.
 std::vector<P> statementProblems(const QByteArray& bytes)
 {
     return summary(loom::readStatement(bytes, statementPath).problems, statementPath);
 }
 
+/// The problems of a proof file read as `proofPath`, as summary() gives them.
 std::vector<P> proofProblems(const QByteArray& bytes)
 {
     return summary(loom::readProof(bytes, proofPath).problems, proofPath);
@@ -437,4 +439,52 @@ TEST_CASE("A date Qt can't hold is reported, and the file isn't rewritten", "[st
         {"bad-value", 5, "`created` can't be `0000-01-01`; it must be one of the dates from 0001-01-01 on."}});
     CHECK(reading.parsed);
     CHECK_FALSE(reading.lossless);
+}
+
+TEST_CASE("Reference fields of the wrong type are reported, and the file isn't rewritten", "[statements]")
+{
+    const std::pair<QByteArray, P> cases[] = {
+        {"superseded_by = 7\n", {"wrong-type", 5, "`superseded_by` should be a string, not a whole number."}},
+        {"refuted_by = [\"G5TZ.a\"]\nrefuted_on = 2026-11-06\n", {"wrong-type", 5, "`refuted_by` should be a string, not a list."}},
+        {"refuted_by = \"G5TZ.a\"\nrefuted_on = \"2026-11-06\"\n", {"wrong-type", 6, "`refuted_on` should be a date, not a string."}},
+    };
+    for (const auto& [extra, problem] : cases) {
+        INFO(extra.toStdString());
+        const loom::StatementReading reading = loom::readStatement(statementWith(extra), statementPath);
+        const std::vector<P> problems = summary(reading.problems, statementPath);
+        REQUIRE_FALSE(problems.empty());
+        CHECK(problems.front() == problem);
+        CHECK_FALSE(reading.lossless);
+    }
+}
+
+TEST_CASE("A verbose proof's unknown field and broken TOML", "[proofs]")
+{
+    const loom::VerboseReading unknown = loom::readVerboseProof(
+        "+++\nproof = \"4KX7.a\"\nfingerprint = \"3c8e1f0a92d4\"\ncolour = \"red\"\ncreated = 2026-11-05\n+++\nSteps\n", verbosePath);
+    const std::vector<P> problems = summary(unknown.problems, verbosePath);
+    REQUIRE(problems.size() == 1);
+    CHECK(std::get<0>(problems[0]) == "unknown-field");
+    CHECK(std::get<1>(problems[0]) == 4);
+    CHECK_FALSE(unknown.lossless);
+
+    const loom::VerboseReading broken = loom::readVerboseProof("+++\nproof = \n+++\nSteps\n", verbosePath);
+    CHECK_FALSE(broken.parsed);
+    const std::vector<P> syntax = summary(broken.problems, verbosePath);
+    REQUIRE(syntax.size() == 1);
+    CHECK(std::get<0>(syntax[0]) == "toml-syntax");
+    CHECK(std::get<1>(syntax[0]) == 2);
+}
+
+TEST_CASE("A statement's body keeps a lone CR, and front matter never closed is reported", "[statements]")
+{
+    const loom::StatementReading reading = loom::readStatement(statementWith("", "A\rB\n"), statementPath);
+    CHECK(reading.problems.empty());
+    CHECK(reading.document.body == "A\rB\n");
+    CHECK(loom::formatStatement(reading.document).endsWith("+++\nA\rB\n"));
+
+    const loom::StatementReading unclosed = loom::readStatement("+++\nid = \"4KX7\"\nkind = \"theorem\"\n", statementPath);
+    CHECK_FALSE(unclosed.parsed);
+    CHECK(summary(unclosed.problems, statementPath) == std::vector<P>{
+        {"front-matter-unclosed", 1, "The front matter starting on line 1 is never closed by a `+++` line."}});
 }

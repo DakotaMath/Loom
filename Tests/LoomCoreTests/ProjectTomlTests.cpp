@@ -2,10 +2,13 @@
 // the project's problems).
 
 #include "LoomCore/ProjectToml.h"
+#include "LoomCore/TomlWriter.h"
 
 #include "TestSupport.h"
 
+#include <QDir>
 #include <QTemporaryDir>
+#include <QTimeZone>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -43,6 +46,8 @@ struct TempProject {
     QTemporaryDir temp;
     QString root;
 
+    /// Writes the two preamble files, so a reading of the example has no `preamble-missing`.
+    /// Side effects: creates the temporary folder and the files; fails the test if it can't.
     TempProject()
     {
         REQUIRE(temp.isValid());
@@ -389,4 +394,59 @@ TEST_CASE("Opening a project", "[loom.toml]")
         CHECK(opened.status == loom::OpenStatus::FormatTooNew);
         CHECK(opened.message == "This project was made by a newer Loom (format 7). Update Loom to open it.");
     }
+
+    SECTION("a loom.toml that is a folder can't be read")
+    {
+        REQUIRE(QDir().mkpath(project.root + "/loom.toml"));
+        const loom::OpenedProject opened = loom::openProject(project.root);
+        CHECK(opened.status == loom::OpenStatus::Unreadable);
+        CHECK_FALSE(opened.message.isEmpty());
+    }
+}
+
+TEST_CASE("A CRLF loom.toml reads as an LF one", "[loom.toml]")
+{
+    const TempProject project;
+    QByteArray text = specExample;
+    text.replace("\n", "\r\n");
+    const loom::ProjectTomlReading reading = project.read(text);
+    CHECK(reading.problems.empty());
+    CHECK(reading.config.idea == "Find the sharp decay rate for weak solutions of the model system with L^2 data.\n");
+    REQUIRE(reading.config.tags.size() == 2);
+    CHECK(reading.config.tags[1].title == "Energy estimates");
+    // And a problem in it is on the line a person counts.
+    text.replace("kind = \"technique\"", "kind = \"lemma\"");
+    CHECK(only(project.read(text)) ==
+          std::tuple<QString, int, QString>{"bad-value", 18, "`kind` can't be `lemma`; it must be one of `equation`, `technique`, `other`."});
+}
+
+TEST_CASE("A preamble file through a link that leaves the project is a bad path", "[loom.toml][paths]")
+{
+    QTemporaryDir temp;
+    REQUIRE(temp.isValid());
+    const QString root = temp.path() + "/Project";
+    writeFile(temp.path() + "/Outside/preamble.tex", "% outside\n");
+    REQUIRE(QDir().mkpath(root));
+    if (!loomtest::makeDirectoryLink(temp.path() + "/Outside", root + "/TeX"))
+        SKIP("This system can make neither a symbolic link nor a junction.");
+    CHECK(only(loom::readProjectToml(withPreamble("[\"TeX/preamble.tex\"]"), root)) ==
+          std::tuple<QString, int, QString>{"bad-path", 6,
+              "`TeX/preamble.tex` must be a path inside the project, written with `/`, without `..`."});
+}
+
+TEST_CASE("The TOML writer escapes every control character and writes any offset", "[toml]")
+{
+    // Specs/m1-core.md, "Front matter", canonical form: "escaping `\"`, `\\` and control characters".
+    CHECK(loom::tomlBasicString(QString::fromUtf8("a\x01" "b\x1F" "c\x7F" "d\b" "e\f" "f\tg")) ==
+          "\"a\\u0001b\\u001Fc\\u007Fd\\be\\ff\\tg\"");
+    // D1: the date's own offset, to the second; `Z` for UTC.
+    const QDate day(2026, 11, 4);
+    const QTime time(15, 32, 10, 250);
+    CHECK(loom::tomlOffsetDateTime(QDateTime(day, time, QTimeZone::fromSecondsAheadOfUtc(0))) == "2026-11-04T15:32:10Z");
+    CHECK(loom::tomlOffsetDateTime(QDateTime(day, time, QTimeZone::fromSecondsAheadOfUtc(19800))) == "2026-11-04T15:32:10+05:30");
+    CHECK(loom::tomlOffsetDateTime(QDateTime(day, time, QTimeZone::fromSecondsAheadOfUtc(-21600))) == "2026-11-04T15:32:10-06:00");
+    // A key with anything but ASCII letters, digits, `_` and `-` is quoted.
+    CHECK(loom::tomlKey("arxiv-v1") == "arxiv-v1");
+    CHECK(loom::tomlKey("ed 2") == "\"ed 2\"");
+    CHECK(loom::tomlKey(QString::fromUtf8("é")) == QString::fromUtf8("\"é\""));
 }

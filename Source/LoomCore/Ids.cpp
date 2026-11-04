@@ -12,11 +12,17 @@ namespace {
 constexpr qsizetype tagLength = 4;
 constexpr qsizetype alphabetSize = sizeof(tagAlphabet) - 1;
 
+/// Whether `c` is one of the tag alphabet's characters, as written (upper case). The ASCII test
+/// comes first so that a character past U+007F is never narrowed to a `char` that happens to
+/// match. No side effects.
 bool inAlphabet(QChar c)
 {
     return c.unicode() < 0x80 && QByteArrayView(tagAlphabet).contains(static_cast<char>(c.unicode()));
 }
 
+/// Whether `text` is one or more ASCII letters `a`–`z` and nothing else: the shape of a proof
+/// ID's letter part (`a`, `z`, `aa`). Only ASCII, so `é` or `ß` never reads as a proof letter.
+/// No side effects.
 bool isLowerLetters(QStringView text)
 {
     if (text.isEmpty())

@@ -584,11 +584,16 @@ const PaperFile* ProjectContents::paper(const QString& folder) const
 
 const PaperFile* ProjectContents::paperWithKey(const QString& key) const
 {
-    if (const PaperFile* byFolder = paper(key))
-        return byFolder;
-    for (const PaperFile& file : papers) {
-        if (file.reading.parsed && (file.reading.document.key == key || file.reading.document.aliases.contains(key)))
-            return &file;
+    for (const Qt::CaseSensitivity cs : {Qt::CaseSensitive, Qt::CaseInsensitive}) {
+        for (const PaperFile& file : papers) {
+            if (file.folder.compare(key, cs) == 0)
+                return &file;
+        }
+        for (const PaperFile& file : papers) {
+            if (file.reading.parsed
+                && (file.reading.document.key.compare(key, cs) == 0 || file.reading.document.aliases.contains(key, cs)))
+                return &file;
+        }
     }
     return nullptr;
 }
