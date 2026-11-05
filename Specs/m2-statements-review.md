@@ -1,20 +1,20 @@
 ---
 type: spec
 area: M2 statements and review
-tags: [m2, app, ui, latex, build, statements, review, git, markdown]
+tags: [m2, app, ui, latex, build, statements, review, git]
 ---
 
 # Spec: M2, statements and review
 
-> **Summary:** Everything `LoomApp`, `LoomCore` and `loom` do in M2, the milestone that replaces TexViewer's daily use: the app shell (start screen, the side bar of tabs, Settings, *Check my setup*), how the app calls `LoomCore` and turns Dakota's clicks into its confirmations, building LaTeX (the wrapper document, three modes, verbose, `\paperref`, errors mapped to source lines, SyncTeX, `loom build`, builds of `HEAD`), the Statements tab (list, editor, IDs, status and checks), never losing text, the Review tab with rendered Markdown, and the git panel, with a TexViewer parity table, the dependencies, a demo project and how the UI is tested.
+> **Summary:** Everything `LoomApp`, `LoomCore` and `loom` do in M2, the milestone that replaces TexViewer's daily use: the app shell (start screen, the side bar of tabs, Settings, *Check my setup*), how the app calls `LoomCore` and turns Dakota's clicks into its confirmations, building LaTeX (the wrapper document, three modes, verbose, `\paperref`, errors mapped to source lines, SyncTeX, `loom build`, builds of `HEAD`), the Statements tab (list, editor, IDs, status and checks), never losing text, the Review tab and the git panel, with a TexViewer parity table, the dependencies, a demo project and how the UI is tested.
 
 **Last verified:** 2026-11-05 · commit 8506746
 **Status:** Approved by Dakota on 2026-11-05
 **Milestone:** M2
 
 ## Scope
-- **Covers:** the app shell; the app's threads and its use of `LoomCore`; building LaTeX in `LoomCore` and `loom build`; building a revision; the Statements tab; IDs in the editor; status, checks and Dakota's clicks; recovery of unsaved text and files changed outside Loom; the Review tab for uncommitted edits, with rendered Markdown; the git panel; dependencies, CI and the UI tests.
-- **Does not cover:** job branches in Review, merging and retagging, the job queue, tasks (M4); the Graph tab (M5); editing papers and stubs, the Library, Reading (M6); threads and Export (M8); editing Markdown and the Wiki and Home tabs (M12); GitHub pull requests, issues and sign-in (later); merges, rebases and conflicts (a terminal, as with TexViewer).
+- **Covers:** the app shell; the app's threads and its use of `LoomCore`; building LaTeX in `LoomCore` and `loom build`; building a revision; the Statements tab; IDs in the editor; status, checks and Dakota's clicks; recovery of unsaved text and files changed outside Loom; the Review tab for uncommitted edits; the git panel; dependencies, CI and the UI tests.
+- **Does not cover:** rendered Markdown in Review (moved to M4, #41: *Moved to M4* at the end keeps its design), job branches in Review, merging and retagging, the job queue, tasks (M4); the Graph tab (M5); editing papers and stubs, the Library, Reading (M6); threads and Export (M8); editing Markdown and the Wiki and Home tabs (M12); GitHub pull requests, issues and sign-in (later); merges, rebases and conflicts (a terminal, as with TexViewer).
 
 ## The build issues
 Each build issue reads the sections named here; they don't need the rest.
@@ -29,7 +29,6 @@ Each build issue reads the sections named here; they don't need the rest.
 | #38 status, checks and Dakota's clicks | *Status and checks in the tab*, *Dakota's clicks* |
 | #39 git in `LoomCore` and the git panel | *The git panel* |
 | #40 the Review tab | *The Review tab*, *Rules: front-matter changes in plain words* |
-| #41 rendered Markdown in Review | *Rendered Markdown*, the WebEngine, KaTeX and md4c rows of *Dependencies* |
 
 ## Departures from the design and M1
 Places where this spec makes `Specs/loom.md` or `Specs/m1-core.md` more precise in a way they didn't say, or changes them. Dakota approved all of them on 2026-11-05.
@@ -118,7 +117,7 @@ The build issues add these, each Catch2-tested, none with UI code:
 | Has `loom.toml` that reads | Opens. Any validation problems go to the Problems panel, and if there are errors a bar says *"This project has {n} errors; commits are refused until they're fixed."* with **Show problems**. Files whose front matter doesn't parse open in raw mode |
 | Is inside a project (a parent has `loom.toml`) | *"This folder is inside the project {name} at {path}."* **Open that project** |
 | Is empty | *"This folder is empty."* **Create a project here** (the New project form, filled in) |
-| Has no `loom.toml` and isn't empty | *"This folder isn't a Loom project: it has no loom.toml. Loom creates projects only in new or empty folders; bringing in an existing research repo comes with the importer (M3)."* |
+| Has no `loom.toml` and isn't empty | *"This folder isn't a Loom project: it has no loom.toml. Loom creates projects only in new or empty folders."* |
 | Has a `loom.toml` that doesn't parse | *"Loom can't read loom.toml: {parser message} (line {n}). Fix it in a text editor, then open the project again."* **Show in Explorer**. Not opened |
 | Was made by a newer Loom | M1's message: *"This project was made by a newer Loom (format {n}). Update Loom to open it."* Not opened |
 | Is open in another Loom window | *"This project is open in another Loom window."* Not opened. A window that crashed leaves a stale lock, which `QLockFile` detects and takes over |
@@ -439,7 +438,7 @@ Every time a statement or page is opened (from the list, a chip, Ctrl+click, the
 
 ### Status and checks in the tab
 - **The status line** under the statement's title is the status mark, the status word and `LoomCore`'s explanation sentence, the same as `loom status <id>` (M1): *"4KX7 conditional: 4KX7.a is complete and checked, but rests on 3WQ6, which is extracted (not yet checked against the paper's PDF)."* IDs in it are links.
-- **Each proof page's check history** is a table, oldest first, with every entry of `<proof-id>.checks.toml`: date and time, who (*Dakota*, or *agent claude-opus-5-5*), the verdict, and **this version** or **an older version** (whether the fingerprint matches the proof's current one). The two counting checks (M1, rule 5) are marked **counts**. A `changes` text shows in full under its entry. `record` and `note` are links: a Markdown file opens read-only in the Markdown view (*Rendered Markdown*); a missing one says it's missing.
+- **Each proof page's check history** is a table, oldest first, with every entry of `<proof-id>.checks.toml`: date and time, who (*Dakota*, or *agent claude-opus-5-5*), the verdict, and **this version** or **an older version** (whether the fingerprint matches the proof's current one). The two counting checks (M1, rule 5) are marked **counts**. A `changes` text shows in full under its entry. `record` and `note` are links: a Markdown file opens read-only as plain text in a window of its own (rendered from M4); a missing one says it's missing.
 - **What the proof gives** is one line above the table, from the snapshot: *"Checked: the agent's pass of 2026-11-04 and your pass of 2026-11-04."*, *"Waiting for your pass."*, *"Doesn't support 4KX7: the agent says it's wrong (fail, 2026-11-20)."*
 
 **Dakota's buttons** on a proof page: **Pass**, **Needs changes…**, **Fail**, each through its confirmation dialog (*Dakota's clicks*). They are disabled, with the reason on hover, while the proof's page has unsaved edits (*"Save first: a check records the version on disk."*) and while the snapshot is older than the file on disk. A refusal because the proof changed under the dialog (`proof-changed`) says so and offers to show the new version.
@@ -504,15 +503,7 @@ The list updates when files change (from the snapshot and a new `git status`, af
 3. **Raw diff**: a toggle that replaces the PDFs with `git diff HEAD -- <files>` for the entry's files, coloured.
 4. **Open in Statements**: opens the statement (or the selected proof) in the Statements tab.
 
-**A paper entry** shows the plain-word changes of `paper.toml` and its stubs (fields as `journal: "…" → "…"`, `verified` set or cleared, locators added, `checked_against_pdf` set) and the raw diff. **Markdown** entries show the rendered Markdown (below) with **Raw diff** a click away. **Project files** and **Other files** show the raw diff only; a binary file says so and shows its size before and after.
-
-### Rendered Markdown
-A changed Markdown file is shown rendered, with its changes marked, in one view component of `LoomApp` (`MarkdownView`), which is the app's only use of Qt WebEngine. It is also used read-only for records and notes opened from the check history.
-
-- **Rendering.** md4c turns Markdown (CommonMark, with tables, strikethrough and task lists) into HTML, with `$…$` and `$$…$$` kept as math (md4c's `MD_FLAG_LATEXMATHSPANS`, so `_` and `*` inside math are never emphasis); KaTeX typesets the math. The project's `\newcommand`s without optional arguments from its preamble files are passed to KaTeX as macros; math that KaTeX can't typeset shows its source in red. TOML front matter (`+++`) is shown as a small two-column table at the top.
-- **Changes.** The old and new files are split into top-level blocks (paragraphs, headings, list items, table rows, code blocks), which are compared in order (longest common subsequence). An added block has a green bar in the margin; a removed one is shown, struck through, with a red bar, where it was; a changed block is shown as the removed old one followed by the added new one, with the changed words in the new one highlighted. **Next change** and **Previous change** jump between them. A new file is all added; a deleted one all removed.
-- **Links.** Links to project files open them in Loom (a statement in Statements; another Markdown file in the view); `http` and `https` links open in the default browser. The page loads nothing from the internet: KaTeX, its fonts and the page's script and styles are compiled into `LoomApp` as Qt resources, and every request for a URL outside them is blocked.
-- **Raw diff** is a click away, as everywhere in Review.
+**A paper entry** shows the plain-word changes of `paper.toml` and its stubs (fields as `journal: "…" → "…"`, `verified` set or cleared, locators added, `checked_against_pdf` set) and the raw diff. **Markdown** entries show the raw diff (rendered from M4). **Project files** and **Other files** show the raw diff only; a binary file says so and shows its size before and after.
 
 ### The git panel
 A panel on the right, opened from every tab (the branch in the status bar, or Ctrl+Shift+G). It runs git only on a click, through `LoomCore`'s git operations (the `git` program, as M1 runs it: `GIT_TERMINAL_PROMPT=0` so git never waits for a terminal, M1's timeout and `git-timeout`). Merges, rebases and conflicts are left to a terminal.
@@ -552,7 +543,7 @@ A panel on the right, opened from every tab (the branch in the status bar, or Ct
 | Settings: theme, font size, compile timeout, *Check my setup* | M2 (*Settings*) |
 | Review: before at `HEAD` and after, compiled side by side | M2 (*The Review tab*) |
 | Review: header changes in plain words | M2 (*Rules*), plus the status changes they cause |
-| Review: Markdown rendered with changes marked | M2 (*Rendered Markdown*, #41; Q6) |
+| Review: Markdown rendered with changes marked | M4 (#41; Q6); M2 shows the raw diff |
 | Review: raw diff; *Open in editor* | M2 |
 | Git panel: new branch, switch branch, tick files and commit, hook refusals shown, *Run checks*, push listing the commits first, fetch, pull fast-forward only | M2 (*The git panel*) |
 | Git panel: discarding changes (Dakota never used it) | Dropped (E5, Q5) |
@@ -564,19 +555,15 @@ A panel on the right, opened from every tab (the branch in the status bar, or Ct
 | --- | --- | --- | --- | --- | --- |
 | QScintilla | 2.14.1 | GPL v3 (or Riverbank's commercial licence) | Compiled in: the source archive by `FetchContent` (URL and SHA-256), built as a static library by Loom's own `Source/CMake/QScintilla.cmake`, since QScintilla ships only qmake files | Yes: GPL v3 is Loom's licence | #35 |
 | Qt PDF, Qt PDF Widgets | Qt 6.11.1 | LGPL v3 / GPL v3 (it contains PDFium, BSD-3-Clause) | Linked (`Qt6::Pdf`, `Qt6::PdfWidgets`) in `LoomApp` | Yes | #36 |
-| Qt WebEngine Widgets | Qt 6.11.1 | LGPL v3 / GPL v3 (Chromium's licences are compatible) | Linked in `LoomApp`, used only by `MarkdownView` | Yes | #41 |
-| md4c | its latest release, pinned by URL and SHA-256 | MIT | Compiled in by `FetchContent` (it has CMake) | Yes | #41 |
-| KaTeX | 0.16.x, pinned | MIT | Its release archive by `FetchContent`; the script, CSS and fonts compiled into `LoomApp` as Qt resources | Yes | #41 |
 | TeX Live (`latexmk`, pdfLaTeX, `synctex`, BibTeX) | 2025 or newer | LPPL, GPL and others | Separate programs, never linked; installed by Dakota | Not linked or shipped | how-to page (#34) |
 
 `LoomCore` gains no dependency: the build, git and setup checks run programs through Qt Core. The configure check that keeps Gui, Widgets and WebEngine out of `LoomCore` (M1) is extended to Pdf and PdfWidgets.
 
 **CI** (`.github/workflows/checks.yml`):
-- Qt from `install-qt-action` with the modules `qtpdf qtwebengine qtwebchannel qtpositioning` on both runners.
-- **Linux:** `apt-get install latexmk texlive-latex-base texlive-latex-recommended texlive-fonts-recommended`, so the TeX tests run; and the system libraries QScintilla and WebEngine need.
+- Qt from `install-qt-action` with the module `qtpdf` on both runners.
+- **Linux:** `apt-get install latexmk texlive-latex-base texlive-latex-recommended texlive-fonts-recommended`, so the TeX tests run; and the system libraries QScintilla needs.
 - **Windows:** no TeX (a TeX Live install is too large for each run), so the TeX tests skip there; Dakota's machine runs them.
 - **TeX tests** are Catch2 and Qt Tests that need `latexmk`. They carry the CTest label `tex`; when `latexmk` isn't found they skip (Catch2's `SKIP`, Qt's `QSKIP`) with *"latexmk not found"*. The Linux job sets `LOOM_REQUIRE_TEX=1`, under which a missing `latexmk` fails the test instead, so CI can't skip them silently.
-- **WebEngine tests** carry the label `webengine` and skip when WebEngine can't start (*"Qt WebEngine couldn't start here"*); the Markdown HTML (md4c, the block diff) is tested without WebEngine.
 
 ### The demo project
 `Tests/Projects/Demo/`, written by #33 and used by every M2 test that needs a project: a small project of made-up mathematics that compiles, with one of most statuses. Its checks' fingerprints are computed with `loom fingerprint` when the files are written.
@@ -652,7 +639,6 @@ For every statement or stub whose status differs: `4KX7 · title: unchecked → 
 - **A revision build after a key rename:** the revision's own `paper.toml` and aliases are used, so its citations resolve as they did then.
 - **No `synctex`:** forward search goes to the statement's page; double-clicking the PDF does nothing and says why once.
 - **A very long build log:** Output keeps the last 5 MB per channel.
-- **A Markdown file with invalid math:** KaTeX shows the source in red; the rest renders.
 - **A detached `HEAD`:** the panel says so; Commit is refused; Review compares with `HEAD` as usual.
 - **A repository with no commits:** Review lists everything as new; before sides are empty; Push is hidden.
 
@@ -679,9 +665,32 @@ For every statement or stub whose status differs: `4KX7 · title: unchecked → 
 | Checks and clicks | Qt Test | Each click confirmed and cancelled; status updates everywhere |
 | Never losing text | Qt Test | A file changed on disk with and without edits; recovery after the app is killed (a child process ended mid-edit) |
 | Review | Qt Test | The `review` overlay listed and grouped; before and after; plain words; status changes; raw diff; nothing written |
-| Markdown | Catch2 or Qt Test without WebEngine; screenshot test, label `webengine` | HTML and block diff for added, removed and changed blocks; math kept out of emphasis; no external loads |
 | Git panel | Qt Test | Commit, refused commit with clickable problems, switch refused, push listing |
 | On Windows | manual | Each build issue's Windows check |
+
+## Moved to M4: rendered Markdown
+Rendered Markdown in Review (#41) moved to M4 (Q6). Its design, worked out for M2, is kept here for the M4 spec to take over, check and approve; nothing in this section is built in M2.
+
+### The view
+A changed Markdown file is shown rendered, with its changes marked, in one view component of `LoomApp` (`MarkdownView`), which is the app's only use of Qt WebEngine. It is also used read-only for records and notes opened from the check history.
+
+- **Rendering.** md4c turns Markdown (CommonMark, with tables, strikethrough and task lists) into HTML, with `$…$` and `$$…$$` kept as math (md4c's `MD_FLAG_LATEXMATHSPANS`, so `_` and `*` inside math are never emphasis); KaTeX typesets the math. The project's `\newcommand`s without optional arguments from its preamble files are passed to KaTeX as macros; math that KaTeX can't typeset shows its source in red. TOML front matter (`+++`) is shown as a small two-column table at the top.
+- **Changes.** The old and new files are split into top-level blocks (paragraphs, headings, list items, table rows, code blocks), which are compared in order (longest common subsequence). An added block has a green bar in the margin; a removed one is shown, struck through, with a red bar, where it was; a changed block is shown as the removed old one followed by the added new one, with the changed words in the new one highlighted. **Next change** and **Previous change** jump between them. A new file is all added; a deleted one all removed.
+- **Links.** Links to project files open them in Loom (a statement in Statements; another Markdown file in the view); `http` and `https` links open in the default browser. The page loads nothing from the internet: KaTeX, its fonts and the page's script and styles are compiled into `LoomApp` as Qt resources, and every request for a URL outside them is blocked.
+- **Raw diff** is a click away, as everywhere in Review.
+
+### Its dependencies
+| Dependency | Version | Licence | Used how | Fine with GPL v3? | Decision page |
+| --- | --- | --- | --- | --- | --- |
+| Qt WebEngine Widgets | Qt 6.11.1 | LGPL v3 / GPL v3 (Chromium's licences are compatible) | Linked in `LoomApp`, used only by `MarkdownView` | Yes | #41 |
+| md4c | its latest release, pinned by URL and SHA-256 | MIT | Compiled in by `FetchContent` (it has CMake) | Yes | #41 |
+| KaTeX | 0.16.x, pinned | MIT | Its release archive by `FetchContent`; the script, CSS and fonts compiled into `LoomApp` as Qt resources | Yes | #41 |
+
+### CI, an edge case and tests
+- Qt from `install-qt-action` gains the modules `qtwebengine qtwebchannel qtpositioning`, and the Linux runner the system libraries WebEngine needs.
+- **WebEngine tests** carry the label `webengine` and skip when WebEngine can't start (*"Qt WebEngine couldn't start here"*); the Markdown HTML (md4c, the block diff) is tested without WebEngine.
+- **Edge case, a Markdown file with invalid math:** KaTeX shows the source in red; the rest renders.
+- Tests: Catch2 or Qt Test without WebEngine, plus a screenshot test with the label `webengine`, for the HTML and block diff of added, removed and changed blocks, math kept out of emphasis, and no external loads.
 
 ## Open questions
 - None. Dakota answered them on 2026-11-05, each as recommended, and approved the departures and decisions; the spec above follows his answers:
@@ -690,10 +699,10 @@ For every statement or stub whose status differs: `4KX7 · title: unchecked → 
   - **Q3, TeX engine and bibliography style:** pdfLaTeX and `amsplain`, fixed for M2, with no change to `loom.toml`. A `[tex]` table can come later if a project needs another engine.
   - **Q4, tabs of later milestones:** hidden until their milestone (E4).
   - **Q5, discarding uncommitted changes:** left out; Dakota has never used it (E5).
-  - **Q6, rendered Markdown (#41):** stays in M2, as its last issue.
+  - **Q6, rendered Markdown (#41):** first kept in M2, as recommended; then, when the importer (M3) was dropped from the design on 2026-11-05, moved to M4, where job branches bring agents' Markdown into Review. Without the importer, M2 has no steady source of Markdown changes, and M2 no longer needs Qt WebEngine.
 
 ## See also
 - Up: [Specs](README.md)
 - [The design](loom.md): *The app* (*Tabs*, *Local review*), *IDs*, *Papers* (`\paperref`), *Technology*, *Build order*
 - [The M1 spec](m1-core.md): the formats, the `loom` command, Dakota's clicks, validation, the toolchain
-- The M2 build issues: #33–#41
+- The M2 build issues: #33–#40; #41 (rendered Markdown) is now M4's
