@@ -13,7 +13,7 @@ tags: [design, project-model, workflows, architecture]
 **Replaces:** TexViewer, the owner's earlier Electron/TypeScript editor, which is archived once Loom can do what it does
 
 ## Scope
-- **Covers:** why Loom exists; its principles; the project folder and every file type in it; how status and staleness are computed; the tabs; each workflow (literature, reading sessions, spec sessions, proof jobs, threads, numerics, reviewers, Lean, tasks); agent jobs and local review; the technology; Loom's own repo layout; the build order; importing an existing project.
+- **Covers:** why Loom exists; its principles; the project folder and every file type in it; how status and staleness are computed; the tabs; each workflow (literature, reading sessions, spec sessions, proof jobs, threads, numerics, reviewers, Lean, tasks); agent jobs and local review; the technology; Loom's own repo layout; the build order.
 - **Does not cover:** screen-by-screen layouts, exact field lists beyond the examples here, and the agent prompts. Each gets its own spec under `Specs/` before its milestone is built.
 
 ## Why
@@ -487,9 +487,9 @@ Loom/
 | Milestone | Delivers |
 | --- | --- |
 | **M1 Core** | `LoomCore` and `loom`: the project folder, every format, validation, status computation, `loom new-project` and `loom validate`, tests |
-| **M2 Statements and Review** | The app shell and the side bar of tabs; Statements tab (edit, compile in three modes, PDF beside); Review tab and the git panel for Dakota's own edits. Replaces TexViewer's daily use |
-| **M3 Move in** | Importer for existing research repos (below); Dakota switches to Loom |
-| **M4 Tasks and Jobs** | Tasks tab, the job queue, Claude Code jobs on branches, records, job branches in Review |
+| **M2 Statements and Review** | The app shell and the side bar of tabs; Statements tab (edit, compile in three modes, PDF beside); Review tab and the git panel for Dakota's own edits. Replaces TexViewer's daily use; Dakota switches to Loom |
+| ~~M3 Move in~~ | Dropped on 2026-11-05: there is no importer, and research that predates Loom starts over as new Loom projects (see below) |
+| **M4 Tasks and Jobs** | Tasks tab, the job queue, Claude Code jobs on branches, records, job branches in Review, rendered Markdown in Review (moved from M2) |
 | **M5 Graph** | The Graph tab |
 | **M6 Library and Reading** | Paper entries, the verification window, gather literature, reading sessions and the discussion |
 | **M7 Specs and proof jobs** | Spec sessions, first pass, per-proof jobs |
@@ -501,14 +501,8 @@ Loom/
 
 Each milestone gets its own spec in `Specs/` before it's built.
 
-## Importing an existing project
-An importer (M3) turns an existing LaTeX research repo into a Loom project, so work done before Loom isn't left behind. It handles repos organised as one result per file with a comment header (status, uses, cites) plus one Markdown page per paper:
-- Each result file (statement and proof together) becomes a statement file plus a proof file. Its list of used results becomes the proof's premises, or `stated_using` for definitions. The old hand-set status becomes the proof's `level`; recorded referee passes become agent checks, which Dakota re-accepts.
-- Every result gets a new tag; its old ID is kept as an alias, so search and old notes still find it.
-- Paper pages become `Papers/<Key>/` entries with every field marked unverified.
-- Wiki pages are sorted by kind: per-equation pages become `Wiki/topics/`, narrative pages become `Threads/`, open-problem pages become open statements or questions, pitfalls split between failed proofs and `Wiki/pitfalls/`, math decisions stay in `Wiki/decisions/`, logs and meetings become records and meetings, and process pages are dropped (Loom owns the process now).
-- Frozen source drafts come in as a read-only archive folder; numerics, Lean and transcripts move to their new homes.
-- The importer writes a report of everything it couldn't map, for Dakota to settle.
+## No importer
+M3 was to bring existing LaTeX research repos into Loom. It was dropped on 2026-11-05: Dakota starts such research over as new Loom projects, so nothing needs importing. The milestone numbers after it are kept, so M4–M12 mean what they always have. Two things in M1 were written with an importer in mind and stay, since they cost nothing and have other uses: `origin = "import:<path>"` is still a valid value (nothing writes it), and aliases still hold a statement's old names.
 
 ## Open questions
 - None. Ready for Dakota's approval.
