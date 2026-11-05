@@ -18,7 +18,7 @@ include(LoomCompilerOptions)
 include(LoomCoreLinkCheck)
 include(LoomDependencies)
 
-find_package(Qt6 6.11 REQUIRED COMPONENTS Core Gui Widgets Test)
+find_package(Qt6 6.11 REQUIRED COMPONENTS Core Gui Widgets Pdf PdfWidgets Test)
 qt_standard_project_setup()
 # QScintilla needs Qt Widgets, so it comes after Qt.
 include(QScintilla)

@@ -7,6 +7,7 @@
 #include "LoomApp/Lane.h"
 #include "LoomApp/LatexEditor.h"
 #include "LoomApp/NewItemDialogs.h"
+#include "LoomApp/PdfPane.h"
 #include "LoomApp/ProjectSession.h"
 #include "LoomApp/StatementList.h"
 #include "LoomApp/TextDiff.h"
@@ -126,7 +127,7 @@ bool fileRole(const QString& path, FileRole& role)
     return false;
 }
 
-StatementsPage::StatementsPage(AppSettings* settings, Lane* lane, QWidget* parent)
+StatementsPage::StatementsPage(AppSettings* settings, Lane* lane, Lane* buildLane, QWidget* parent)
     : QWidget(parent)
     , m_settings(settings)
     , m_lane(lane)
@@ -137,7 +138,7 @@ StatementsPage::StatementsPage(AppSettings* settings, Lane* lane, QWidget* paren
     , m_empty(new QLabel(this))
     , m_tabs(new QTabWidget(this))
     , m_newProofButton(new QToolButton(this))
-    , m_pdfPane(new QWidget(this))
+    , m_pdf(new PdfPane(settings, buildLane, this))
 {
     setObjectName(QStringLiteral("statementsPage"));
     m_tabs->setObjectName(QStringLiteral("pages"));
@@ -164,18 +165,9 @@ StatementsPage::StatementsPage(AppSettings* settings, Lane* lane, QWidget* paren
     editorLayout->addWidget(m_tabs, 1);
     m_tabs->hide();
 
-    // The PDF pane comes with compiling (#36).
-    m_pdfPane->setObjectName(QStringLiteral("pdfPane"));
-    auto* pdfNote = new QLabel(QStringLiteral("The compiled PDF of the open statement comes here."), m_pdfPane);
-    pdfNote->setWordWrap(true);
-    pdfNote->setAlignment(Qt::AlignCenter);
-    pdfNote->setForegroundRole(QPalette::PlaceholderText);
-    auto* pdfLayout = new QVBoxLayout(m_pdfPane);
-    pdfLayout->addWidget(pdfNote);
-
     m_splitter->addWidget(m_list);
     m_splitter->addWidget(m_editorArea);
-    m_splitter->addWidget(m_pdfPane);
+    m_splitter->addWidget(m_pdf);
     m_splitter->setStretchFactor(0, 2);
     m_splitter->setStretchFactor(1, 5);
     m_splitter->setStretchFactor(2, 3);
@@ -199,7 +191,11 @@ StatementsPage::StatementsPage(AppSettings* settings, Lane* lane, QWidget* paren
     connect(m_tabs, &QTabWidget::currentChanged, this, [this] {
         if (FilePage* page = currentPage())
             page->refresh();
+        updatePdfTarget();
     });
+    // Double-clicking the PDF opens the source at that line (inverse SyncTeX).
+    connect(m_pdf, &PdfPane::placeActivated, this, &StatementsPage::showFileLine);
+    connect(m_pdf, &PdfPane::outputLine, this, &StatementsPage::outputLine);
     connect(m_settings, &AppSettings::changed, this, &StatementsPage::applyEditorFont);
     qApp->installEventFilter(this);
 }
@@ -239,6 +235,8 @@ void StatementsPage::setSession(ProjectSession* session)
     m_tabs->hide();
     m_empty->show();
     showFormDrafts();
+    m_pdf->setSession(nullptr, nullptr);
+    m_buildProblems.clear();
     m_state.reset();
     m_session = session;
     m_snapshot = session ? session->snapshot() : nullptr;
@@ -248,6 +246,7 @@ void StatementsPage::setSession(ProjectSession* session)
         return;
 
     m_state = std::make_unique<QSettings>(projectStateFile(m_settings->paths(), session->root()), QSettings::IniFormat);
+    m_pdf->setSession(session, m_state.get());
     for (const QString& text : m_state->value(QStringLiteral("history/back")).toStringList()) {
         if (const Place place = Place::fromString(text); !place.tag.isEmpty())
             m_back.push_back(place);
@@ -420,6 +419,7 @@ void StatementsPage::snapshotChanged()
     }
     refreshPages();
     updateUnsaved();
+    m_pdf->snapshotChanged(m_snapshot);
 }
 
 EditBuffer* StatementsPage::ensureBuffer(const QString& path, FileKind kind, const QString& id)
@@ -501,6 +501,7 @@ void StatementsPage::rebuildPages(const QString& select)
     if (m_tag.isEmpty() || !m_snapshot) {
         m_tabs->hide();
         m_empty->show();
+        updatePdfTarget();
         return;
     }
     m_empty->hide();
@@ -513,6 +514,7 @@ void StatementsPage::rebuildPages(const QString& select)
             page->bind(ensureBuffer(stub->path, FileKind::Stub, m_tag), nullptr);
         m_tabs->addTab(page, QStringLiteral("Paper result"));
         applyEditorFont();
+        updatePdfTarget();
         return;
     }
     const QString statementPath = QStringLiteral("Statements/%1.tex").arg(m_tag);
@@ -535,6 +537,21 @@ void StatementsPage::rebuildPages(const QString& select)
     m_tabs->setCurrentIndex(selected);
     applyEditorFont();
     updateUnsaved();
+    updatePdfTarget();
+}
+
+void StatementsPage::updatePdfTarget()
+{
+    if (m_tag.isEmpty() || !m_session) {
+        m_pdf->setTarget({}, {});
+        return;
+    }
+    if (m_stub) {
+        m_pdf->setTarget(m_tag, m_tag, true);
+        return;
+    }
+    const FilePage* page = currentPage();
+    m_pdf->setTarget(page && !page->proofId().isEmpty() ? page->proofId() : m_tag, m_tag);
 }
 
 void StatementsPage::openStatement(const QString& tag, const QString& page, bool record)
@@ -798,7 +815,38 @@ void StatementsPage::save()
     FilePage* page = currentPage();
     if (!page || !page->shownBuffer())
         return;
-    saveBuffer(page->shownBuffer());
+    // "Ctrl+S saves and compiles"; with Compile on save off, it only saves.
+    saveBuffer(page->shownBuffer(), {}, [this](bool ok) {
+        if (ok && m_settings->compileOnSave())
+            m_pdf->compile();
+    });
+}
+
+void StatementsPage::compile()
+{
+    m_pdf->compileClicked();
+}
+
+void StatementsPage::showCursorInPdf()
+{
+    FilePage* page = currentPage();
+    EditBuffer* shown = page ? page->shownBuffer() : nullptr;
+    if (!shown)
+        return;
+    int line = 0;
+    int index = 0;
+    page->editor()->getCursorPosition(&line, &index);
+    ++line; // The editor counts from 0.
+    // The form shows the body only: its line n is the file's line n + the front matter's lines.
+    if (!shown->raw() && shown->kind() != FileKind::Stub)
+        line += std::max(1, shown->loadedBodyLine()) - 1;
+    m_pdf->showPlace(shown->path(), line, index);
+}
+
+void StatementsPage::setBuildProblems(const std::vector<Problem>& problems)
+{
+    m_buildProblems = problems;
+    refreshPages();
 }
 
 void StatementsPage::saveBuffer(EditBuffer* buffer, const SaveConfirmations& confirmations, std::function<void(bool)> done)
@@ -883,6 +931,8 @@ void StatementsPage::finishSave(EditBuffer* buffer, const QByteArray& sent, cons
     if (result.outcome == ChangeOutcome::Done) {
         // The file is now what the save wrote (or, when nothing needed writing, what was loaded).
         const QByteArray now = result.written.isEmpty() ? buffer->loaded() : result.written;
+        // A save is Loom's own write, not a change on disk for the PDF pane to compile again for.
+        m_pdf->noteWritten(buffer->path(), now);
         if (buffer->text() == sent) {
             buffer->load(now, true);
             dropDraft(buffer);
@@ -1432,6 +1482,11 @@ void StatementsPage::forward()
 
 void StatementsPage::find(bool replace)
 {
+    // "Find in the PDF (Ctrl+F while the PDF has focus) uses Qt PDF's search."
+    if (!replace && QApplication::focusWidget() && m_pdf->isAncestorOf(QApplication::focusWidget())) {
+        m_pdf->find();
+        return;
+    }
     if (FilePage* page = currentPage())
         page->findBar()->open(replace);
 }

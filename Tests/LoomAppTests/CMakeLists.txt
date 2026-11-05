@@ -32,3 +32,20 @@ if(WIN32)
     set_tests_properties(StatementsTabTests PROPERTIES
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${LOOM_QT_BIN_DIR}")
 endif()
+
+# CompileTests: compiling, the PDF pane and the Problems panel (#36). Its builds need TeX, hence
+# the label; the cases that build skip without latexmk (Specs/m2-statements-review.md,
+# "Dependencies and toolchain").
+qt_add_executable(CompileTests
+    CompileTests.cpp)
+target_link_libraries(CompileTests PRIVATE LoomAppLib LoomTestSupport Qt6::Test)
+target_compile_definitions(CompileTests PRIVATE
+    LOOM_SCREENSHOTS="${PROJECT_BINARY_DIR}/screenshots")
+loom_set_compiler_options(CompileTests)
+add_test(NAME CompileTests COMMAND CompileTests)
+add_dependencies(CompileTests loom)
+set_tests_properties(CompileTests PROPERTIES LABELS tex)
+if(WIN32)
+    set_tests_properties(CompileTests PROPERTIES
+        ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${LOOM_QT_BIN_DIR}")
+endif()

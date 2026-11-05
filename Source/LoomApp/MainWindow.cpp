@@ -4,6 +4,7 @@
 #include "LoomApp/BottomPanel.h"
 #include "LoomApp/Lane.h"
 #include "LoomApp/NewProjectDialog.h"
+#include "LoomApp/PdfPane.h"
 #include "LoomApp/ProjectSession.h"
 #include "LoomApp/SettingsPage.h"
 #include "LoomApp/SetupCheckView.h"
@@ -129,7 +130,7 @@ MainWindow::MainWindow(AppSettings* settings, QWidget* parent)
     connect(m_startScreen, &StartScreen::recentClicked, this, [this](const QString& path) { openFolder(path); });
     m_pages->addWidget(m_startScreen);
 
-    m_statementsPage = new StatementsPage(m_settings, m_projectLane, m_pages);
+    m_statementsPage = new StatementsPage(m_settings, m_projectLane, m_buildLane, m_pages);
     m_tabPages[Tab::Statements] = m_statementsPage;
     m_reviewNote = new QLabel;
     m_tabPages[Tab::Review] = placeholderPage(QStringLiteral("reviewPage"), QStringLiteral("Review"), m_reviewNote, m_pages);
@@ -173,7 +174,25 @@ MainWindow::MainWindow(AppSettings* settings, QWidget* parent)
             m_bottomPanel->showProblems();
         }
     });
-    connect(m_statementsPage, &StatementsPage::outputLine, m_bottomPanel, &BottomPanel::appendOutput);
+    connect(m_statementsPage, &StatementsPage::outputLine, m_bottomPanel, [this](const QString& line) { m_bottomPanel->appendOutput(line); });
+    // The PDF pane's builds: the status bar's build state, the Problems panel and Output's Build channel.
+    PdfPane* pdf = m_statementsPage->pdfPane();
+    connect(pdf, &PdfPane::buildStarted, this, [this, pdf] {
+        m_buildState->setText(pdf->stateText());
+        m_buildState->show();
+    });
+    connect(pdf, &PdfPane::buildFinished, this, [this, pdf](const BuildResult& result) {
+        m_buildState->setText(pdf->stateText());
+        m_buildState->setVisible(!m_buildState->text().isEmpty());
+        m_bottomPanel->setBuildProblems(result.problems);
+        m_statementsPage->setBuildProblems(result.problems);
+        logBuild(result);
+        // "Errors open in a Problems panel that jumps to the line."
+        if (result.errors() > 0) {
+            m_bottomPanel->show();
+            m_bottomPanel->showProblems();
+        }
+    });
     connect(m_statementsPage, &StatementsPage::unsavedChanged, this,
             [this](bool any) { m_sideBar->button(Tab::Statements)->setBadgeDot(any); });
     m_splitter = new QSplitter(Qt::Vertical, this);
@@ -246,6 +265,17 @@ void MainWindow::createActions()
     view->addSeparator();
     QAction* panel = view->addAction(QStringLiteral("&Bottom panel"), this, &MainWindow::toggleBottomPanel);
     panel->setShortcut(QKeySequence(QKeyCombination(Qt::ControlModifier, Qt::Key_QuoteLeft)));
+    // F8 / Shift+F8: the next and previous problem, opened at its line.
+    const auto stepProblem = [this](bool forward) {
+        if (!m_session)
+            return;
+        m_bottomPanel->show();
+        m_bottomPanel->showProblems();
+        m_bottomPanel->stepProblem(forward);
+    };
+    view->addAction(QStringLiteral("&Next problem"), this, [stepProblem] { stepProblem(true); })->setShortcut(QKeySequence(Qt::Key_F8));
+    view->addAction(QStringLiteral("&Previous problem"), this, [stepProblem] { stepProblem(false); })
+        ->setShortcut(QKeySequence(QKeyCombination(Qt::ShiftModifier, Qt::Key_F8)));
 
     // The Statements tab's actions (Specs/m2-statements-review.md, "Shortcuts"), on its tab only.
     QMenu* statement = menuBar()->addMenu(QStringLiteral("&Statement"));
@@ -261,6 +291,9 @@ void MainWindow::createActions()
     add(QStringLiteral("New &proof…"), QKeySequence(QKeyCombination(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_N)),
         [this] { m_statementsPage->newProof(); });
     add(QStringLiteral("&Save"), QKeySequence(QKeyCombination(Qt::ControlModifier, Qt::Key_S)), [this] { m_statementsPage->save(); });
+    add(QStringLiteral("&Compile"), QKeySequence(QKeyCombination(Qt::ControlModifier, Qt::Key_B)), [this] { m_statementsPage->compile(); });
+    add(QStringLiteral("Show in the P&DF"), QKeySequence(QKeyCombination(Qt::ControlModifier, Qt::Key_J)),
+        [this] { m_statementsPage->showCursorInPdf(); });
     statement->addSeparator();
     add(QStringLiteral("&Back"), QKeySequence(QKeyCombination(Qt::AltModifier, Qt::Key_Left)), [this] { m_statementsPage->back(); });
     add(QStringLiteral("&Forward"), QKeySequence(QKeyCombination(Qt::AltModifier, Qt::Key_Right)), [this] { m_statementsPage->forward(); });
@@ -287,6 +320,7 @@ void MainWindow::createActions()
             "<p><b>Loom %1</b><br>Mathematical research with AI agents.<br>Licensed under the GNU GPL v3.</p>"
             "<table cellspacing='0' cellpadding='3'>"
             "<tr><td>Qt %2 (Core, Gui, Widgets)</td><td>LGPL v3 / GPL v3</td><td>linked</td></tr>"
+            "<tr><td>Qt PDF %2 (with PDFium)</td><td>LGPL v3 / GPL v3 (PDFium: BSD-3-Clause)</td><td>linked</td></tr>"
             "<tr><td>toml++</td><td>MIT</td><td>compiled in</td></tr>"
             "<tr><td>QScintilla 2.14.1</td><td>GPL v3</td><td>compiled in</td></tr>"
             "<tr><td>TeX Live: latexmk, pdfLaTeX, synctex, BibTeX</td><td>LPPL, GPL and others</td><td>separate programs, not linked</td></tr>"
@@ -324,7 +358,8 @@ void MainWindow::createStatusBar()
     m_busy->hide();
     // No frames around the items: Windows' style draws one even around an empty label.
     statusBar()->setStyleSheet(QStringLiteral("QStatusBar::item { border: none; }"));
-    m_buildState->hide(); // The build's state comes with compiling (#36).
+    m_buildState->setToolTip(QStringLiteral("The latest build of the open statement"));
+    m_buildState->hide();
     statusBar()->addWidget(m_branch);
     statusBar()->addWidget(m_buildState);
     statusBar()->addPermanentWidget(m_problemCounts);
@@ -476,6 +511,8 @@ void MainWindow::finishOpening(Opening opening, OpenMode mode)
     // Its unsaved edits were asked about before this open started (openFolder()).
     m_unsavedAnswered = false;
     m_statementsPage->setSession(nullptr);
+    m_bottomPanel->setBuildProblems({});
+    m_buildState->hide();
     delete m_session;
     m_session = new ProjectSession(std::move(opening.lockFile), opening.snapshot, m_projectLane,
                                    [settings = m_settings] { return settings->gitTool(); }, this);
@@ -591,6 +628,7 @@ void MainWindow::updateFromSnapshot()
         counts << count(snapshot->warnings, "warning", "warnings");
     m_problemCounts->setText(counts.isEmpty() ? QStringLiteral("No problems") : counts.join(QStringLiteral(", ")));
     m_problemCounts->show();
+    m_bottomPanel->setSnapshot(snapshot);
     m_bottomPanel->setProblems(snapshot->problems);
 
     if (!snapshot->unreadable.isEmpty()) {
@@ -606,6 +644,35 @@ void MainWindow::updateFromSnapshot()
 
     m_reviewNote->setText(snapshot->gitProblem.isEmpty() ? QStringLiteral("Your uncommitted changes, compiled before and after, come next.")
                                                          : snapshot->gitProblem);
+}
+
+void MainWindow::logBuild(const BuildResult& result)
+{
+    // "Build (each build's command, time and full main.log)".
+    const QString what = QStringLiteral("%1 (%2%3)").arg(result.target, buildModeName(result.mode),
+                                                         result.verbose ? QStringLiteral(", verbose") : QString());
+    QString summary;
+    switch (result.outcome) {
+    case BuildOutcome::Succeeded:
+        summary = result.reused ? QStringLiteral("%1: unchanged since its last build, which is shown.").arg(what)
+                                : QStringLiteral("Built %1 in %2 s.").arg(what, QString::number(result.seconds, 'f', 1));
+        break;
+    case BuildOutcome::Failed:
+        summary = QStringLiteral("Built %1 in %2 s, with %3.").arg(what, QString::number(result.seconds, 'f', 1))
+                      .arg(result.errors() == 1 ? QStringLiteral("1 error") : QStringLiteral("%1 errors").arg(result.errors()));
+        break;
+    case BuildOutcome::Refused:
+    case BuildOutcome::CantWork:
+        summary = QStringLiteral("Didn't build %1: %2").arg(what, result.message);
+        break;
+    case BuildOutcome::Stopped:
+        return;
+    }
+    m_bottomPanel->appendOutput(OutputChannel::Build, summary);
+    if (!result.command.isEmpty())
+        m_bottomPanel->appendOutput(OutputChannel::Build, QStringLiteral("In %1: %2").arg(result.folder, result.command));
+    if (!result.log.isEmpty())
+        m_bottomPanel->appendOutput(OutputChannel::Build, QStringLiteral("main.log:\n") + QString::fromUtf8(result.log));
 }
 
 void MainWindow::updateBusy()

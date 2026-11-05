@@ -101,6 +101,19 @@ void answer(QWidget& window, const QString& boxName, const QString& button)
     QTRY_VERIFY(!box(window, boxName));
 }
 
+/// Presses a window shortcut. Shortcuts need the window active, and while tests run in parallel
+/// another test's window can take that, so it is made active first
+/// (Wiki/gotchas/qt/shortcuts-need-an-active-window.md).
+/// @returns Whether the window could be made active.
+bool press(QWidget* window, Qt::Key key, Qt::KeyboardModifiers modifiers = {})
+{
+    window->activateWindow();
+    if (!QTest::qWaitForWindowActive(window))
+        return false;
+    QTest::keyClick(window, key, modifiers);
+    return true;
+}
+
 /// The row of an ID in the list, or null.
 QTreeWidgetItem* row(StatementsPage* page, const QString& id)
 {
@@ -433,7 +446,7 @@ void StatementsTabTests::editsAndSaves()
 
     // Ctrl+S saves through LoomCore.
     QSignalSpy saved(page, &StatementsPage::saved);
-    QTest::keyClick(window.get(), Qt::Key_S, Qt::ControlModifier);
+    QVERIFY(press(window.get(), Qt::Key_S, Qt::ControlModifier));
     QTRY_COMPARE(saved.count(), 1);
     const QByteArray after = readFile(path);
     QVERIFY(after.contains("title = \"A sharper tail bound for sums\""));
@@ -472,7 +485,7 @@ void StatementsTabTests::aRefusedSaveKeepsTheText()
     QVERIFY(problems.count() >= 1);
     QVERIFY(window->bottomPanel()->isVisible());
     QVERIFY(window->bottomPanel()->problems()->topLevelItemCount() >= 1);
-    QVERIFY(window->bottomPanel()->problems()->topLevelItem(0)->text(2).startsWith(QStringLiteral("Not saved: ")));
+    QVERIFY(window->bottomPanel()->problems()->topLevelItem(0)->text(loom::BottomPanel::MessageColumn).startsWith(QStringLiteral("Not saved: ")));
     screenshot(window.get(), QStringLiteral("statements-refused-save"));
 
     // In raw mode, a changed tag is refused too, and the text stays.
@@ -571,7 +584,7 @@ void StatementsTabTests::newStatementAndNewProof()
     StatementsPage* page = window->statementsPage();
 
     // Ctrl+N: the form; an empty body is refused and the form stays.
-    QTest::keyClick(window.get(), Qt::Key_N, Qt::ControlModifier);
+    QVERIFY(press(window.get(), Qt::Key_N, Qt::ControlModifier));
     QTRY_VERIFY(page->newStatementDialog());
     loom::NewStatementDialog* form = page->newStatementDialog();
     form->kind()->setCurrentIndex(form->kind()->findData(QStringLiteral("proposition")));
@@ -601,7 +614,7 @@ void StatementsTabTests::newStatementAndNewProof()
     // doesn't make the window active again when a dialog closes, and a shortcut needs it active.
     window->activateWindow();
     QVERIFY(QTest::qWaitForWindowActive(window.get()));
-    QTest::keyClick(window.get(), Qt::Key_N, Qt::ControlModifier | Qt::ShiftModifier);
+    QVERIFY(press(window.get(), Qt::Key_N, Qt::ControlModifier | Qt::ShiftModifier));
     QTRY_VERIFY(page->newProofDialog());
     loom::NewProofDialog* proofForm = page->newProofDialog();
     QCOMPARE(proofForm->level()->findData(QStringLiteral("failed")), -1); // Not offered.
@@ -690,13 +703,13 @@ void StatementsTabTests::backAndForward()
         back << place.tag + u'/' + place.page;
     QCOMPARE(back, (QStringList{QStringLiteral("C4JK/"), QStringLiteral("D5MN/")}));
 
-    QTest::keyClick(window.get(), Qt::Key_Left, Qt::AltModifier);
+    QVERIFY(press(window.get(), Qt::Key_Left, Qt::AltModifier));
     QCOMPARE(page->openTag(), QStringLiteral("D5MN"));
-    QTest::keyClick(window.get(), Qt::Key_Left, Qt::AltModifier);
+    QVERIFY(press(window.get(), Qt::Key_Left, Qt::AltModifier));
     QCOMPARE(page->openTag(), QStringLiteral("C4JK"));
-    QTest::keyClick(window.get(), Qt::Key_Right, Qt::AltModifier);
+    QVERIFY(press(window.get(), Qt::Key_Right, Qt::AltModifier));
     QCOMPARE(page->openTag(), QStringLiteral("D5MN"));
-    QTest::keyClick(window.get(), Qt::Key_Right, Qt::AltModifier);
+    QVERIFY(press(window.get(), Qt::Key_Right, Qt::AltModifier));
     QCOMPARE(page->openTag(), QStringLiteral("E6PQ"));
     QCOMPARE(page->currentPage()->proofId(), QStringLiteral("E6PQ.a"));
 
@@ -724,7 +737,7 @@ void StatementsTabTests::findAndReplace()
     page->openStatement(QStringLiteral("K3AB"));
     FilePage* file = page->currentPage();
 
-    QTest::keyClick(window.get(), Qt::Key_F, Qt::ControlModifier);
+    QVERIFY(press(window.get(), Qt::Key_F, Qt::ControlModifier));
     loom::FindBar* bar = file->findBar();
     QVERIFY(bar->isVisible());
     QVERIFY(!bar->replaceBox()->isVisible());
@@ -738,7 +751,7 @@ void StatementsTabTests::findAndReplace()
     bar->matchCase()->setChecked(false);
 
     // Ctrl+H adds replace; Replace all, in the open file only, as unsaved edits.
-    QTest::keyClick(window.get(), Qt::Key_H, Qt::ControlModifier);
+    QVERIFY(press(window.get(), Qt::Key_H, Qt::ControlModifier));
     QVERIFY(bar->replaceBox()->isVisible());
     bar->findBox()->setText(QStringLiteral("T_N"));
     bar->replaceBox()->setText(QStringLiteral("\\tau_N"));
@@ -748,7 +761,7 @@ void StatementsTabTests::findAndReplace()
     QVERIFY(page->hasUnsavedEdits());
 
     // Ctrl+Shift+F: bodies of every statement and proof; a click opens the line.
-    QTest::keyClick(window.get(), Qt::Key_F, Qt::ControlModifier | Qt::ShiftModifier);
+    QVERIFY(press(window.get(), Qt::Key_F, Qt::ControlModifier | Qt::ShiftModifier));
     QTRY_VERIFY(window->findChild<QDialog*>(QStringLiteral("findInProject")));
     auto* dialog = window->findChild<QDialog*>(QStringLiteral("findInProject"));
     auto* query = dialog->findChild<QLineEdit*>(QStringLiteral("query"));

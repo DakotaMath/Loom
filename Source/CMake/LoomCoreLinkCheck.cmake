@@ -1,17 +1,18 @@
 # Enforces "LoomCore has no UI code" (CLAUDE.md hard rule 2) at configure time.
 # Rule (Specs/m1-core.md, "Toolchain"): LoomCore links Qt6::Core and toml++ only, and the
-# configure fails if anything adds Qt Gui, Widgets or WebEngine to it, directly or through
+# configure fails if anything adds Qt Gui, Widgets, WebEngine or Pdf to it, directly or through
 # another target. Tested by Tests/CMake/CoreLinkCheck.
 
 # Stops the configure if a target links a forbidden Qt module.
 #   target: the target to check (LoomCore).
 # Walks the target's LINK_LIBRARIES and INTERFACE_LINK_LIBRARIES, then those of every target
 # they name, so a module pulled in second-hand is caught too. A forbidden module is any entry
-# naming Qt6::Gui*, Qt6::Widgets* or Qt6::WebEngine* (or the versionless Qt:: names), including
-# inside generator expressions such as $<LINK_ONLY:...>.
+# naming Qt6::Gui*, Qt6::Widgets*, Qt6::WebEngine* or Qt6::Pdf* (Pdf and PdfWidgets: M2's
+# "Dependencies and toolchain"), or the versionless Qt:: names, including inside generator
+# expressions such as $<LINK_ONLY:...>.
 # Side effects: message(FATAL_ERROR) on the first forbidden module found.
 function(loom_check_no_ui_links target)
-    set(forbidden "(^|[^A-Za-z0-9_])(Qt6?::(Gui|Widgets|WebEngine)[A-Za-z0-9_]*)")
+    set(forbidden "(^|[^A-Za-z0-9_])(Qt6?::(Gui|Widgets|WebEngine|Pdf)[A-Za-z0-9_]*)")
     set(seen "")
     set(queue "${target}")
     while(queue)

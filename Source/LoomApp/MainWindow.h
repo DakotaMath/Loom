@@ -7,6 +7,8 @@
 #include "LoomApp/ProjectSnapshot.h"
 #include "LoomApp/Tabs.h"
 
+#include "LoomCore/Build.h"
+
 #include <QMainWindow>
 
 #include <functional>
@@ -118,6 +120,9 @@ private:
     void showStart();
     /// Draws everything that comes from the snapshot: title, status bar, errors bar, Problems.
     void updateFromSnapshot();
+    /// Writes a build to Output's Build channel: what was built, how it went, the command and
+    /// the full `main.log`.
+    void logBuild(const BuildResult& result);
     /// Shows the spinner while any lane is busy.
     void updateBusy();
     /// Asks what to do with unsaved edits before the project closes (Specs/m2-statements-review.md,

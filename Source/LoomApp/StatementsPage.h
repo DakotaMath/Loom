@@ -1,10 +1,10 @@
 #pragma once
 
-// The Statements tab (Specs/m2-statements-review.md, "The Statements tab", all but "The PDF
-// pane", and "Never losing text"): the list, the editor's pages, saving through LoomCore with
-// Dakota's confirmations, creating statements and proofs, verbose versions, back and forward, find,
-// recovery files and files changed outside Loom. It owns every open file's buffer, so unsaved
-// edits survive leaving a statement and switching tabs.
+// The Statements tab (Specs/m2-statements-review.md, "The Statements tab" and "Never losing
+// text"): the list, the editor's pages, the PDF pane, saving through LoomCore with Dakota's
+// confirmations (and compiling after), creating statements and proofs, verbose versions, back and
+// forward, find, recovery files and files changed outside Loom. It owns every open file's buffer,
+// so unsaved edits survive leaving a statement and switching tabs.
 
 #include "LoomApp/EditBuffer.h"
 #include "LoomApp/NewItemDialogs.h"
@@ -37,6 +37,7 @@ namespace loom {
 class AppSettings;
 class FilePage;
 class Lane;
+class PdfPane;
 class StatementList;
 
 /// A place in the back and forward history (Specs/m2-statements-review.md, "Back and forward":
@@ -78,9 +79,10 @@ public:
     /// How long after typing stops a recovery file is written (the spec: one second).
     static constexpr int draftDelayMs = 1000;
 
-    /// @param settings The app's settings (editor font); must outlive the page.
-    /// @param lane     The Project lane: every read and write of the project runs there.
-    StatementsPage(AppSettings* settings, Lane* lane, QWidget* parent = nullptr);
+    /// @param settings  The app's settings (editor font, compiling); must outlive the page.
+    /// @param lane      The Project lane: every read and write of the project runs there.
+    /// @param buildLane The Build lane, where the PDF pane's builds run.
+    StatementsPage(AppSettings* settings, Lane* lane, Lane* buildLane, QWidget* parent = nullptr);
     /// Keeps the open statement and history in the per-project state file.
     ~StatementsPage() override;
 
@@ -117,14 +119,23 @@ public:
     /// The buffer of a file, if it has been opened.
     EditBuffer* buffer(const QString& path) const;
     StatementList* list() const { return m_list; }
+    PdfPane* pdfPane() const { return m_pdf; }
 
     // Edits.
     /// Whether any file has unsaved edits.
     bool hasUnsavedEdits() const;
     /// The files with unsaved edits, project-relative.
     QStringList unsavedPaths() const;
-    /// Ctrl+S: saves the page's shown file.
+    /// Ctrl+S: saves the page's shown file, then (with *Compile on save*) compiles the PDF.
     void save();
+    /// Ctrl+B: compiles the saved files.
+    void compile();
+    /// Ctrl+J: shows the cursor's place in the PDF (forward SyncTeX).
+    void showCursorInPdf();
+    /// The latest build's problems, which the pages mark in the margin.
+    const std::vector<Problem>& buildProblems() const { return m_buildProblems; }
+    /// Takes the latest build's problems. Side effects: re-marks the pages.
+    void setBuildProblems(const std::vector<Problem>& problems);
     /// Saves one buffer through LoomCore (Specs/m2-statements-review.md, "Saving"), asking for
     /// Dakota's confirmation when LoomCore says the save needs it, and saving again if he gives
     /// it. A refusal leaves the text in the editor and its recovery file, and lists the problems.
@@ -153,7 +164,8 @@ public:
     const std::vector<Place>& backHistory() const { return m_back; }
     const std::vector<Place>& forwardHistory() const { return m_forward; }
 
-    /// Ctrl+F, Ctrl+H, F3 and Shift+F3, on the page shown.
+    /// Ctrl+F, Ctrl+H, F3 and Shift+F3, on the page shown; Ctrl+F while the PDF has focus finds in
+    /// the PDF.
     void find(bool replace);
     void findNext(bool forward);
     /// Ctrl+Shift+F: finds text in every statement's and proof's body.
@@ -217,6 +229,8 @@ private:
     void checkOutside();
     /// Re-reads every page.
     void refreshPages();
+    /// Tells the PDF pane what the tab shows: the statement on its page, the proof on a proof's.
+    void updatePdfTarget();
     /// Updates the dots and unsavedChanged().
     void updateUnsaved();
     /// Lists the recovery files and offers them back.
@@ -261,7 +275,8 @@ private:
     QLabel* m_empty;
     QTabWidget* m_tabs;
     QToolButton* m_newProofButton;
-    QWidget* m_pdfPane;
+    PdfPane* m_pdf;
+    std::vector<Problem> m_buildProblems;
 
     QString m_tag;          ///< The statement (or stub) open.
     bool m_stub = false;    ///< The open tag is a paper stub, read-only.
