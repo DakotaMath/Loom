@@ -26,7 +26,7 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 - The M1 spec (2026-11-03): [`Specs/m1-core.md`](Specs/m1-core.md), approved by Dakota (PR #11).
 
 ## In progress
-- #36 compiling, the PDF pane (Qt PDF), SyncTeX, the Problems panel and Output's channels: PR #47, waiting for review; 342 tests pass on Windows, 1 skipped ([log](Wiki/logs/2026-11/2026-11-05-compile-pdf.md)).
+- #36 compiling, the PDF pane (Qt PDF), SyncTeX, the Problems panel and Output's channels: PR #47, reviewed by a subagent and fixed, waiting for Dakota's review; 343 tests pass on Windows, 1 skipped ([log](Wiki/logs/2026-11/2026-11-05-compile-pdf.md)).
 
 ## Next up
 Milestones M0–M12 are on GitHub; M3 is dropped and its milestone closed. M1's issues (#2–#9) are all closed.

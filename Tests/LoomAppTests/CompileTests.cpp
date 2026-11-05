@@ -16,6 +16,7 @@
 #include "LoomApp/StatementsPage.h"
 
 #include "LoomCore/SyncTex.h"
+#include "LoomCore/BuildDocument.h"
 
 #include "DemoProject.h"
 
@@ -23,7 +24,9 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QLabel>
+#include <QLineEdit>
 #include <QPdfDocument>
+#include <QProgressBar>
 #include <QPlainTextEdit>
 #include <QScrollBar>
 #include <QSignalSpy>
@@ -122,6 +125,12 @@ private slots:
     void anErrorKeepsTheLastGoodPdfDimmed();
     void modesAndVerboseAreRememberedPerStatement();
     void synctexBothWays();
+    void aBrokenFrontMatterKeepsTheLastGoodPdf();
+    void errorsOnlyWithoutAGoodBuildAndClearedOnLeaving();
+    void aNewerBuildReplacesTheRunningOne();
+    void opensAtTheStatementsPage();
+    void zoomAndScrollAreKept();
+    void findInThePdf();
     void compileOnSaveOffOnlySaves();
     void withoutLatexmkThePaneSaysSo();
     void aPaperResultIsntBuilt();
@@ -361,8 +370,11 @@ void CompileTests::modesAndVerboseAreRememberedPerStatement()
 void CompileTests::synctexBothWays()
 {
     REQUIRE_TEX();
-    if (QStandardPaths::findExecutable(QStringLiteral("synctex")).isEmpty())
+    if (QStandardPaths::findExecutable(QStringLiteral("synctex")).isEmpty()) {
+        if (qEnvironmentVariableIntValue("LOOM_REQUIRE_TEX") == 1)
+            QFAIL("synctex not found, and LOOM_REQUIRE_TEX=1");
         QSKIP("synctex not found");
+    }
     const loomtest::DemoProject demo;
     QVERIFY2(demo.ok(), qPrintable(demo.error()));
     const std::unique_ptr<MainWindow> window = newWindow();
@@ -481,7 +493,8 @@ void CompileTests::problemsNameFilesAndF8Steps()
     loom::Problem second = first;
     second.file = QStringLiteral("Proofs/D5MN/D5MN.a.tex");
     second.line = 10;
-    panel->setBuildProblems({first, second});
+    // As validation problems: opening D5MN.a changes the PDF's target, which clears build problems.
+    panel->setProblems({first, second});
     QCOMPARE(panel->problems()->topLevelItemCount(), 2);
     QSignalSpy activated(panel, &BottomPanel::problemActivated);
     QVERIFY(press(window.get(), Qt::Key_F8));
@@ -489,12 +502,14 @@ void CompileTests::problemsNameFilesAndF8Steps()
     QCOMPARE(activated.at(0).at(0).toString(), QStringLiteral("Statements/C4JK.tex"));
     QCOMPARE(window->statementsPage()->openTag(), QStringLiteral("C4JK"));
     QVERIFY(press(window.get(), Qt::Key_F8));
+    QCOMPARE(activated.count(), 2);
     QCOMPARE(activated.at(1).at(0).toString(), QStringLiteral("Proofs/D5MN/D5MN.a.tex"));
     QCOMPARE(window->statementsPage()->currentPage()->proofId(), QStringLiteral("D5MN.a"));
-    // A new snapshot rebuilds the list; the selected problem stays selected, so F8 goes on from it.
-    window->bottomPanel()->setProblems(window->session()->snapshot()->problems);
+    // Rebuilding the list keeps the selected problem selected, so F8 goes on from it.
+    panel->setSaveProblems({});
     QCOMPARE(panel->problems()->currentItem()->data(BottomPanel::FileColumn, Qt::UserRole).toString(), QStringLiteral("Proofs/D5MN/D5MN.a.tex"));
     QVERIFY(press(window.get(), Qt::Key_F8, Qt::ShiftModifier));
+    QCOMPARE(activated.count(), 3);
     QCOMPARE(activated.at(2).at(0).toString(), QStringLiteral("Statements/C4JK.tex"));
 
     // Output: Build, Git and Loom, each with Copy and Clear.
@@ -506,6 +521,197 @@ void CompileTests::problemsNameFilesAndF8Steps()
     QVERIFY(clear);
     clear->click();
     QVERIFY(panel->output(OutputChannel::Git)->toPlainText().isEmpty());
+}
+
+void CompileTests::aBrokenFrontMatterKeepsTheLastGoodPdf()
+{
+    REQUIRE_TEX();
+    const loomtest::DemoProject demo;
+    QVERIFY2(demo.ok(), qPrintable(demo.error()));
+    const std::unique_ptr<MainWindow> window = newWindow();
+    QVERIFY(openDemo(*window, demo.root()));
+    StatementsPage* page = window->statementsPage();
+    PdfPane* pdf = page->pdfPane();
+    page->openStatement(QStringLiteral("K3AB"));
+    QTRY_VERIFY_WITH_TIMEOUT(builtAs(pdf, QStringLiteral("K3AB")), buildWaitMs);
+    QCOMPARE(pdf->result().outcome, BuildOutcome::Succeeded);
+
+    // An agent breaks the front matter: the build can't read it, and the last good PDF stays.
+    const QString file = demo.root() + QStringLiteral("/Statements/K3AB.tex");
+    const QByteArray good = readFile(file);
+    QByteArray broken = good;
+    broken.replace("kind = \"lemma\"", "kind = \"lemma");
+    QVERIFY(broken != good);
+    QSignalSpy finished(pdf, &PdfPane::buildFinished);
+    QVERIFY(writeFile(file, broken));
+    window->session()->refresh();
+    QTRY_VERIFY_WITH_TIMEOUT(finished.count() >= 1, buildWaitMs);
+    QVERIFY2(pdf->result().outcome == BuildOutcome::Failed, qPrintable(pdf->result().code + u' ' + pdf->result().message));
+    QVERIFY(pdf->dimmed());
+    QCOMPARE(pdf->document()->status(), QPdfDocument::Status::Ready);
+    QVERIFY(pdf->lastGoodBar()->isVisible());
+
+    // Fixing it on disk compiles again.
+    finished.clear();
+    QVERIFY(writeFile(file, good));
+    window->session()->refresh();
+    QTRY_VERIFY_WITH_TIMEOUT(finished.count() >= 1 && pdf->result().outcome == BuildOutcome::Succeeded, buildWaitMs);
+    QVERIFY(!pdf->dimmed());
+}
+
+void CompileTests::errorsOnlyWithoutAGoodBuildAndClearedOnLeaving()
+{
+    REQUIRE_TEX();
+    const loomtest::DemoProject demo(QStringLiteral("latex-error"));
+    QVERIFY2(demo.ok(), qPrintable(demo.error()));
+    const std::unique_ptr<MainWindow> window = newWindow();
+    QVERIFY(openDemo(*window, demo.root()));
+    StatementsPage* page = window->statementsPage();
+    PdfPane* pdf = page->pdfPane();
+
+    // K3AB has never built: "With no good build yet: the errors only."
+    page->openStatement(QStringLiteral("K3AB"));
+    QTRY_VERIFY_WITH_TIMEOUT(builtAs(pdf, QStringLiteral("K3AB")), buildWaitMs);
+    QCOMPARE(pdf->result().outcome, BuildOutcome::Failed);
+    QVERIFY(!pdf->dimmed());
+    QVERIFY(pdf->messageLabel()->isVisible());
+    QVERIFY2(pdf->messageLabel()->text().startsWith(QStringLiteral("No PDF yet: 1 error.")), qPrintable(pdf->messageLabel()->text()));
+    QVERIFY(pdf->messageLabel()->text().contains(QStringLiteral("Statements/K3AB.tex:13: Missing } inserted.")));
+    const auto texErrors = [&] {
+        int n = 0;
+        QTreeWidget* problems = window->bottomPanel()->problems();
+        for (int i = 0; i < problems->topLevelItemCount(); ++i)
+            n += problems->topLevelItem(i)->data(BottomPanel::SeverityColumn, Qt::UserRole) == QStringLiteral("tex-error");
+        return n;
+    };
+    QCOMPARE(texErrors(), 1);
+    QVERIFY(!page->buildProblems().empty());
+    auto* buildState = window->statusBar()->findChild<QLabel*>(QStringLiteral("buildState"));
+    QCOMPARE(buildState->text(), QStringLiteral("1 error"));
+
+    // Leaving for a paper's result: K3AB's problems aren't the open statement's any more.
+    page->openStub(QStringLiteral("7RT2"));
+    QCOMPARE(texErrors(), 0);
+    QVERIFY(page->buildProblems().empty());
+    QVERIFY(buildState->isHidden());
+}
+
+void CompileTests::aNewerBuildReplacesTheRunningOne()
+{
+    REQUIRE_TEX();
+    const loomtest::DemoProject demo;
+    QVERIFY2(demo.ok(), qPrintable(demo.error()));
+    const std::unique_ptr<MainWindow> window = newWindow();
+    QVERIFY(openDemo(*window, demo.root()));
+    StatementsPage* page = window->statementsPage();
+    PdfPane* pdf = page->pdfPane();
+    page->openStatement(QStringLiteral("D5MN"));
+    QTRY_VERIFY_WITH_TIMEOUT(builtAs(pdf, QStringLiteral("D5MN")), buildWaitMs);
+
+    QSignalSpy started(pdf, &PdfPane::buildStarted);
+    QSignalSpy finished(pdf, &PdfPane::buildFinished);
+    pdf->compile();
+    // Busy: Compile shows a spinner and doesn't start a second build.
+    QVERIFY(!pdf->compileButton()->isEnabled());
+    QVERIFY(pdf->findChild<QProgressBar*>(QStringLiteral("compileSpinner"))->isVisible());
+    pdf->compileClicked();
+    QCOMPARE(started.count(), 1);
+    // Ctrl+S (or a mode click) does: the older build's result is dropped.
+    pdf->compile();
+    QCOMPARE(started.count(), 2);
+    QTRY_VERIFY_WITH_TIMEOUT(finished.count() >= 1, buildWaitMs);
+    QTest::qWait(1500);
+    QCOMPARE(finished.count(), 1);
+    QVERIFY(!pdf->building());
+    QVERIFY(pdf->compileButton()->isEnabled());
+    QVERIFY(pdf->findChild<QProgressBar*>(QStringLiteral("compileSpinner"))->isHidden());
+}
+
+void CompileTests::opensAtTheStatementsPage()
+{
+    REQUIRE_TEX();
+    const loomtest::DemoProject demo;
+    QVERIFY2(demo.ok(), qPrintable(demo.error()));
+    const std::unique_ptr<MainWindow> window = newWindow();
+    QVERIFY(openDemo(*window, demo.root()));
+    StatementsPage* page = window->statementsPage();
+    PdfPane* pdf = page->pdfPane();
+    page->openStatement(QStringLiteral("E6PQ"));
+    QTRY_VERIFY_WITH_TIMEOUT(builtAs(pdf, QStringLiteral("E6PQ")), buildWaitMs);
+    QTest::mouseClick(pdf->modeButton(BuildMode::Chain), Qt::LeftButton);
+    QTRY_VERIFY_WITH_TIMEOUT(builtAs(pdf, QStringLiteral("E6PQ"), BuildMode::Chain), buildWaitMs);
+    QCOMPARE(pdf->result().outcome, BuildOutcome::Succeeded);
+    // "A new document opens at the open statement's page" (from main.aux).
+    const int page_ = loom::auxLabelPage(readFile(demo.root() + u'/' + pdf->result().folder + QStringLiteral("/main.aux")), QStringLiteral("E6PQ"));
+    QVERIFY(page_ >= 1);
+    QTRY_COMPARE(pdf->currentPage() + 1, page_);
+}
+
+void CompileTests::zoomAndScrollAreKept()
+{
+    REQUIRE_TEX();
+    const loomtest::DemoProject demo;
+    QVERIFY2(demo.ok(), qPrintable(demo.error()));
+    std::unique_ptr<MainWindow> window = newWindow();
+    QVERIFY(openDemo(*window, demo.root()));
+    PdfPane* pdf = window->statementsPage()->pdfPane();
+    window->statementsPage()->openStatement(QStringLiteral("D5MN"));
+    QTRY_VERIFY_WITH_TIMEOUT(builtAs(pdf, QStringLiteral("D5MN")), buildWaitMs);
+    QTRY_COMPARE(pdf->document()->status(), QPdfDocument::Status::Ready);
+    auto* zoomIn = pdf->findChild<QToolButton*>(QStringLiteral("zoomIn"));
+    for (int i = 0; i < 4; ++i)
+        QTest::mouseClick(zoomIn, Qt::LeftButton);
+    QCOMPARE(pdf->view()->zoomMode(), QPdfView::ZoomMode::Custom);
+    const qreal zoom = pdf->view()->zoomFactor();
+
+    // A rebuild of the same document keeps its scroll position.
+    QScrollBar* bar = pdf->view()->verticalScrollBar();
+    QTRY_VERIFY(bar->maximum() > 0);
+    QTest::qWait(500); // The view lays the zoomed pages out again after a moment.
+    bar->setValue(bar->maximum() / 2);
+    const int scrolled = bar->value();
+    QVERIFY(scrolled > 0);
+    QTest::qWait(300);
+    QCOMPARE(bar->value(), scrolled);
+    QSignalSpy finished(pdf, &PdfPane::buildFinished);
+    pdf->compile();
+    QTRY_VERIFY_WITH_TIMEOUT(finished.count() >= 1, buildWaitMs);
+    QTest::qWait(300);
+    QCOMPARE(bar->value(), scrolled);
+
+    // The zoom is kept per project.
+    window.reset();
+    window = newWindow();
+    QVERIFY(openDemo(*window, demo.root()));
+    QCOMPARE(window->statementsPage()->pdfPane()->view()->zoomMode(), QPdfView::ZoomMode::Custom);
+    QVERIFY(qAbs(window->statementsPage()->pdfPane()->view()->zoomFactor() - zoom) < 0.001);
+}
+
+void CompileTests::findInThePdf()
+{
+    REQUIRE_TEX();
+    const loomtest::DemoProject demo;
+    QVERIFY2(demo.ok(), qPrintable(demo.error()));
+    const std::unique_ptr<MainWindow> window = newWindow();
+    QVERIFY(openDemo(*window, demo.root()));
+    PdfPane* pdf = window->statementsPage()->pdfPane();
+    window->statementsPage()->openStatement(QStringLiteral("D5MN"));
+    QTRY_VERIFY_WITH_TIMEOUT(builtAs(pdf, QStringLiteral("D5MN")), buildWaitMs);
+    QTRY_COMPARE(pdf->document()->status(), QPdfDocument::Status::Ready);
+
+    // Ctrl+F while the PDF has focus finds in the PDF.
+    window->activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(window.get()));
+    pdf->view()->setFocus();
+    QTRY_VERIFY(pdf->view()->hasFocus());
+    QTest::keyClick(window.get(), Qt::Key_F, Qt::ControlModifier);
+    QTRY_VERIFY(pdf->findBar()->isVisible());
+    auto* text = pdf->findBar()->findChild<QLineEdit*>(QStringLiteral("pdfFindText"));
+    QVERIFY(text->hasFocus());
+    QTest::keyClicks(text, QStringLiteral("bounded"));
+    QTest::keyClick(text, Qt::Key_Return);
+    auto* count = pdf->findBar()->findChild<QLabel*>(QStringLiteral("pdfFindCount"));
+    QTRY_VERIFY2(count->text().startsWith(QStringLiteral("1 of ")), qPrintable(count->text()));
 }
 
 QTEST_MAIN(CompileTests)

@@ -26,7 +26,7 @@ Ctrl+S compiles a statement and shows the PDF beside the editor: it must render 
 Qt PDF: `find_package(Qt6 … Pdf PdfWidgets)`, linked by `LoomAppLib`. CI installs it with `install-qt-action`'s `modules: qtpdf`. `LoomCore`'s link check (`Source/CMake/LoomCoreLinkCheck.cmake`) refuses `Qt6::Pdf*` as it refuses Gui, Widgets and WebEngine, so `LoomCore` stays free of it.
 
 How `LoomApp` uses it (`Source/LoomApp/PdfPane.*`):
-- Each build's `main.pdf` (or `last-good.pdf`) is read on the Build lane and loaded into a `QPdfDocument` from a `QBuffer`; the pane keeps the buffer while the document uses it.
+- Each build's `main.pdf` (or `last-good.pdf`) is read on the Build lane by `LoomCore`'s `readBuildOutput()`, under the folder's `build.lock`, and loaded into a `QPdfDocument` from a `QBuffer`; the pane keeps the buffer while the document uses it.
 - `LoomPdfView` (a `QPdfView`) recomputes the page layout `QPdfView` draws (multi-page, fit-width or custom zoom) to turn a double-click into a page and point for `synctex edit`, and a `synctex view` box into a mark on the page.
 - Find in the PDF is `QPdfSearchModel` set on the view.
 

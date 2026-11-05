@@ -128,6 +128,9 @@ ProjectSnapshot readSnapshot(const QString& root, const GitTool& git)
             paths << file.path;
         for (const StubFile& file : snapshot.contents.stubs)
             paths << file.path;
+        // The preambles too: a change to one recompiles the shown build (the PDF pane).
+        for (const QString& path : snapshot.config.preamble)
+            paths << path;
         for (const QString& path : paths) {
             if (const std::optional<QByteArray> bytes = readProjectFile(snapshot.root, path)) {
                 snapshot.files.insert(path, *bytes);

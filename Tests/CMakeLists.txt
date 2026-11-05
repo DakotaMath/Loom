@@ -102,7 +102,7 @@ set_tests_properties(cmake.core-link-check.direct-widgets PROPERTIES
 set_tests_properties(cmake.core-link-check.webengine PROPERTIES
     PASS_REGULAR_EXPRESSION "LoomCore${ws}must${ws}not${ws}link${ws}Qt6::WebEngineWidgets\\.")
 set_tests_properties(cmake.core-link-check.pdf PROPERTIES
-    PASS_REGULAR_EXPRESSION "LoomCore${ws}must${ws}not${ws}link${ws}Qt6::Pdf\.")
+    PASS_REGULAR_EXPRESSION "LoomCore${ws}must${ws}not${ws}link${ws}Qt6::Pdf\\.")
 set_tests_properties(cmake.core-link-check.through-target PROPERTIES
     PASS_REGULAR_EXPRESSION "LoomCore${ws}must${ws}not${ws}link${ws}Qt6::Gui${ws}\\(through${ws}Helper\\)")
 set_tests_properties(cmake.core-link-check.link-only PROPERTIES

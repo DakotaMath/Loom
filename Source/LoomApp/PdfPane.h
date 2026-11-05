@@ -25,6 +25,7 @@ class QBuffer;
 class QButtonGroup;
 class QGraphicsOpacityEffect;
 class QLabel;
+class QProgressBar;
 class QLineEdit;
 class QPdfDocument;
 class QPdfSearchModel;
@@ -173,6 +174,8 @@ signals:
     void placeActivated(const QString& file, int line);
     /// A line for Output's Loom channel (what SyncTeX couldn't do).
     void outputLine(const QString& text);
+    /// The target changed: the problems of the build shown so far aren't the open statement's.
+    void targetChanged();
 
 private:
     struct Built;
@@ -182,6 +185,8 @@ private:
     /// Loads PDF bytes into the view, keeping the scroll position when `keepScroll`; else opening
     /// at `page` (from 1; 0 for the first).
     void loadPdf(const QByteArray& bytes, bool keepScroll, int page);
+    /// Puts the scroll bars back where they were, once the view's new layout allows it.
+    void restoreScroll(const QPoint& scroll);
     /// Shows a message where the PDF goes (no PDF).
     void showMessage(const QString& text);
     /// Updates the toolbar from the mode, toggle and build state.
@@ -225,6 +230,17 @@ private:
     /// The project files the shown build read (statements, proofs, verbose versions) with their
     /// bytes then, to see a change on disk; and the target statement's proofs then.
     QHash<QString, QByteArray> m_inputs;
+    /// Loom's own saves that no snapshot has caught up with yet: the bytes written, and the
+    /// snapshots' bytes from before.
+    struct Written {
+        QByteArray bytes;
+        QByteArray before;
+    };
+    QHash<QString, Written> m_written;
+    std::shared_ptr<const ProjectSnapshot> m_compileSnapshot; ///< The snapshot when the latest build started.
+    QString m_shownFolder;   ///< The build folder of the PDF shown, project-relative.
+    QByteArray m_goodAux;    ///< `main.aux` of the latest build without errors, of document m_goodKey.
+    QString m_goodKey;
     QStringList m_proofs;
     QTimer m_quiet;
     bool m_toldNoSynctex = false;
@@ -233,6 +249,7 @@ private:
     QButtonGroup* m_modes;
     QToolButton* m_verboseButton;
     QToolButton* m_compileButton;
+    QProgressBar* m_spinner;
     QToolButton* m_fitWidth;
     QToolButton* m_zoomIn;
     QToolButton* m_zoomOut;
@@ -249,6 +266,7 @@ private:
     QGraphicsOpacityEffect* m_dim;
     std::unique_ptr<QBuffer> m_buffer;
     int m_findIndex = -1;
+    bool m_findPending = false; ///< Enter was pressed before the search found anything.
     /// What loadPdf() does once the document is ready: restore the scroll, or jump to a page.
     int m_pendingPage = 0;
     QPoint m_pendingScroll;

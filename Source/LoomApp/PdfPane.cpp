@@ -6,9 +6,6 @@
 
 #include <QBuffer>
 #include <QButtonGroup>
-#include <QDirIterator>
-#include <QFile>
-#include <QFileInfo>
 #include <QGraphicsOpacityEffect>
 #include <QGuiApplication>
 #include <QHBoxLayout>
@@ -20,6 +17,7 @@
 #include <QPdfDocument>
 #include <QPdfPageNavigator>
 #include <QPdfSearchModel>
+#include <QProgressBar>
 #include <QScreen>
 #include <QScrollBar>
 #include <QSettings>
@@ -32,13 +30,6 @@
 namespace loom {
 
 namespace {
-
-/// A file's bytes, or none if it can't be read.
-QByteArray readBytes(const QString& path)
-{
-    QFile file(path);
-    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
-}
 
 /// "1 error", "2 errors".
 QString errorCount(int n)
@@ -191,10 +182,11 @@ struct PdfPane::Built {
     int generation = 0;
     QString key;            ///< The document: target, mode and toggle.
     BuildResult result;
+    QString folder;         ///< The build folder, project-relative; empty if there is none.
     QByteArray pdf;         ///< `main.pdf` when it succeeded; else `last-good.pdf`, if any.
     QDateTime lastGoodTime; ///< When `last-good.pdf` was written, when `pdf` is it.
     QByteArray aux;         ///< `main.aux`.
-    QHash<QString, QByteArray> inputs;
+    QStringList inputs;     ///< The project files the build read (its copies), and any it couldn't read.
 };
 
 PdfPane::PdfPane(AppSettings* settings, Lane* lane, QWidget* parent)
@@ -204,6 +196,7 @@ PdfPane::PdfPane(AppSettings* settings, Lane* lane, QWidget* parent)
     , m_modes(new QButtonGroup(this))
     , m_verboseButton(new QToolButton(this))
     , m_compileButton(new QToolButton(this))
+    , m_spinner(new QProgressBar(this))
     , m_fitWidth(new QToolButton(this))
     , m_zoomIn(new QToolButton(this))
     , m_zoomOut(new QToolButton(this))
@@ -262,6 +255,13 @@ PdfPane::PdfPane(AppSettings* settings, Lane* lane, QWidget* parent)
     m_compileButton->setToolTip(QStringLiteral("Compile the saved files (Ctrl+B)"));
     connect(m_compileButton, &QToolButton::clicked, this, &PdfPane::compileClicked);
     bar->addWidget(m_compileButton);
+    // "While a task runs, the control that started it shows a spinner."
+    m_spinner->setObjectName(QStringLiteral("compileSpinner"));
+    m_spinner->setRange(0, 0);
+    m_spinner->setTextVisible(false);
+    m_spinner->setFixedSize(36, 8);
+    m_spinner->hide();
+    bar->addWidget(m_spinner);
     bar->addStretch(1);
     m_zoomOut->setObjectName(QStringLiteral("zoomOut"));
     m_zoomOut->setText(QStringLiteral("−"));
@@ -335,9 +335,12 @@ PdfPane::PdfPane(AppSettings* settings, Lane* lane, QWidget* parent)
     const auto step = [this](bool forward) {
         const int count = m_search->rowCount({});
         if (count == 0) {
+            // Qt PDF searches page by page as it goes: the first result found will be shown.
+            m_findPending = !m_findText->text().isEmpty();
             m_findCount->setText(m_findText->text().isEmpty() ? QString() : QStringLiteral("No matches"));
             return;
         }
+        m_findPending = false;
         m_findIndex = forward ? (m_findIndex + 1) % count : (m_findIndex <= 0 ? count - 1 : m_findIndex - 1);
         m_view->setCurrentSearchResultIndex(m_findIndex);
         const QPdfLink link = m_search->resultAtIndex(m_findIndex);
@@ -351,6 +354,10 @@ PdfPane::PdfPane(AppSettings* settings, Lane* lane, QWidget* parent)
     });
     connect(m_findText, &QLineEdit::returnPressed, this, [step] {
         step(!(QGuiApplication::keyboardModifiers() & Qt::ShiftModifier));
+    });
+    connect(m_search, &QPdfSearchModel::countChanged, this, [this, step] {
+        if (m_findPending && m_search->rowCount({}) > 0)
+            step(true);
     });
     connect(next, &QToolButton::clicked, this, [step] { step(true); });
     connect(previous, &QToolButton::clicked, this, [step] { step(false); });
@@ -382,8 +389,7 @@ PdfPane::PdfPane(AppSettings* settings, Lane* lane, QWidget* parent)
             if (m_document->status() != QPdfDocument::Status::Ready)
                 return;
             if (m_pendingKeep) {
-                m_view->horizontalScrollBar()->setValue(m_pendingScroll.x());
-                m_view->verticalScrollBar()->setValue(m_pendingScroll.y());
+                restoreScroll(m_pendingScroll);
             } else {
                 jumpTo(std::max(1, m_pendingPage));
             }
@@ -413,6 +419,7 @@ PdfPane::~PdfPane()
 {
     if (m_stop)
         *m_stop = true;
+    m_document->close(); // Before the buffer it reads goes.
 }
 
 QToolButton* PdfPane::modeButton(BuildMode mode) const
@@ -437,7 +444,12 @@ void PdfPane::setSession(ProjectSession* session, QSettings* state)
     m_hasResult = false;
     m_shownKey.clear();
     m_aux.clear();
+    m_goodAux.clear();
+    m_goodKey.clear();
+    m_shownFolder.clear();
     m_inputs.clear();
+    m_written.clear();
+    m_compileSnapshot.reset();
     m_proofs.clear();
     m_toldNoSynctex = false;
     m_document->close();
@@ -471,6 +483,9 @@ void PdfPane::setTarget(const QString& target, const QString& statement, bool st
     m_quiet.stop();
     m_inputs.clear();
     m_proofs.clear();
+    // Nothing of the previous target's build applies to this one: its page, nor its problems.
+    m_aux.clear();
+    emit targetChanged();
     // The mode and toggle are remembered per statement ("remembered per statement").
     m_mode = m_settings->defaultCompileMode();
     m_verbose = false;
@@ -521,9 +536,9 @@ QString PdfPane::documentKey() const
 
 QString PdfPane::folderPath() const
 {
-    if (!m_session || m_result.folder.isEmpty())
+    if (!m_session || m_shownFolder.isEmpty())
         return {};
-    return m_session->root() + u'/' + m_result.folder;
+    return m_session->root() + u'/' + m_shownFolder;
 }
 
 SyncTexTool PdfPane::synctexTool() const
@@ -550,7 +565,8 @@ void PdfPane::compile()
     m_quiet.stop();
     const int generation = ++m_generation;
     m_building = true;
-    m_proofs = proofsOf(m_session->snapshot().get(), m_statement);
+    m_compileSnapshot = m_session->snapshot();
+    m_proofs = proofsOf(m_compileSnapshot.get(), m_statement);
 
     BuildRequest request;
     request.root = m_session->root();
@@ -570,25 +586,27 @@ void PdfPane::compile()
             built.generation = generation;
             built.key = key;
             built.result = buildTarget(request);
-            if (built.result.outcome == BuildOutcome::Stopped || built.result.folder.isEmpty())
+            if (built.result.outcome == BuildOutcome::Stopped)
                 return built;
-            const QString folder = request.root + u'/' + built.result.folder;
-            if (built.result.outcome == BuildOutcome::Succeeded && !built.result.pdf.isEmpty()) {
-                built.pdf = readBytes(request.root + u'/' + built.result.pdf);
-            } else if (!built.result.lastGoodPdf.isEmpty()) {
-                const QString lastGood = request.root + u'/' + built.result.lastGoodPdf;
-                built.pdf = readBytes(lastGood);
-                built.lastGoodTime = QFileInfo(lastGood).lastModified();
+            // A build that stopped at a file it couldn't read has no folder in its result, but its
+            // folder may hold a last good PDF from before.
+            built.folder = built.result.folder;
+            if (built.folder.isEmpty() && built.result.outcome == BuildOutcome::Failed && !built.result.target.isEmpty())
+                built.folder = buildFolder(built.result.target, request.mode, request.verbose);
+            const BuildOutput output = readBuildOutput(request.root, built.folder);
+            if (built.result.outcome == BuildOutcome::Succeeded)
+                built.pdf = output.pdf;
+            if (built.pdf.isEmpty()) {
+                built.pdf = output.lastGoodPdf;
+                built.lastGoodTime = output.lastGoodTime;
             }
-            built.aux = readBytes(folder + QStringLiteral("/main.aux"));
-            // The project files the build read, as they are now, to see later changes on disk.
-            // (A file changed while the build ran is read here already changed, and so isn't
-            // compiled again; the next change is.) Preambles aren't in the snapshot's files.
-            const QString src = folder + QStringLiteral("/src/");
-            for (QDirIterator it(src, QDir::Files, QDirIterator::Subdirectories); it.hasNext();) {
-                const QString path = it.next().mid(src.size());
-                if (!path.startsWith(QStringLiteral("TeX/")))
-                    built.inputs.insert(path, readBytes(request.root + u'/' + path));
+            built.aux = output.aux;
+            built.inputs = output.inputs;
+            // A file the build couldn't read is watched too, so fixing it compiles again.
+            for (const Problem& problem : built.result.problems) {
+                if (!built.inputs.contains(problem.file)
+                    && (problem.file.startsWith(QStringLiteral("Statements/")) || problem.file.startsWith(QStringLiteral("Proofs/"))))
+                    built.inputs << problem.file;
             }
             return built;
         },
@@ -615,10 +633,22 @@ void PdfPane::finish(Built built)
         m_result.seconds = seconds;
     else
         m_finished = QDateTime::currentDateTime();
-    m_inputs = built.inputs;
+    // What the build read, as Loom knew the files when it started: from the snapshot then, or
+    // from Loom's own saves since. A change on disk during the build then differs from this, and
+    // the next snapshot compiles again.
+    m_inputs.clear();
+    for (const QString& path : built.inputs) {
+        const auto written = m_written.constFind(path);
+        m_inputs.insert(path, written != m_written.cend() ? written->bytes
+                                                          : (m_compileSnapshot ? m_compileSnapshot->files.value(path) : QByteArray()));
+    }
     m_shownKey = built.key;
-    if (!built.aux.isEmpty())
-        m_aux = built.aux;
+    m_shownFolder = built.folder;
+    m_aux = built.aux;
+    if (m_result.outcome == BuildOutcome::Succeeded) {
+        m_goodAux = built.aux;
+        m_goodKey = built.key;
+    }
     const int errors = m_result.errors();
     if (m_result.outcome == BuildOutcome::Succeeded) {
         m_dimmed = false;
@@ -663,9 +693,12 @@ void PdfPane::finish(Built built)
 
 int PdfPane::targetPage() const
 {
-    if (const int page = auxLabelPage(m_aux, m_target); page > 0)
+    // While dimmed, the PDF shown is the last good build's: its own `main.aux`, when the pane
+    // has it, says where things are in it.
+    const QByteArray& aux = m_dimmed && m_goodKey == m_shownKey && !m_goodAux.isEmpty() ? m_goodAux : m_aux;
+    if (const int page = auxLabelPage(aux, m_target); page > 0)
         return page;
-    return auxLabelPage(m_aux, m_statement);
+    return auxLabelPage(aux, m_statement);
 }
 
 void PdfPane::loadPdf(const QByteArray& bytes, bool keepScroll, int page)
@@ -688,6 +721,28 @@ void PdfPane::loadPdf(const QByteArray& bytes, bool keepScroll, int page)
     }
 }
 
+void PdfPane::restoreScroll(const QPoint& scroll)
+{
+    // The view sets its scroll ranges for a new document as it lays it out, which can come after
+    // the document is ready; until the range reaches the old place, setting it would be clamped.
+    QScrollBar* down = m_view->verticalScrollBar();
+    QScrollBar* across = m_view->horizontalScrollBar();
+    const auto apply = [down, across, scroll] {
+        across->setValue(scroll.x());
+        down->setValue(scroll.y());
+        return down->value() == scroll.y() && across->value() == scroll.x();
+    };
+    if (apply())
+        return;
+    auto connection = std::make_shared<QMetaObject::Connection>();
+    *connection = connect(down, &QScrollBar::rangeChanged, this, [apply, connection] {
+        if (apply())
+            disconnect(*connection);
+    });
+    // Give up after a moment (the document may be shorter now).
+    QTimer::singleShot(1000, this, [connection] { disconnect(*connection); });
+}
+
 void PdfPane::showMessage(const QString& text)
 {
     m_message->setText(text);
@@ -707,6 +762,11 @@ void PdfPane::jumpTo(int page, const QPointF& point)
     const int offset = point.isNull() ? m_view->documentMargins().top() : m_view->viewport()->height() / 3;
     QScrollBar* bar = m_view->verticalScrollBar();
     bar->setValue(bar->value() + static_cast<int>(rect.top() + point.y() * scale) - offset);
+    if (!point.isNull()) {
+        // Zoomed in, the place may be off to the side too.
+        QScrollBar* across = m_view->horizontalScrollBar();
+        across->setValue(across->value() + static_cast<int>(rect.left() + point.x() * scale) - m_view->viewport()->width() / 4);
+    }
 }
 
 int PdfPane::currentPage() const
@@ -738,6 +798,7 @@ void PdfPane::updateControls()
     m_verboseButton->setChecked(m_verbose);
     m_compileButton->setEnabled(usable && !m_building);
     m_compileButton->setText(m_building ? QStringLiteral("Compiling…") : QStringLiteral("Compile"));
+    m_spinner->setVisible(m_building);
     if (m_building)
         m_stateLabel->setText(QStringLiteral("Building…"));
     else
@@ -770,16 +831,30 @@ void PdfPane::noteWritten(const QString& path, const QByteArray& bytes)
 {
     if (const auto it = m_inputs.find(path); it != m_inputs.end())
         it.value() = bytes;
+    // Until a snapshot has caught up with the write, snapshots still have the bytes from before it.
+    const std::shared_ptr<const ProjectSnapshot> snapshot = m_session ? m_session->snapshot() : nullptr;
+    m_written.insert(path, Written{bytes, snapshot ? snapshot->files.value(path) : QByteArray()});
 }
 
 void PdfPane::snapshotChanged(const std::shared_ptr<const ProjectSnapshot>& snapshot)
 {
-    if (!snapshot || m_target.isEmpty() || m_stub || m_shownKey.isEmpty())
+    if (!snapshot)
+        return;
+    // A write is caught up with once a snapshot no longer has the bytes from before it.
+    for (auto it = m_written.begin(); it != m_written.end();) {
+        if (snapshot->files.value(it.key()) != it->before)
+            it = m_written.erase(it);
+        else
+            ++it;
+    }
+    if (m_target.isEmpty() || m_stub || m_shownKey.isEmpty())
         return;
     // "A file changed on disk that's in the shown build compiles it again (once, after 300 ms of
     // quiet)." A new or removed proof of the statement changes what the build shows, too.
     bool changed = false;
     for (auto it = m_inputs.begin(); it != m_inputs.end(); ++it) {
+        if (m_written.contains(it.key()))
+            continue; // Loom's own save, not in a snapshot yet.
         const QByteArray now = snapshot->files.value(it.key());
         if (now != it.value()) {
             it.value() = now;
@@ -799,7 +874,9 @@ void PdfPane::showPlace(const QString& file, int line, int column)
     if (m_document->status() != QPdfDocument::Status::Ready)
         return;
     const QString folder = folderPath();
-    if (folder.isEmpty() || !m_inputs.contains(file)) {
+    // While dimmed, `main.synctex.gz` is the failed build's, not the PDF's on screen: the
+    // statement's page is the best Loom can say.
+    if (folder.isEmpty() || !m_inputs.contains(file) || m_dimmed) {
         jumpTo(std::max(1, targetPage()));
         return;
     }
@@ -838,7 +915,13 @@ void PdfPane::inverse(int page, const QPointF& point)
     const QString folder = folderPath();
     if (folder.isEmpty())
         return;
+    if (m_dimmed) {
+        // `main.synctex.gz` is the failed build's, and would point at the wrong places.
+        m_stateLabel->setText(QStringLiteral("This is the last good build; fix the errors to click into the PDF."));
+        return;
+    }
     const SyncTexTool tool = synctexTool();
+    const QString key = m_shownKey;
     struct Found {
         SyncTexOutcome outcome;
         SyncTexPlace place;
@@ -849,7 +932,9 @@ void PdfPane::inverse(int page, const QPointF& point)
             found.outcome = synctexInverse(tool, folder, page + 1, point.x(), point.y(), found.place);
             return found;
         },
-        [this](Found found) {
+        [this, key](Found found) {
+            if (key != m_shownKey)
+                return; // Another document is shown now.
             if (found.outcome == SyncTexOutcome::Found) {
                 emit placeActivated(found.place.file, found.place.line);
             } else if (found.outcome == SyncTexOutcome::Missing && !m_toldNoSynctex) {

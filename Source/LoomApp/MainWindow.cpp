@@ -177,6 +177,13 @@ MainWindow::MainWindow(AppSettings* settings, QWidget* parent)
     connect(m_statementsPage, &StatementsPage::outputLine, m_bottomPanel, [this](const QString& line) { m_bottomPanel->appendOutput(line); });
     // The PDF pane's builds: the status bar's build state, the Problems panel and Output's Build channel.
     PdfPane* pdf = m_statementsPage->pdfPane();
+    // Problems are "the latest build's problems for the open statement": a new target clears them.
+    connect(pdf, &PdfPane::targetChanged, this, [this] {
+        m_bottomPanel->setBuildProblems({});
+        m_statementsPage->setBuildProblems({});
+        m_buildState->clear();
+        m_buildState->hide();
+    });
     connect(pdf, &PdfPane::buildStarted, this, [this, pdf] {
         m_buildState->setText(pdf->stateText());
         m_buildState->show();
@@ -671,7 +678,8 @@ void MainWindow::logBuild(const BuildResult& result)
     m_bottomPanel->appendOutput(OutputChannel::Build, summary);
     if (!result.command.isEmpty())
         m_bottomPanel->appendOutput(OutputChannel::Build, QStringLiteral("In %1: %2").arg(result.folder, result.command));
-    if (!result.log.isEmpty())
+    // A reused build's log is the one already in the channel.
+    if (!result.log.isEmpty() && !result.reused)
         m_bottomPanel->appendOutput(OutputChannel::Build, QStringLiteral("main.log:\n") + QString::fromUtf8(result.log));
 }
 

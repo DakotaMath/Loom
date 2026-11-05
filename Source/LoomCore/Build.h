@@ -9,8 +9,10 @@
 #include "LoomCore/Problem.h"
 
 #include <QByteArray>
+#include <QDateTime>
 #include <QProcessEnvironment>
 #include <QString>
+#include <QStringList>
 
 #include <atomic>
 #include <memory>
@@ -110,6 +112,28 @@ struct BuildResult {
 ///
 /// @returns The result. Side effects: writes under `.loom/`; runs `latexmk` (and, for `rev`, git).
 BuildResult buildTarget(const BuildRequest& request);
+
+/// What a build left in its folder, for the app to show (Specs/m2-statements-review.md, "The PDF
+/// pane").
+struct BuildOutput {
+    bool read = false;       ///< False if the folder doesn't exist or its lock wasn't free in time.
+    QByteArray pdf;          ///< `main.pdf`, or empty.
+    QByteArray lastGoodPdf;  ///< `last-good.pdf`, or empty.
+    QDateTime lastGoodTime;  ///< When `last-good.pdf` was written.
+    QByteArray aux;          ///< `main.aux`, or empty.
+    /// The project files the build copied under `src/`, project-relative with `/`, sorted.
+    QStringList inputs;
+};
+
+/// Reads a build folder's PDFs, `main.aux` and the list of its copies, holding the folder's
+/// `build.lock` (as buildTarget() does), so another build of the same folder (an agent's `loom
+/// build`) can't replace or remove them halfway through. Reading the bytes is what lets the app
+/// show a PDF without holding the file open ("Where the PDF is read from").
+/// @param root       The project folder.
+/// @param folder     The build folder, project-relative (BuildResult::folder, or buildFolder()).
+/// @param lockWaitMs How long to wait for the lock.
+/// @returns What was there. Side effects: takes and releases the lock; writes nothing else.
+BuildOutput readBuildOutput(const QString& root, const QString& folder, int lockWaitMs = 10'000);
 
 /// The build folder of a target, project-relative: `.loom/build/4KX7/chain-verbose`, or under
 /// `.loom/rev/<hash>/build/` for a commit. No side effects.
