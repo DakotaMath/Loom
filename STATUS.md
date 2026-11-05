@@ -7,10 +7,11 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 -->
 # Status
 
-**Updated:** 2026-11-05 · main at ad75623
+**Updated:** 2026-11-05 · main at d81778a
 **Current milestone:** M1, the core, is **done**: built, reviewed, fixed and re-reviewed; all 279 `ctest` tests pass on Windows. **M2** (statements and review) is being built from its approved spec
 
 ## Done recently
+- #33 building LaTeX in `LoomCore` and `loom build`, with the demo project: PR #44 merged (2026-11-05) ([log](Wiki/logs/2026-11/2026-11-05-build-latex.md)).
 - The M2 spec (#32, PR #42) and dropping M3 (PR #43), merged by Dakota (2026-11-05) ([log](Wiki/logs/2026-11/2026-11-05-m2-spec.md)).
 - The M1 review, fixes and final pass (2026-11-04 to 05): review on branch `m1/review` (`Reviews/M1/`, verdict in `FINAL.md`, no blockers); fixes in PRs #21–#27, #29, #30; spec amendments A1–A23 in PRs #20, #28, #30. A proof's `level` is now in its fingerprint (A18, `loom-fingerprint-v2`) ([log](Wiki/logs/2026-11/2026-11-05-m1-review.md)).
 - #9 `loom validate`, `loom install-hooks` and the commit guard (2026-11-04): PR #19 merged ([log](Wiki/logs/2026-11/2026-11-04-validate.md)).
@@ -23,15 +24,15 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 - The M1 spec (2026-11-03): [`Specs/m1-core.md`](Specs/m1-core.md), approved by Dakota (PR #11).
 
 ## In progress
-- #33 building LaTeX in `LoomCore` and `loom build`, with the demo project (`Tests/Projects/Demo`): PR #44, waiting for review; 310/310 tests pass on Windows with TeX Live ([log](Wiki/logs/2026-11/2026-11-05-build-latex.md)).
+- #34 the app shell (start screen, opening folders, the side bar of tabs, Settings, *Check my setup*, lanes and snapshots): PR #45, waiting for review; 323 tests pass on Windows, 1 skipped ([log](Wiki/logs/2026-11/2026-11-05-app-shell.md)).
 
 ## Next up
 Milestones M0–M12 are on GitHub; M3 is dropped and its milestone closed. M1's issues (#2–#9) are all closed.
-- M2's build issues #34–#40 (#41 is now M4's): #34 (the app shell) next; the others use the demo project and `Tests/Support/DemoProject` from PR #44. #36 also takes SyncTeX and the `.aux` page (Noticed in PR #44).
+- M2's build issues #34–#40 (#41 is now M4's): #35 (the Statements tab) next, into the shell from PR #45; all use the demo project and `Tests/Support/DemoProject` from PR #44. #36 also takes SyncTeX and the `.aux` page (Noticed in PR #44).
 - M1 follow-ups, for M2 or later: see "Follow-ups" in `Reviews/M1/FINAL.md` on `m1/review` (`\cite` of an old key is settled by the M2 spec, E3).
 
 ## Waiting on Dakota
-- Review PR #44 (#33, `loom build`) and run its Windows check.
+- Review PR #45 (#34, the app shell) and run its Windows check.
 - Close the M1 milestone on GitHub.
 - The Windows checks listed in PRs #21–#30.
 
