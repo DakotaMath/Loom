@@ -66,8 +66,12 @@ struct ChangeResult {
     QString path;
     /// For edits: the fields that changed, in the spec's order (`body` for the body).
     QStringList changed;
+    /// When done: the bytes written to `path`, so an editor knows the file it now holds without
+    /// reading it again (another writer may have changed it since); empty if nothing was written.
+    QByteArray written;
     /// For edits: the checked proofs whose checks the change outdates (or, when refused with
-    /// `outdates-checks`, would outdate), in path order.
+    /// `outdates-checks` or with `dakota-only` for a click it needs first, would outdate), in path
+    /// order.
     QStringList outdatedChecks;
 };
 

@@ -7,6 +7,8 @@ add_executable(LoomCoreTests
     BuildTests.cpp
     ChecksTests.cpp
     CyclesTests.cpp
+    DraftsTests.cpp
+    EditorSavesTests.cpp
     EditsTests.cpp
     FingerprintTests.cpp
     FrontMatterTests.cpp

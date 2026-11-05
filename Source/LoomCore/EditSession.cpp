@@ -1,11 +1,13 @@
 #include "LoomCore/EditSession.h"
 
 #include "LoomCore/ProjectFiles.h"
+#include "LoomCore/ProofChecks.h"
 
 #include <QDir>
 #include <QFileInfo>
 #include <QHash>
 #include <QLockFile>
+#include <QSet>
 
 namespace loom::edits {
 
@@ -133,6 +135,76 @@ ChangeResult notEditable(const QString& path, const std::vector<Problem>& proble
     for (const Problem& problem : problems)
         lines << problemLine(problem);
     return refused(QStringLiteral("not-editable"), lines.join(u'\n'));
+}
+
+QString listed(const QStringList& items)
+{
+    if (items.size() < 2)
+        return items.join(QString());
+    return items.first(items.size() - 1).join(u", ") + QStringLiteral(" and ") + items.last();
+}
+
+ChangeResult dakotaOnly(const QString& what)
+{
+    return refused(QStringLiteral("dakota-only"), QStringLiteral("Only Dakota can %1, and only at a terminal.").arg(what));
+}
+
+ChangeResult commit(Session& session, const QString& path, const QByteArray& bytes, const ProjectContents& changed,
+                    const QString& what, ChangeResult result, const std::optional<QStringList>& outdateChecks,
+                    const QString& needsDakota)
+{
+    const ProjectConfig& config = session.project.config;
+    const std::vector<Problem> added = addedErrors(session.problems(config, session.project.problems, session.contents),
+                                                   session.problems(config, session.project.problems, changed));
+    result.path = path;
+    if (!added.empty()) {
+        ChangeResult refusal = refusedFor(added, what);
+        refusal.id = result.id;
+        refusal.path = path;
+        return refusal;
+    }
+    if (!needsDakota.isEmpty()) {
+        ChangeResult refusal = dakotaOnly(needsDakota);
+        refusal.id = result.id;
+        refusal.path = path;
+        // So the app's dialog for the click can name the checks it outdates too, and Dakota
+        // confirms both at once (Specs/m2-statements-review.md, "Dakota's clicks").
+        refusal.outdatedChecks = outdatedChecks(session.contents, changed);
+        return refusal;
+    }
+    result.outdatedChecks = outdatedChecks(session.contents, changed);
+    if (!result.outdatedChecks.isEmpty() && !outdateChecks) {
+        const bool one = result.outdatedChecks.size() == 1;
+        result.outcome = ChangeOutcome::Refused;
+        result.code = QStringLiteral("outdates-checks");
+        // "What … read", not "the text": a proof's level is in its fingerprint too (A18).
+        result.message = QStringLiteral("Loom didn't %1, because it would outdate the checks of %2: %3 checked, and "
+                                        "what %4 read would change. Only Dakota can outdate checks (`--outdate-checks`, "
+                                        "at a terminal).")
+                             .arg(what, listed(result.outdatedChecks), one ? QStringLiteral("it is") : QStringLiteral("they are"),
+                                  one ? QStringLiteral("its checks") : QStringLiteral("their checks"));
+        return result;
+    }
+    if (outdateChecks
+        && QSet<QString>(result.outdatedChecks.begin(), result.outdatedChecks.end())
+               != QSet<QString>(outdateChecks->begin(), outdateChecks->end())) {
+        const QString now = result.outdatedChecks.isEmpty() ? QStringLiteral("no checks")
+                                                            : QStringLiteral("the checks of ") + listed(result.outdatedChecks);
+        const QString confirmed = outdateChecks->isEmpty() ? QStringLiteral("none, as Dakota confirmed")
+                                                           : QStringLiteral("those of %1 that Dakota confirmed").arg(listed(*outdateChecks));
+        result.outcome = ChangeOutcome::Refused;
+        result.code = QStringLiteral("outdates-checks");
+        result.message = QStringLiteral("Loom didn't %1, because it would now outdate %2, not %3: the project changed in "
+                                        "between. Run the command again to see what it outdates now.")
+                             .arg(what, now, confirmed);
+        return result;
+    }
+    const QString error = writeProjectFile(session.project.root, path, bytes);
+    if (!error.isEmpty())
+        return cantWork(QStringLiteral("write-failed"), error);
+    result.outcome = ChangeOutcome::Done;
+    result.written = bytes;
+    return result;
 }
 
 } // namespace loom::edits

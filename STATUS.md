@@ -7,10 +7,11 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 -->
 # Status
 
-**Updated:** 2026-11-05 · main at d81778a
+**Updated:** 2026-11-05 · main at 3be5679
 **Current milestone:** M1, the core, is **done**: built, reviewed, fixed and re-reviewed; all 279 `ctest` tests pass on Windows. **M2** (statements and review) is being built from its approved spec
 
 ## Done recently
+- #34 the app shell: PR #45 merged (2026-11-05) ([log](Wiki/logs/2026-11/2026-11-05-app-shell.md)).
 - #33 building LaTeX in `LoomCore` and `loom build`, with the demo project: PR #44 merged (2026-11-05) ([log](Wiki/logs/2026-11/2026-11-05-build-latex.md)).
 - The M2 spec (#32, PR #42) and dropping M3 (PR #43), merged by Dakota (2026-11-05) ([log](Wiki/logs/2026-11/2026-11-05-m2-spec.md)).
 - The M1 review, fixes and final pass (2026-11-04 to 05): review on branch `m1/review` (`Reviews/M1/`, verdict in `FINAL.md`, no blockers); fixes in PRs #21–#27, #29, #30; spec amendments A1–A23 in PRs #20, #28, #30. A proof's `level` is now in its fingerprint (A18, `loom-fingerprint-v2`) ([log](Wiki/logs/2026-11/2026-11-05-m1-review.md)).
@@ -24,15 +25,15 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 - The M1 spec (2026-11-03): [`Specs/m1-core.md`](Specs/m1-core.md), approved by Dakota (PR #11).
 
 ## In progress
-- #34 the app shell (start screen, opening folders, the side bar of tabs, Settings, *Check my setup*, lanes and snapshots): PR #45, waiting for review; 323 tests pass on Windows, 1 skipped ([log](Wiki/logs/2026-11/2026-11-05-app-shell.md)).
+- #35 the Statements tab (list, QScintilla editor, saving with Dakota's confirmations, new statements and proofs, verbose versions, back and forward, find, recovery files, files changed on disk): PR #46, waiting for review; 335 tests pass on Windows, 1 skipped ([log](Wiki/logs/2026-11/2026-11-05-statements-editor.md)).
 
 ## Next up
 Milestones M0–M12 are on GitHub; M3 is dropped and its milestone closed. M1's issues (#2–#9) are all closed.
-- M2's build issues #34–#40 (#41 is now M4's): #35 (the Statements tab) next, into the shell from PR #45; all use the demo project and `Tests/Support/DemoProject` from PR #44. #36 also takes SyncTeX and the `.aux` page (Noticed in PR #44).
+- M2's build issues #36–#40 (#41 is now M4's): #36 (compiling and the PDF pane) next, into the Statements tab from PR #46; all use the demo project and `Tests/Support/DemoProject` from PR #44. #36 also takes SyncTeX and the `.aux` page (Noticed in PR #44).
 - M1 follow-ups, for M2 or later: see "Follow-ups" in `Reviews/M1/FINAL.md` on `m1/review` (`\cite` of an old key is settled by the M2 spec, E3).
 
 ## Waiting on Dakota
-- Review PR #45 (#34, the app shell) and run its Windows check.
+- Review PR #46 (#35, the Statements tab) and run its Windows check.
 - Close the M1 milestone on GitHub.
 - The Windows checks listed in PRs #21–#30.
 
@@ -42,6 +43,7 @@ Milestones M0–M12 are on GitHub; M3 is dropped and its milestone closed. M1's 
 - **Fingerprints are v2** (A18): checks written before PR #29 no longer match.
 - **Path checks on Windows:** `QFileInfo::canonicalFilePath()` doesn't resolve junctions; `LoomCore` uses `std::filesystem::canonical()` ([gotcha](Wiki/gotchas/qt/canonical-path-ignores-junctions.md)).
 - **Terminal checks on Windows:** `_isatty()` is true for `NUL`; `loom` uses `GetConsoleMode` ([gotcha](Wiki/gotchas/windows/isatty-true-for-nul.md)).
+- **QScintilla takes shortcuts** its keymap binds while an editor has focus ([gotcha](Wiki/gotchas/qt/qscintilla-takes-bound-shortcuts.md)).
 - **Qt regexes:** `$` also matches before a final `\n`; anchor with `QRegularExpression::anchoredPattern` ([gotcha](Wiki/gotchas/qt/regex-dollar-before-final-newline.md)).
 - **TeX tests:** labelled `tex` (`ctest -L tex`); they skip without `latexmk`, and fail instead under `LOOM_REQUIRE_TEX=1`, as on Linux CI. BibTeX refuses a plain `max_print_line` ([gotcha](Wiki/gotchas/latex/bibtex-rejects-long-max-print-line.md)).
 - **Public repo:** never commit details of private research projects; examples use made-up papers.

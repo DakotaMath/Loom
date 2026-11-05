@@ -14,6 +14,10 @@ add_library(LoomCore STATIC
     Checks.h
     Cycles.cpp
     Cycles.h
+    Drafts.cpp
+    Drafts.h
+    EditorSaves.cpp
+    EditorSaves.h
     Edits.cpp
     EditSession.cpp
     EditSession.h

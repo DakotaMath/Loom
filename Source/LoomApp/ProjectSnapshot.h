@@ -10,6 +10,9 @@
 #include "LoomCore/ProjectToml.h"
 #include "LoomCore/Status.h"
 
+#include <QByteArray>
+#include <QDateTime>
+#include <QHash>
 #include <QString>
 
 #include <vector>
@@ -57,6 +60,12 @@ struct ProjectSnapshot {
     ProjectConfig config;       ///< `loom.toml`.
     ProjectContents contents;   ///< Every statement, proof and paper.
     ProjectGraph graph;         ///< With every computed status.
+    /// The bytes of every statement, proof, verbose proof and paper stub file, by project-relative
+    /// path, as read for this snapshot: what the editor opens, and compares with what it loaded to
+    /// see a file changed outside Loom (Specs/m2-statements-review.md, "Never losing text").
+    QHash<QString, QByteArray> files;
+    /// When each of `files` was last modified, for sorting the list by *recently changed*.
+    QHash<QString, QDateTime> modified;
     /// Every validation problem, as `loom validate` sorts them; plus, if the project couldn't be
     /// validated at all, nothing and `unreadable` says why.
     std::vector<Problem> problems;
@@ -73,7 +82,7 @@ struct ProjectSnapshot {
 };
 
 /// Reads a project into a snapshot: `loom.toml`, the contents and graph (loadContents(),
-/// buildGraph()), the validation problems (validateProject(), skipping the checks against the
+/// buildGraph()), the bytes and times of the statement, proof and stub files, the validation problems (validateProject(), skipping the checks against the
 /// last commit when git can't read it), and the branch (`git symbolic-ref --short -q HEAD`).
 /// @param root The project folder.
 /// @param git  Which git.

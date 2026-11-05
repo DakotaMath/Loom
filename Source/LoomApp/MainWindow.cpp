@@ -9,6 +9,7 @@
 #include "LoomApp/SetupCheckView.h"
 #include "LoomApp/SideBar.h"
 #include "LoomApp/StartScreen.h"
+#include "LoomApp/StatementsPage.h"
 
 #include "LoomCore/AppLock.h"
 #include "LoomCore/Version.h"
@@ -128,8 +129,8 @@ MainWindow::MainWindow(AppSettings* settings, QWidget* parent)
     connect(m_startScreen, &StartScreen::recentClicked, this, [this](const QString& path) { openFolder(path); });
     m_pages->addWidget(m_startScreen);
 
-    m_tabPages[Tab::Statements] = placeholderPage(QStringLiteral("statementsPage"), QStringLiteral("Statements"),
-        new QLabel(QStringLiteral("The list of statements and the editor come next.")), m_pages);
+    m_statementsPage = new StatementsPage(m_settings, m_projectLane, m_pages);
+    m_tabPages[Tab::Statements] = m_statementsPage;
     m_reviewNote = new QLabel;
     m_tabPages[Tab::Review] = placeholderPage(QStringLiteral("reviewPage"), QStringLiteral("Review"), m_reviewNote, m_pages);
     m_settingsPage = new SettingsPage(m_settings, m_buildLane, m_pages);
@@ -159,6 +160,22 @@ MainWindow::MainWindow(AppSettings* settings, QWidget* parent)
 
     m_bottomPanel = new BottomPanel(this);
     m_bottomPanel->hide();
+    connect(m_bottomPanel, &BottomPanel::problemActivated, this, [this](const QString& file, int line) {
+        if (!m_session)
+            return;
+        showTab(Tab::Statements);
+        m_statementsPage->showFileLine(file, line);
+    });
+    connect(m_statementsPage, &StatementsPage::refusalProblems, this, [this](const std::vector<Problem>& problems) {
+        m_bottomPanel->setSaveProblems(problems);
+        if (!problems.empty()) {
+            m_bottomPanel->show();
+            m_bottomPanel->showProblems();
+        }
+    });
+    connect(m_statementsPage, &StatementsPage::outputLine, m_bottomPanel, &BottomPanel::appendOutput);
+    connect(m_statementsPage, &StatementsPage::unsavedChanged, this,
+            [this](bool any) { m_sideBar->button(Tab::Statements)->setBadgeDot(any); });
     m_splitter = new QSplitter(Qt::Vertical, this);
     m_splitter->addWidget(m_pages);
     m_splitter->addWidget(m_bottomPanel);
@@ -192,7 +209,9 @@ MainWindow::~MainWindow()
 {
     for (SetupCheckView* view : findChildren<SetupCheckView*>())
         view->stop();
-    // The lanes wait for their work before the window's parts go; the session's lock goes with it.
+    // The page keeps its state before the session goes; the lanes wait for their work before the
+    // window's parts go; the session's lock goes with it.
+    m_statementsPage->setSession(nullptr);
     delete m_projectLane;
     delete m_buildLane;
     delete m_gitLane;
@@ -228,6 +247,37 @@ void MainWindow::createActions()
     QAction* panel = view->addAction(QStringLiteral("&Bottom panel"), this, &MainWindow::toggleBottomPanel);
     panel->setShortcut(QKeySequence(QKeyCombination(Qt::ControlModifier, Qt::Key_QuoteLeft)));
 
+    // The Statements tab's actions (Specs/m2-statements-review.md, "Shortcuts"), on its tab only.
+    QMenu* statement = menuBar()->addMenu(QStringLiteral("&Statement"));
+    const auto add = [this, statement](const QString& name, QKeySequence keys, std::function<void()> action) {
+        QAction* item = statement->addAction(name, this, std::move(action));
+        item->setShortcut(keys);
+        item->setEnabled(false);
+        m_statementActions.push_back(item);
+        return item;
+    };
+    add(QStringLiteral("&New statement…"), QKeySequence(QKeyCombination(Qt::ControlModifier, Qt::Key_N)),
+        [this] { m_statementsPage->newStatement(); });
+    add(QStringLiteral("New &proof…"), QKeySequence(QKeyCombination(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_N)),
+        [this] { m_statementsPage->newProof(); });
+    add(QStringLiteral("&Save"), QKeySequence(QKeyCombination(Qt::ControlModifier, Qt::Key_S)), [this] { m_statementsPage->save(); });
+    statement->addSeparator();
+    add(QStringLiteral("&Back"), QKeySequence(QKeyCombination(Qt::AltModifier, Qt::Key_Left)), [this] { m_statementsPage->back(); });
+    add(QStringLiteral("&Forward"), QKeySequence(QKeyCombination(Qt::AltModifier, Qt::Key_Right)), [this] { m_statementsPage->forward(); });
+    statement->addSeparator();
+    add(QStringLiteral("&Find…"), QKeySequence(QKeyCombination(Qt::ControlModifier, Qt::Key_F)), [this] { m_statementsPage->find(false); });
+    add(QStringLiteral("&Replace…"), QKeySequence(QKeyCombination(Qt::ControlModifier, Qt::Key_H)), [this] { m_statementsPage->find(true); });
+    add(QStringLiteral("Find &next"), QKeySequence(Qt::Key_F3), [this] { m_statementsPage->findNext(true); });
+    add(QStringLiteral("Find pre&vious"), QKeySequence(QKeyCombination(Qt::ShiftModifier, Qt::Key_F3)),
+        [this] { m_statementsPage->findNext(false); });
+    add(QStringLiteral("Find in the pro&ject…"), QKeySequence(QKeyCombination(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_F)),
+        [this] { m_statementsPage->findInProject(); });
+    statement->addSeparator();
+    add(QStringLiteral("&Larger text"), QKeySequence(QKeyCombination(Qt::ControlModifier, Qt::Key_Equal)),
+        [this] { m_statementsPage->zoomEditor(1); });
+    add(QStringLiteral("S&maller text"), QKeySequence(QKeyCombination(Qt::ControlModifier, Qt::Key_Minus)),
+        [this] { m_statementsPage->zoomEditor(-1); });
+
     QMenu* help = menuBar()->addMenu(QStringLiteral("&Help"));
     help->addAction(QStringLiteral("&About Loom"), this, [this] {
         const std::string_view version = versionString();
@@ -238,6 +288,7 @@ void MainWindow::createActions()
             "<table cellspacing='0' cellpadding='3'>"
             "<tr><td>Qt %2 (Core, Gui, Widgets)</td><td>LGPL v3 / GPL v3</td><td>linked</td></tr>"
             "<tr><td>toml++</td><td>MIT</td><td>compiled in</td></tr>"
+            "<tr><td>QScintilla 2.14.1</td><td>GPL v3</td><td>compiled in</td></tr>"
             "<tr><td>TeX Live: latexmk, pdfLaTeX, synctex, BibTeX</td><td>LPPL, GPL and others</td><td>separate programs, not linked</td></tr>"
             "<tr><td>Git, Git LFS</td><td>GPL v2, MIT</td><td>separate programs, not linked</td></tr>"
             "</table>")
@@ -295,6 +346,7 @@ void MainWindow::showStart()
 {
     m_pages->setCurrentWidget(m_startScreen);
     m_sideBar->clearCurrent();
+    updateStatementActions();
 }
 
 void MainWindow::showTab(Tab tab)
@@ -306,6 +358,52 @@ void MainWindow::showTab(Tab tab)
     m_sideBar->setCurrent(tab);
     if (m_session)
         m_settings->setLastTab(tabInfo(tab).key);
+    updateStatementActions();
+}
+
+void MainWindow::updateStatementActions()
+{
+    const bool on = m_session && !onStartScreen() && m_current == Tab::Statements;
+    for (QAction* action : m_statementActions)
+        action->setEnabled(on);
+}
+
+void MainWindow::askAboutUnsavedEdits(const QString& why, std::function<void()> proceed)
+{
+    if (!m_statementsPage->hasUnsavedEdits()) {
+        proceed();
+        return;
+    }
+    const int files = static_cast<int>(m_statementsPage->unsavedPaths().size());
+    auto* box = new QMessageBox(QMessageBox::Question, QStringLiteral("Unsaved edits"),
+                                QStringLiteral("%1 unsaved edits. %2")
+                                    .arg(files == 1 ? QStringLiteral("1 file has") : QStringLiteral("%1 files have").arg(files), why),
+                                QMessageBox::NoButton, this);
+    box->setObjectName(QStringLiteral("unsavedEditsMessage"));
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    QPushButton* saveAll = box->addButton(QStringLiteral("Save all"), QMessageBox::AcceptRole);
+    saveAll->setObjectName(QStringLiteral("saveAll"));
+    QPushButton* keep = box->addButton(QStringLiteral("Keep them for next time"), QMessageBox::DestructiveRole);
+    keep->setObjectName(QStringLiteral("keep"));
+    QPushButton* cancel = box->addButton(QMessageBox::Cancel);
+    cancel->setObjectName(QStringLiteral("cancel"));
+    box->setDefaultButton(cancel);
+    box->setEscapeButton(cancel);
+    connect(box, &QMessageBox::finished, this, [this, box, saveAll, keep, proceed] {
+        if (box->clickedButton() == saveAll) {
+            m_statementsPage->saveAll([this, proceed](bool ok) {
+                if (ok)
+                    proceed();
+                else
+                    showTab(Tab::Statements);
+            });
+        } else if (box->clickedButton() == keep) {
+            // The recovery files stay, written now, and are offered back next time.
+            m_statementsPage->writeAllDrafts(proceed);
+        }
+    });
+    box->open();
+    cancel->setFocus();
 }
 
 void MainWindow::toggleBottomPanel()
@@ -321,6 +419,14 @@ void MainWindow::openFolder(const QString& path, OpenMode mode)
         if (onStartScreen())
             showTab(Tab::Statements);
         emit openFinished();
+        return;
+    }
+    if (m_session && m_statementsPage->hasUnsavedEdits() && !m_unsavedAnswered) {
+        // One project per window: the open one's unsaved edits are asked about first.
+        askAboutUnsavedEdits(QStringLiteral("What should Loom do with them before it opens another project?"), [this, path, mode] {
+            m_unsavedAnswered = true;
+            openFolder(path, mode);
+        });
         return;
     }
     const GitTool git = m_settings->gitTool();
@@ -356,6 +462,8 @@ void MainWindow::finishOpening(Opening opening, OpenMode mode)
     else if (opening.lock != AppLockOutcome::Taken)
         refusal = opening.lockMessage;
     if (!refusal.isEmpty()) {
+        // The project open here stays, so its unsaved edits will be asked about again.
+        m_unsavedAnswered = false;
         if (mode == OpenMode::Restore)
             statusBar()->showMessage(QStringLiteral("Loom couldn't reopen %1: %2").arg(QDir::toNativeSeparators(opening.folder.folder), refusal), 15'000);
         else
@@ -365,7 +473,9 @@ void MainWindow::finishOpening(Opening opening, OpenMode mode)
     }
 
     // Opening another project in a window that has one: the old one closes, releasing its lock.
-    // (Asking about unsaved edits first comes with the editor, #35.)
+    // Its unsaved edits were asked about before this open started (openFolder()).
+    m_unsavedAnswered = false;
+    m_statementsPage->setSession(nullptr);
     delete m_session;
     m_session = new ProjectSession(std::move(opening.lockFile), opening.snapshot, m_projectLane,
                                    [settings = m_settings] { return settings->gitTool(); }, this);
@@ -382,6 +492,7 @@ void MainWindow::finishOpening(Opening opening, OpenMode mode)
     m_sideBar->setProjectTabsVisible(true);
     for (const TabInfo& info : projectTabs())
         m_tabActions.at(info.tab)->setEnabled(true);
+    m_statementsPage->setSession(m_session);
     showTab(tab);
     updateFromSnapshot();
     emit projectOpened(snapshot.root);
@@ -504,6 +615,15 @@ void MainWindow::updateBusy()
 
 void MainWindow::closeEvent(QCloseEvent* event)
 {
+    if (m_session && m_statementsPage->hasUnsavedEdits() && !m_unsavedAnswered) {
+        event->ignore();
+        askAboutUnsavedEdits(QStringLiteral("What should Loom do with them before it closes?"), [this] {
+            m_unsavedAnswered = true;
+            close();
+        });
+        return;
+    }
+    m_unsavedAnswered = false;
     m_settings->setWindowGeometry(saveGeometry());
     if (m_session) {
         m_settings->setLastProject(m_session->root());

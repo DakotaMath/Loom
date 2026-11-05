@@ -18,3 +18,17 @@ if(WIN32)
     set_tests_properties(LoomAppTests PROPERTIES
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${LOOM_QT_BIN_DIR}")
 endif()
+
+# StatementsTabTests: the Statements tab (#35), its own program so each Qt Test class has its main().
+qt_add_executable(StatementsTabTests
+    StatementsTabTests.cpp)
+target_link_libraries(StatementsTabTests PRIVATE LoomAppLib LoomTestSupport Qt6::Test)
+target_compile_definitions(StatementsTabTests PRIVATE
+    LOOM_SCREENSHOTS="${PROJECT_BINARY_DIR}/screenshots")
+loom_set_compiler_options(StatementsTabTests)
+add_test(NAME StatementsTabTests COMMAND StatementsTabTests)
+add_dependencies(StatementsTabTests loom)
+if(WIN32)
+    set_tests_properties(StatementsTabTests PROPERTIES
+        ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${LOOM_QT_BIN_DIR}")
+endif()

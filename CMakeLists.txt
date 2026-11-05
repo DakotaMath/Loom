@@ -20,6 +20,8 @@ include(LoomDependencies)
 
 find_package(Qt6 6.11 REQUIRED COMPONENTS Core Gui Widgets Test)
 qt_standard_project_setup()
+# QScintilla needs Qt Widgets, so it comes after Qt.
+include(QScintilla)
 
 # On Windows nothing puts Qt's DLLs next to our programs, so the tests get Qt's bin folder
 # on their PATH instead (see Tests/CMakeLists.txt). Fail here, not in a test, if it's wrong.
