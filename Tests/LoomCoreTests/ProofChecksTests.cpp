@@ -75,6 +75,7 @@ TEST_CASE("A proof's fingerprint in its project", "[proof-checks]")
     const loom::ProjectContents contents = loom::loadContents(project.root).contents;
 
     loom::FingerprintInput input;
+    input.level = "complete";
     input.statementTag = "4KX7";
     input.statementBody = "Body of 4KX7.\n";
     input.premises = {{"5HN8", QByteArray("Body of 5HN8.\n")}};
@@ -276,8 +277,8 @@ TEST_CASE("Edits that would outdate checks need Dakota's confirmation", "[proof-
     project.makeChecked("4KX7.a");
     const QByteArray statementBefore = project.read("Statements/4KX7.tex");
     const QByteArray proofBefore = project.read("Proofs/4KX7/4KX7.a.tex");
-    const QString refusal = "Loom didn't change %1, because it would outdate the checks of 4KX7.a: it is checked, and the text "
-                            "its checks read would change. Only Dakota can outdate checks (`--outdate-checks`, at a terminal).";
+    const QString refusal = "Loom didn't change %1, because it would outdate the checks of 4KX7.a: it is checked, and what its "
+                            "checks read would change. Only Dakota can outdate checks (`--outdate-checks`, at a terminal).";
 
     SECTION("the proved statement's body")
     {
@@ -319,15 +320,44 @@ TEST_CASE("Edits that would outdate checks need Dakota's confirmation", "[proof-
         edit.addPremises = {"9D3F"};
         CHECK(loom::editProof(project.root, "4KX7.a", edit, at(5)).code == "outdates-checks");
     }
+    SECTION("the proof's level (A18)")
+    {
+        loom::ProofEdit edit;
+        edit.level = "sketch";
+        loom::ChangeResult result = loom::editProof(project.root, "4KX7.a", edit, at(5));
+        CHECK(result.outcome == loom::ChangeOutcome::Refused);
+        CHECK(result.code == "outdates-checks");
+        CHECK(result.outdatedChecks == QStringList{"4KX7.a"});
+        CHECK(result.message == refusal.arg("4KX7.a"));
+        CHECK(project.read("Proofs/4KX7/4KX7.a.tex") == proofBefore);
+
+        edit.outdateChecks = QStringList{"4KX7.a"};
+        result = loom::editProof(project.root, "4KX7.a", edit, at(5));
+        CHECK(result.outcome == loom::ChangeOutcome::Done);
+        CHECK(result.changed == QStringList{"level"});
+        CHECK(result.outdatedChecks == QStringList{"4KX7.a"});
+        CHECK_FALSE(loom::proofChecking(loom::loadContents(project.root).contents, "4KX7.a").standing.checked);
+    }
+    SECTION("marking a checked proof failed needs both of Dakota's clicks (A16, A18)")
+    {
+        loom::ProofEdit edit;
+        edit.level = "failed";
+        CHECK(loom::editProof(project.root, "4KX7.a", edit, at(5)).code == "dakota-only");
+        edit.failedConfirmed = true;
+        CHECK(loom::editProof(project.root, "4KX7.a", edit, at(5)).code == "outdates-checks");
+        CHECK(project.read("Proofs/4KX7/4KX7.a.tex") == proofBefore);
+        edit.outdateChecks = QStringList{"4KX7.a"};
+        CHECK(loom::editProof(project.root, "4KX7.a", edit, at(5)).outcome == loom::ChangeOutcome::Done);
+    }
     SECTION("what isn't in the fingerprint edits freely")
     {
         loom::StatementEdit title;
         title.title = "A new title";
         title.verified = true;
         CHECK(loom::editStatement(project.root, "4KX7", title, at(5)).outcome == loom::ChangeOutcome::Done);
-        loom::ProofEdit level;
-        level.level = "sketch";
-        const loom::ChangeResult result = loom::editProof(project.root, "4KX7.a", level, at(5));
+        loom::ProofEdit verified;
+        verified.verified = true;
+        const loom::ChangeResult result = loom::editProof(project.root, "4KX7.a", verified, at(5));
         CHECK(result.outcome == loom::ChangeOutcome::Done);
         CHECK(result.outdatedChecks.isEmpty());
         loom::StatementEdit trailing;
@@ -351,7 +381,7 @@ TEST_CASE("Edits that would outdate checks need Dakota's confirmation", "[proof-
         edit.body = "A weaker lemma.";
         const loom::ChangeResult result = loom::editStatement(project.root, "5HN8", edit, at(20));
         CHECK(result.outdatedChecks == QStringList{"4KX7.a", "9D3F.b"});
-        CHECK(result.message.contains("the checks of 4KX7.a and 9D3F.b: they are checked, and the text their checks read would change."));
+        CHECK(result.message.contains("the checks of 4KX7.a and 9D3F.b: they are checked, and what their checks read would change."));
     }
 }
 

@@ -24,6 +24,7 @@ std::optional<QString> proofFingerprint(const ProjectContents& contents, const Q
         return fail(QStringLiteral("Loom can't read the front matter of %1 (%2).").arg(statement->tag, statement->path));
 
     FingerprintInput input;
+    input.level = proof->reading.document.level;
     input.statementTag = statement->tag;
     input.statementBody = statement->reading.document.body;
     input.proofBody = proof->reading.document.body;

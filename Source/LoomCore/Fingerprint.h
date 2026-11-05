@@ -21,10 +21,15 @@ struct FingerprintPremise {
     std::optional<QByteArray> body;
 };
 
-/// Everything a proof's fingerprint covers (Specs/m1-core.md, D3): the bodies of the proof, the
-/// statement it proves and each premise. Titles, kinds, tags, `stated_using`, `level`, dates,
-/// the order of `premises` and the verbose version are deliberately not here.
+/// Everything a proof's fingerprint covers (Specs/m1-core.md, D3): the proof's `level` and the
+/// bodies of the proof, the statement it proves and each premise. Titles, kinds, tags,
+/// `stated_using`, dates, the order of `premises` and the verbose version are deliberately not
+/// here.
 struct FingerprintInput {
+    /// The proof's `level` as its front matter gives it (`sketch`, `heuristic`, `complete` or
+    /// `failed`). It is in the fingerprint because a level is a claim about the proof: checks of
+    /// the old level don't carry over to a new one (Specs/m1-core.md, "The fingerprint", A18).
+    QString level;
     QString statementTag;
     QByteArray statementBody;
     std::vector<FingerprintPremise> premises;
@@ -39,9 +44,10 @@ struct FingerprintInput {
 QByteArray normaliseForFingerprint(const QByteArray& body);
 
 /// The byte string the fingerprint hashes (Specs/m1-core.md, "The fingerprint", step 2):
-/// `loom-fingerprint-v1\n`, then a `statement <tag>` section, one `premise <tag>` section per
-/// premise in byte order of the tags, and a `proof` section. Each section is its label line, the
-/// length of the normalised text in bytes as a decimal line, the text, and `\n`.
+/// `loom-fingerprint-v2\n`, then a `level` section holding the level as written (A18), a
+/// `statement <tag>` section, one `premise <tag>` section per premise in byte order of the tags,
+/// and a `proof` section. Each section is its label line, the length of its text in bytes as a
+/// decimal line, the text, and `\n`; bodies are normalised first, the level isn't.
 /// @returns The bytes. No side effects.
 QByteArray fingerprintBytes(const FingerprintInput& input);
 

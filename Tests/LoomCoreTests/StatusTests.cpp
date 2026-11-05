@@ -353,6 +353,24 @@ TEST_CASE("Levels rank complete, then sketch, then heuristic", "[status][levels]
     CHECK(graph.statement("4KX7")->proofs == QStringList{"4KX7.a", "4KX7.b", "4KX7.c", "4KX7.d"});
 }
 
+TEST_CASE("A checked sketch moved to complete isn't checked: the level is in the fingerprint (A18)", "[status][levels]")
+{
+    // Raising the level is a claim about the proof that its checks didn't see, so the status
+    // doesn't rise without a new check (Specs/m1-core.md, "The fingerprint").
+    const ProjectFixture project;
+    project.statement("4KX7", "theorem");
+    project.proof("4KX7", "4KX7.a", "4KX7", "[]", "sketch");
+    makeChecked(project, "4KX7.a");
+    REQUIRE(loom::proofChecking(loom::loadContents(project.root).contents, "4KX7.a").standing.checked);
+    CHECK(statusOf(graphOf(project.root), "4KX7") == Status::Sketch);
+
+    project.proof("4KX7", "4KX7.a", "4KX7", "[]", "complete"); // The same body, by hand.
+    const loom::ProjectGraph graph = graphOf(project.root);
+    CHECK_FALSE(graph.proof("4KX7.a")->checking.standing.checked);
+    CHECK(graph.proof("4KX7.a")->gives == loom::Gives::CompleteUnchecked);
+    CHECK(statusOf(graph, "4KX7") == Status::Unchecked);
+}
+
 TEST_CASE("The rules that come before proofs", "[status][rules]")
 {
     const ProjectFixture project;

@@ -19,7 +19,7 @@ tags: [glossary]
 | **Status** | Computed from a statement's proofs and their checks: proved, conditional, unchecked, sketch, heuristic, open, cited, extracted, false |
 | **Level** | A proof's own maturity, set by its author: sketch, heuristic, complete, failed |
 | **Check** | A verdict on a proof by an agent or Dakota, appended to the proof's check history |
-| **Fingerprint** | A short hash of what a check read (the proof, its premises, its statement); edits leave older checks behind |
+| **Fingerprint** | A short hash of what a check read (the proof and its level, its premises, its statement); edits, and level changes, leave older checks behind |
 | **Tag (ID)** | A statement's permanent four-character ID, e.g. `4KX7` |
 | **Paper version** | One version of a paper (an arXiv version, the published one), with its own data, PDF and locators |
 | **Stub** | The committed record of a paper's result: where it is in each version and a gist in our words |

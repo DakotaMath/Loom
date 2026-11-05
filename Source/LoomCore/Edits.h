@@ -155,13 +155,15 @@ struct ProofEdit {
     bool failedConfirmed = false;
 };
 
-/// `loom edit-proof <proof-id>`: changes a proof's level, premises and body. Changing the body
-/// or premises of a checked proof is refused unless `edit.outdateChecks` lists exactly the proofs
-/// it would outdate now, as for editStatement() (Specs/m1-core.md, "The `loom` command").
+/// `loom edit-proof <proof-id>`: changes a proof's level, premises and body. Changing the body,
+/// premises or level of a checked proof is refused unless `edit.outdateChecks` lists exactly the
+/// proofs it would outdate now, as for editStatement() (Specs/m1-core.md, "The `loom` command";
+/// the level is in the fingerprint, A18).
 /// Setting `level = "failed"` on a proof that isn't is Dakota's click (Specs/m1-core.md,
 /// "Checks", verdict `fail`), refused with `dakota-only` without `edit.failedConfirmed`; keeping
 /// `failed`, or changing it to another level, isn't. Refusals come in this order: the rules (any
-/// error the edit would add), then Dakota's `failed`, then outdated checks.
+/// error the edit would add), then Dakota's `failed`, then outdated checks; so marking a checked
+/// proof failed needs both confirmations.
 /// @param typed The proof's ID as typed.
 /// @returns The result; `changed` lists the fields that changed.
 /// Side effects: rewrites the file in canonical form if anything changed.

@@ -13,9 +13,9 @@
 
 namespace loom {
 
-/// A proof's current fingerprint (Specs/m1-core.md, "The fingerprint"), from the bodies of the
-/// proof, the statement it proves and each premise statement, as they are in `contents`; a
-/// premise that is a paper stub counts with no body.
+/// A proof's current fingerprint (Specs/m1-core.md, "The fingerprint"), from the proof's `level`
+/// (A18) and the bodies of the proof, the statement it proves and each premise statement, as they
+/// are in `contents`; a premise that is a paper stub counts with no body.
 /// @param id      The proof's ID.
 /// @param problem Set, when there is no fingerprint, to why: in plain English, ready to print.
 /// @returns The fingerprint, or nothing if the proof, the statement it proves or a premise isn't
@@ -40,8 +40,8 @@ struct ProofChecking {
 /// @returns The fingerprint (or why there is none), the history and its standing. No side effects.
 ProofChecking proofChecking(const ProjectContents& contents, const QString& id);
 
-/// The proofs a change would outdate (Specs/m1-core.md, "Statements": editing text that is in a
-/// checked proof's fingerprint needs Dakota's click).
+/// The proofs a change would outdate (Specs/m1-core.md, "Statements": changing what is in a
+/// checked proof's fingerprint, a body or, since A18, a proof's level, needs Dakota's click).
 /// Rule: a proof is outdated when it is checked in `before` and its fingerprint in `after`
 /// differs (or can't be computed). Only checked proofs count, as the spec says; a proof with an
 /// agent's pass that Dakota hasn't confirmed yet edits freely.

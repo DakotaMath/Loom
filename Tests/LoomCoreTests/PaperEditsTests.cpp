@@ -163,6 +163,7 @@ TEST_CASE("A stub premise is in the fingerprint with no text", "[papers][content
     const loom::ProjectContents contents = loom::loadContents(project.root).contents;
 
     loom::FingerprintInput input;
+    input.level = "complete";
     input.statementTag = "9D3F";
     input.statementBody = "Body of 9D3F.\n";
     input.premises.push_back({"7RT2", std::nullopt});

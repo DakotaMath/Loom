@@ -23,7 +23,7 @@ The design is approved; these are the places this spec makes it more precise in 
 | --- | --- | --- | --- |
 | D1 | A check's `date` is a date (`2026-11-04`) | It is a date and time with offset (`2026-11-04T15:32:10-06:00`) | "Newer" must be exact: Dakota's pass counts only if it is newer than the agent's, and two checks on the same day are common |
 | D2 | The fingerprint is a short hash (example: 6 characters) | 12 hex characters of SHA-256 | 6 characters is 1 in 16 million per edit; 12 costs nothing and removes the doubt |
-| D3 | The fingerprint covers the proof, "its premises" and the statement it proves | It covers the proof's body, the proved statement's body and **each premise's statement body** | If a premise is weakened after the check, the old check shouldn't still count |
+| D3 | The fingerprint covers the proof, "its premises" and the statement it proves | It covers the proof's body, the proved statement's body and **each premise's statement body**, and the proof's `level` (A18) | If a premise is weakened after the check, the old check shouldn't still count |
 | D4 | `refuted_by` is "set and accepted" | `refuted_by` plus `refuted_on` (the date of Dakota's click); both or neither | The file needs to record the acceptance, or "accepted" can't be computed |
 | D5 | Proofs prove statements | Only lemmas, propositions, theorems, corollaries and conjectures have proofs or appear as premises; paper stubs have no proof files in M1 | The other kinds have no status, so a proof of one, or a premise on one, means nothing |
 | D6 | Top-level folders listed | Folders are created when their first file is written; `new-project` creates none of the empty ones | Git doesn't keep empty folders, so a clone would differ from the original |
@@ -248,7 +248,7 @@ By Fact \ref{7RT2} with $k=0$, ...
 | `id` | yes | `<statement-id>.<letters>`, equal to the file name without `.tex` |
 | `proves` | yes | The statement's tag, equal to the folder name. Must be a provable kind and not a stub |
 | `premises` | yes (may be `[]`) | Array of tags of provable statements or stubs; no repeats; not the proved statement itself |
-| `level` | yes | `sketch`, `heuristic`, `complete` or `failed`. Setting `failed` (in `new-proof` or `edit-proof`) is Dakota's click (A16); without his confirmation it is refused, `dakota-only`: *"Only Dakota can mark a proof failed, and only at a terminal."* Changing a failed proof back to another level is not a click |
+| `level` | yes | `sketch`, `heuristic`, `complete` or `failed`. Setting `failed` (in `new-proof` or `edit-proof`) is Dakota's click (A16); without his confirmation it is refused, `dakota-only`: *"Only Dakota can mark a proof failed, and only at a terminal."* Changing a failed proof back to another level is not a click. The level is in the proof's fingerprint (A18), so changing the level of a checked proof outdates its checks and is refused unless Dakota confirms it, as a change to its body or premises is (Statements); setting `failed` on a checked proof needs both of his confirmations |
 | `created` | yes | Date |
 | `verified` | no | Date the premises and level were last checked against the body |
 
@@ -357,15 +357,18 @@ as a separate lemma or start the induction at k = 1 and treat k = 0 by hand.
 1. **Normalise each text** (a body): CRLF becomes LF; spaces and tabs at the end of every line are removed; newlines at the very end are removed. Nothing else changes. So an editor trimming whitespace doesn't outdate a check, and any other edit does.
 2. **Build one byte string** from sections, each written as a label line, the length of the text in bytes as a decimal line, the text, and `\n`:
    ```
-   loom-fingerprint-v1\n
+   loom-fingerprint-v2\n
+   level\n<length>\n<level>\n
    statement <tag>\n<length>\n<normalised body of the proved statement>\n
    premise <tag>\n<length>\n<normalised body of the premise>\n      (one per premise, by tag in byte order)
    proof\n<length>\n<normalised body of the proof>\n
    ```
-   A premise that is a paper stub is written `premise <tag>\n0\n\n`: its content is the paper, which doesn't change under us, and its `gist` is our wording, free to improve.
+   A premise that is a paper stub is written `premise <tag>\n0\n\n`: its content is the paper, which doesn't change under us, and its `gist` is our wording, free to improve. `<level>` is the proof's `level` as its front matter gives it (`sketch`, `heuristic`, `complete` or `failed`), not normalised (A18).
 3. **Hash** the bytes with SHA-256 and keep the first 12 lowercase hex characters.
 
-What isn't in it: titles, kinds, tags, `stated_using`, `level`, dates, the order of `premises`, the verbose version, and the bodies of `stated_using` statements (definitions change rarely, and the cascade of re-checks would be large). Changing which premises a proof has changes it (a section appears or goes).
+What isn't in it: titles, kinds, tags, `stated_using`, dates, the order of `premises`, the verbose version, and the bodies of `stated_using` statements (definitions change rarely, and the cascade of re-checks would be large). Changing which premises a proof has changes it (a section appears or goes).
+
+The proof's `level` is in it (A18): a level is a claim about the proof, so checks of the proof at its old level don't carry over to the new one, and a checked sketch raised to `complete` isn't checked until it is checked again.
 
 **Adding a check** (`loom add-check`) computes nothing on the caller's word: Loom computes the current fingerprint itself. An agent passes the fingerprint of the version it read (`--fingerprint`, from `loom fingerprint` before reading); if the proof has changed since, the check is refused: *"4KX7.a changed after you read it (you read 3c8e1f0a92d4, it is now 77b2e9c0d415). Read it again before checking it."* The date is the current local time.
 
@@ -750,7 +753,7 @@ Other types, cited version `published`:
 | `new-statement` | `--kind <kind> --title <title> (--body <text> \| --body-file <path>) [--tag <tag>]… [--stated-using <id>]… [--origin <origin>]` | Creates `Statements/<new tag>.tex`, `created` today | The new tag; `{"id", "path"}` |
 | `edit-statement` | `<id> [--title …] [--kind …] [--body-file <path>] [--add-tag …] [--remove-tag …] [--add-stated-using …] [--remove-stated-using …] [--superseded-by <id>] [--verified] [--outdate-checks]` | Changes the statement. A change to the body that would outdate checks (see Statements) is refused unless `--outdate-checks` *(Dakota)*. `--verified` sets `verified` to today | The changed fields; with `--json`, also `outdated_checks` |
 | `new-proof` | `<statement-id> --level <level> (--body <text> \| --body-file <path>) [--premise <id>]…` | Creates the next proof of the statement. `--level failed` is *(Dakota)* (A16) | The new proof ID; `{"id", "path"}` |
-| `edit-proof` | `<proof-id> [--level …] [--body-file <path>] [--add-premise …] [--remove-premise …] [--verified] [--outdate-checks]` | Changes the proof. Changing the body or premises of a checked proof is refused unless `--outdate-checks` *(Dakota)*. `--level failed` is *(Dakota)* (A16) | The changed fields |
+| `edit-proof` | `<proof-id> [--level …] [--body-file <path>] [--add-premise …] [--remove-premise …] [--verified] [--outdate-checks]` | Changes the proof. Changing the body, premises or level of a checked proof is refused unless `--outdate-checks` *(Dakota)* (A18: the level is in the fingerprint). `--level failed` is *(Dakota)* (A16), a click of its own: on a checked proof both are asked for | The changed fields |
 | `fingerprint` | `<proof-id>` | | The current fingerprint; `{"proof", "fingerprint"}` |
 | `add-check` | `<proof-id> --by <dakota\|agent:model> --verdict <pass\|needs-changes\|fail> [--changes <text> \| --changes-file <path>] [--fingerprint <fp>] [--record <path>] [--note <path>]` | Appends a check with the current fingerprint and time. Agents must give `--fingerprint` (refused if the proof has changed) and `--record`. `--by dakota` is *(Dakota)*; with `needs-changes` and no `--changes`, it asks for the message at the terminal | The entry and whether the proof is now checked |
 | `refute` | `<id> --by <proof-id>` *(Dakota)* | Sets `refuted_by` and `refuted_on` (today). Refuses a proof of `<id>` itself (A12, code `refuted-self`): *{proof} is a proof of {id} itself, so it can't refute it. A statement is refuted by a proof of another statement, such as its negation.* | The new status |
