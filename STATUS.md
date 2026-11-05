@@ -22,15 +22,16 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 - The M1 spec (2026-11-03): [`Specs/m1-core.md`](Specs/m1-core.md), approved by Dakota (PR #11).
 
 ## In progress
-- #32 the M2 spec, [`Specs/m2-statements-review.md`](Specs/m2-statements-review.md): PR #42, approved by Dakota (Q1–Q6 as recommended), waiting to be merged ([log](Wiki/logs/2026-11/2026-11-05-m2-spec.md)).
+- #32 the M2 spec, [`Specs/m2-statements-review.md`](Specs/m2-statements-review.md): PR #42, approved by Dakota (Q1–Q6 as recommended; Q6 then changed: rendered Markdown, #41, moved to M4), waiting to be merged ([log](Wiki/logs/2026-11/2026-11-05-m2-spec.md)).
+- Dropping M3, the importer (Dakota, 2026-11-05): PR #43 changes the design; Dakota switches to Loom at the end of M2, and M4–M12 keep their numbers ([log](Wiki/logs/2026-11/2026-11-05-drop-importer.md)).
 
 ## Next up
-Milestones M0–M12 are on GitHub. M1's issues (#2–#9) are all closed.
-- M2's build issues #33–#41 are filed and can start once PR #42 is merged; #33 (`loom build`) and #34 (the app shell) start first.
+Milestones M0–M12 are on GitHub; M3 is dropped and its milestone closed. M1's issues (#2–#9) are all closed.
+- M2's build issues #33–#40 are filed and can start once PR #42 is merged (#41 is now M4's, waiting for the M4 spec); #33 (`loom build`) and #34 (the app shell) start first.
 - M1 follow-ups, for M2 or later: see "Follow-ups" in `Reviews/M1/FINAL.md` on `m1/review` (`\cite` of an old key is settled by the M2 spec, E3).
 
 ## Waiting on Dakota
-- Merge PR #42 (the M2 spec, #32).
+- Merge PR #42 (the M2 spec, #32) and PR #43 (dropping M3).
 - Close the M1 milestone on GitHub.
 - The Windows checks listed in PRs #21–#30.
 
