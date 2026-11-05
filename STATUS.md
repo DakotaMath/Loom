@@ -8,7 +8,7 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 # Status
 
 **Updated:** 2026-11-05 · main at 8506746
-**Current milestone:** M1, the core, is **done**: built, reviewed, fixed and re-reviewed; all 279 `ctest` tests pass on Windows. M2 (statements and review) has its spec in review
+**Current milestone:** M1, the core, is **done**: built, reviewed, fixed and re-reviewed; all 279 `ctest` tests pass on Windows. M2 (statements and review) has an approved spec, waiting to be merged
 
 ## Done recently
 - The M1 review, fixes and final pass (2026-11-04 to 05): review on branch `m1/review` (`Reviews/M1/`, verdict in `FINAL.md`, no blockers); fixes in PRs #21–#27, #29, #30; spec amendments A1–A23 in PRs #20, #28, #30. A proof's `level` is now in its fingerprint (A18, `loom-fingerprint-v2`) ([log](Wiki/logs/2026-11/2026-11-05-m1-review.md)).
@@ -22,15 +22,15 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 - The M1 spec (2026-11-03): [`Specs/m1-core.md`](Specs/m1-core.md), approved by Dakota (PR #11).
 
 ## In progress
-- #32 the M2 spec, [`Specs/m2-statements-review.md`](Specs/m2-statements-review.md): PR #42, waiting on Dakota's answers to Q1–Q6 ([log](Wiki/logs/2026-11/2026-11-05-m2-spec.md)).
+- #32 the M2 spec, [`Specs/m2-statements-review.md`](Specs/m2-statements-review.md): PR #42, approved by Dakota (Q1–Q6 as recommended), waiting to be merged ([log](Wiki/logs/2026-11/2026-11-05-m2-spec.md)).
 
 ## Next up
 Milestones M0–M12 are on GitHub. M1's issues (#2–#9) are all closed.
-- M2's build issues #33–#41 are filed and wait on the spec's approval; #33 (`loom build`) and #34 (the app shell) start first.
+- M2's build issues #33–#41 are filed and can start once PR #42 is merged; #33 (`loom build`) and #34 (the app shell) start first.
 - M1 follow-ups, for M2 or later: see "Follow-ups" in `Reviews/M1/FINAL.md` on `m1/review` (`\cite` of an old key is settled by the M2 spec, E3).
 
 ## Waiting on Dakota
-- PR #42 (the M2 spec, #32): answer Q1–Q6 and approve.
+- Merge PR #42 (the M2 spec, #32).
 - Close the M1 milestone on GitHub.
 - The Windows checks listed in PRs #21–#30.
 

@@ -9,7 +9,7 @@ tags: [m2, app, ui, latex, build, statements, review, git, markdown]
 > **Summary:** Everything `LoomApp`, `LoomCore` and `loom` do in M2, the milestone that replaces TexViewer's daily use: the app shell (start screen, the side bar of tabs, Settings, *Check my setup*), how the app calls `LoomCore` and turns Dakota's clicks into its confirmations, building LaTeX (the wrapper document, three modes, verbose, `\paperref`, errors mapped to source lines, SyncTeX, `loom build`, builds of `HEAD`), the Statements tab (list, editor, IDs, status and checks), never losing text, the Review tab with rendered Markdown, and the git panel, with a TexViewer parity table, the dependencies, a demo project and how the UI is tested.
 
 **Last verified:** 2026-11-05 · commit 8506746
-**Status:** Draft, awaiting Dakota's answers to the open questions
+**Status:** Approved by Dakota on 2026-11-05
 **Milestone:** M2
 
 ## Scope
@@ -32,7 +32,7 @@ Each build issue reads the sections named here; they don't need the rest.
 | #41 rendered Markdown in Review | *Rendered Markdown*, the WebEngine, KaTeX and md4c rows of *Dependencies* |
 
 ## Departures from the design and M1
-Places where this spec makes `Specs/loom.md` or `Specs/m1-core.md` more precise in a way they didn't say, or changes them. Dakota approves them with the spec.
+Places where this spec makes `Specs/loom.md` or `Specs/m1-core.md` more precise in a way they didn't say, or changes them. Dakota approved all of them on 2026-11-05.
 
 | # | Design or M1 says | This spec says | Why |
 | --- | --- | --- | --- |
@@ -555,7 +555,7 @@ A panel on the right, opened from every tab (the branch in the status bar, or Ct
 | Review: Markdown rendered with changes marked | M2 (*Rendered Markdown*, #41; Q6) |
 | Review: raw diff; *Open in editor* | M2 |
 | Git panel: new branch, switch branch, tick files and commit, hook refusals shown, *Run checks*, push listing the commits first, fetch, pull fast-forward only | M2 (*The git panel*) |
-| Git panel: discarding changes (if TexViewer offered it) | Dropped from M2 (E5, Q5) |
+| Git panel: discarding changes (Dakota never used it) | Dropped (E5, Q5) |
 | Pull requests, GitHub sign-in | Later (GitHub milestone) |
 | Reading sessions | M6 |
 
@@ -684,12 +684,13 @@ For every statement or stub whose status differs: `4KX7 · title: unchecked → 
 | On Windows | manual | Each build issue's Windows check |
 
 ## Open questions
-- **Q1. A save that would add a validation error.** Recommended: refuse it, keeping the text in the editor and its recovery file, and list the errors (E6); one rule for every writer, and the commit guard would refuse the file anyway. The alternative is to save it and let validation and the commit guard complain, as TexViewer did.
-- **Q2. Numbers in statement builds.** Recommended: the tag is the number, "Theorem 4KX7 (title)", `\ref` prints the tag (E1). The alternative is ordinary numbers (Theorem 1, 2, …) per build, which change with the mode.
-- **Q3. TeX engine and bibliography style.** Recommended for M2: pdfLaTeX and `amsplain`, fixed, with no change to `loom.toml`. The alternative is `[tex] engine` (pdflatex, xelatex, lualatex) and `bibstyle` in `loom.toml` now, which raises its `format` to 2 with a migration. Does any of Dakota's projects need XeLaTeX or LuaLaTeX?
-- **Q4. Tabs of later milestones.** Recommended: hidden until their milestone (E4). The alternative is to show them greyed, with "comes in M5" on hover.
-- **Q5. Discarding uncommitted changes.** Recommended: not in M2 (E5). Did TexViewer's git panel offer discard, and does Dakota use it? If so: per file, with a dialog showing what is lost, keeping a copy under `.loom/discarded/`.
-- **Q6. Rendered Markdown in M2 (#41).** Recommended: keep it, as the last M2 issue: the importer (M3) brings notes and wiki pages, so Markdown changes are daily from M3 on. It adds Qt WebEngine (the app's largest dependency) and md4c. The alternative is to show Markdown as a raw diff in M2 and move #41 to M6.
+- None. Dakota answered them on 2026-11-05, each as recommended, and approved the departures and decisions; the spec above follows his answers:
+  - **Q1, a save that would add a validation error:** refused; the text stays in the editor and its recovery file, and the errors are listed (E6).
+  - **Q2, numbers in statement builds:** the tag is the number, "Theorem 4KX7 (title)", and `\ref` prints the tag (E1).
+  - **Q3, TeX engine and bibliography style:** pdfLaTeX and `amsplain`, fixed for M2, with no change to `loom.toml`. A `[tex]` table can come later if a project needs another engine.
+  - **Q4, tabs of later milestones:** hidden until their milestone (E4).
+  - **Q5, discarding uncommitted changes:** left out; Dakota has never used it (E5).
+  - **Q6, rendered Markdown (#41):** stays in M2, as its last issue.
 
 ## See also
 - Up: [Specs](README.md)
