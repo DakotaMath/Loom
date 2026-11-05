@@ -1,5 +1,6 @@
 #include "LoomApp/ProjectSnapshot.h"
 
+#include "LoomCore/ProjectFiles.h"
 #include "LoomCore/Validation.h"
 
 #include <QDir>
@@ -118,6 +119,21 @@ ProjectSnapshot readSnapshot(const QString& root, const GitTool& git)
     if (ContentsLoading loading = loadContents(snapshot.root); loading.ok) {
         snapshot.contents = std::move(loading.contents);
         snapshot.graph = buildGraph(snapshot.contents);
+        QStringList paths;
+        for (const StatementFile& file : snapshot.contents.statements)
+            paths << file.path;
+        for (const ProofFile& file : snapshot.contents.proofs)
+            paths << file.path;
+        for (const VerboseFile& file : snapshot.contents.verbose)
+            paths << file.path;
+        for (const StubFile& file : snapshot.contents.stubs)
+            paths << file.path;
+        for (const QString& path : paths) {
+            if (const std::optional<QByteArray> bytes = readProjectFile(snapshot.root, path)) {
+                snapshot.files.insert(path, *bytes);
+                snapshot.modified.insert(path, QFileInfo(snapshot.root + u'/' + path).lastModified());
+            }
+        }
     } else if (snapshot.unreadable.isEmpty()) {
         snapshot.unreadable = loading.message;
     }

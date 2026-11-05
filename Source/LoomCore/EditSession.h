@@ -70,4 +70,30 @@ std::optional<QStringList> resolveAll(const ProjectContents& contents, const QSt
 /// A refusal to rewrite a file that rewriting would damage, listing its problems. No side effects.
 ChangeResult notEditable(const QString& path, const std::vector<Problem>& problems);
 
+/// "A, B and C". No side effects.
+QString listed(const QStringList& items);
+
+/// The refusal of a change that needs one of Dakota's clicks he hasn't given.
+/// @param what What only Dakota can do, e.g. `mark a proof failed`. No side effects.
+ChangeResult dakotaOnly(const QString& what);
+
+/// Writes `bytes` to `path` if, with the file's contents replaced by `changed`, the project has no
+/// error it didn't have before, Dakota has given the click the change needs, if any, and the
+/// change outdates no checked proof's checks but those he confirmed.
+/// Rule (Specs/m1-core.md, "Statements"): changing what is in a checked proof's fingerprint (a
+/// body, a proof's premises, or, since A18, a proof's level) needs Dakota's confirmation, and the
+/// refusal names the proofs. His confirmation covers the proofs he
+/// was shown: if the change would now outdate a different set (the project changed between the
+/// question and the confirmed run), it is refused, naming both, so he can be asked again.
+/// The refusals come in that order, so Dakota is asked only about a change the rules allow.
+/// @param what          For the refusal: `create the statement`, …
+/// @param outdateChecks The proofs whose checks Dakota confirmed outdating; none: not confirmed.
+/// @param needsDakota   What only Dakota can do that this change does unconfirmed (e.g. `mark a
+///                      proof failed`); empty when it needs no click or he gave it. Its refusal
+///                      carries the checks the change would outdate as well.
+/// @returns The result. Side effects: writes the file when nothing refuses it.
+ChangeResult commit(Session& session, const QString& path, const QByteArray& bytes, const ProjectContents& changed,
+                    const QString& what, ChangeResult result, const std::optional<QStringList>& outdateChecks = std::nullopt,
+                    const QString& needsDakota = {});
+
 } // namespace loom::edits

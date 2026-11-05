@@ -9,7 +9,9 @@
 
 #include <QMainWindow>
 
+#include <functional>
 #include <map>
+#include <vector>
 
 class QAction;
 class QLabel;
@@ -27,6 +29,7 @@ class ProjectSession;
 class SettingsPage;
 class SideBar;
 class StartScreen;
+class StatementsPage;
 
 /// A Loom window.
 class MainWindow : public QMainWindow
@@ -80,6 +83,7 @@ public:
     SideBar* sideBar() const { return m_sideBar; }
     StartScreen* startScreen() const { return m_startScreen; }
     SettingsPage* settingsPage() const { return m_settingsPage; }
+    StatementsPage* statementsPage() const { return m_statementsPage; }
     BottomPanel* bottomPanel() const { return m_bottomPanel; }
     QWidget* page(Tab tab) const;
     QWidget* errorsBar() const { return m_errorsBar; }
@@ -116,6 +120,13 @@ private:
     void updateFromSnapshot();
     /// Shows the spinner while any lane is busy.
     void updateBusy();
+    /// Asks what to do with unsaved edits before the project closes (Specs/m2-statements-review.md,
+    /// "Never losing text": **Save all**, **Keep them for next time**, or **Cancel**), then calls
+    /// `proceed` unless Dakota cancelled or a save didn't happen. Without unsaved edits it proceeds
+    /// at once.
+    void askAboutUnsavedEdits(const QString& why, std::function<void()> proceed);
+    /// Enables the Statement menu's actions on the Statements tab only.
+    void updateStatementActions();
 
     AppSettings* m_settings;
     Lane* m_projectLane;
@@ -140,7 +151,11 @@ private:
     QProgressBar* m_busy;
 
     std::map<Tab, QAction*> m_tabActions;
+    std::vector<QAction*> m_statementActions;
     Tab m_current = Tab::Statements;
+    StatementsPage* m_statementsPage;
+    /// Dakota answered the question about unsaved edits: the next close or open goes ahead.
+    bool m_unsavedAnswered = false;
 };
 
 } // namespace loom
