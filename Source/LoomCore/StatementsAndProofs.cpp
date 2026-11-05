@@ -94,7 +94,7 @@ struct Writer {
     void date(const char* key, const QDate& value)
     {
         if (value.isValid())
-            text +=QStringLiteral("%1 = %2\n").arg(QLatin1StringView(key), tomlDate(value));
+            text += QStringLiteral("%1 = %2\n").arg(QLatin1StringView(key), tomlDate(value));
     }
 };
 

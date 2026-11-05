@@ -51,8 +51,15 @@ struct GitRun {
 GitRun runGit(const GitTool& git, const QStringList& arguments, const QString& workingDir,
               std::optional<int> timeoutMs = std::nullopt, const QByteArray& input = {});
 
+/// A git command as a person would type it, to name it in a message: `git` and the arguments,
+/// separated by spaces; an argument that is empty or holds whitespace or a `"` is put in double
+/// quotes, with `\"` for a `"` (`git commit --message "Create project Demo"`).
+/// @returns The command. No side effects.
+QString gitCommand(const QStringList& arguments);
+
 /// What to tell the user when git didn't run or didn't finish (`GitRun::started` is false).
-/// For a git that timed out: *"`git {first argument}` didn't finish in time, so Loom stopped it.
+/// For a git that timed out, naming the whole command (gitCommand()), as Specs/m1-core.md, "The
+/// `loom` command", A16, words it: *"`{git command}` didn't finish in time, so Loom stopped it.
 /// Git may be waiting for something, such as another git's lock or a slow network drive; try
 /// again."* Otherwise the spec's message for a missing git (Specs/m1-core.md, "The project
 /// folder", step 2): *"Loom needs git, and `git` didn't run. Install Git for Windows and try again."*

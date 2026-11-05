@@ -28,8 +28,13 @@ int lineOf(const toml::source_region& region);
 /// What a TOML value is, for the `wrong-type` message ("…, not {what it is}"), e.g. `a whole number`.
 QString describeToml(const toml::node& node);
 
+/// Whether a value says nothing: empty, or only whitespace. For required and naming fields such a
+/// value is an empty one (Specs/m1-core.md, "Front matter", A2 and A21). No side effects.
+bool isBlank(QStringView text);
+
 /// Whether a string field may be absent or empty. An empty value counts as a missing one
 /// (Specs/m1-core.md, "Front matter", A2: "Empty values are missing values"), except in free text.
+/// A value of only whitespace is empty too (A21).
 enum class Need {
     /// Free text: may be absent, and may be empty (a version's `differences`, an author's `first`).
     Optional,
@@ -75,8 +80,9 @@ struct FieldChecker {
     /// @param required Whether every `thing` needs the field.
     void emptyField(const QString& field, int line, const QString& thing, bool required);
 
-    /// Reports `node` if it is an empty string where `need` doesn't allow one (emptyField()).
-    /// The one rule for empty values that every reader of a string field goes through.
+    /// Reports `node` if it is an empty string, or one of only whitespace (isBlank()), where
+    /// `need` doesn't allow one (emptyField()). The one rule for empty values that every reader
+    /// of a string field goes through.
     /// @returns True if it was reported, so the caller treats the field as having no value.
     bool reportEmpty(const QString& field, const toml::node& node, const QString& thing, Need need);
 
@@ -91,6 +97,12 @@ struct FieldChecker {
     /// @param node  The value; it must be a date (`node.as_date()` not null).
     /// @returns The date, or an invalid QDate after reporting it.
     QDate date(const QString& field, const toml::node& node);
+
+    /// The date part of a TOML date or date-time as a QDate, by the same rule as date(): the
+    /// year 0 is reported as `bad-value` at `line` (a file line), and the caller marks the
+    /// reading lossy. A check's `date` is a date-time, so it comes here directly.
+    /// @returns The date, or an invalid QDate after reporting it.
+    QDate date(const QString& field, const toml::date& value, int line);
 
     /// Reads a string field of `table`, reporting it if it is missing, not a string, or empty
     /// when it mustn't be (reportEmpty()).

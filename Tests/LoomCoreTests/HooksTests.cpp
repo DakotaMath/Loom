@@ -13,6 +13,7 @@
 #include <QTemporaryDir>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 using loomtest::gitOutput;
 using loomtest::readFile;
@@ -262,7 +263,7 @@ TEST_CASE("A git that doesn't finish in time is told apart from a git that isn't
     CHECK_FALSE(absent.timedOut);
     CHECK(loom::gitDidntRunMessage(absent, {"rev-parse", "--show-toplevel"})
           == "Loom needs git, and `git` didn't run. Install Git for Windows and try again.");
-    const QString lateMessage = "`git rev-parse` didn't finish in time, so Loom stopped it. Git may be waiting for something, "
+    const QString lateMessage = "`git rev-parse --show-toplevel` didn't finish in time, so Loom stopped it. Git may be waiting for something, "
                                 "such as another git's lock or a slow network drive; try again.";
     CHECK(loom::gitDidntRunMessage(late, {"rev-parse", "--show-toplevel"}) == lateMessage);
 
@@ -272,6 +273,44 @@ TEST_CASE("A git that doesn't finish in time is told apart from a git that isn't
     CHECK(result.outcome == loom::HooksOutcome::CantWork);
     CHECK(result.code == "git-timeout");
     CHECK(result.message == lateMessage);
+}
+
+TEST_CASE("install-hooks in a linked worktree writes the hook into the main repository's hooks (A10)", "[hooks]")
+{
+    // Git keeps a linked worktree's hooks in the common git directory, so that is "inside".
+    const Repository repo;
+    gitOutput(repo.git, {"add", "--all"}, repo.root);
+    gitOutput(repo.git, {"commit", "-q", "--no-verify", "-m", "Start"}, repo.root);
+    const QString linked = repo.temp.path() + "/Linked";
+    gitOutput(repo.git, {"worktree", "add", "-q", "-b", "other", linked}, repo.root);
+
+    const loom::HooksResult result = loom::installHooks(linked, "/usr/bin/loom", repo.git);
+    INFO(result.message.toStdString());
+    REQUIRE(result.outcome == loom::HooksOutcome::Installed);
+    CHECK(QFileInfo(result.hookPath).canonicalFilePath() == QFileInfo(repo.hook()).canonicalFilePath());
+    CHECK(loom::isLoomHook(readFile(repo.hook())));
+}
+
+TEST_CASE("install-hooks stops a git that doesn't finish at any step, with git-timeout (A16)", "[hooks][git]")
+{
+    // Every git command install-hooks runs, not only the first; the message names the whole command.
+    const auto [slowAt, command] = GENERATE(table<const char*, const char*>({
+        {"rev-parse --git-path", "git rev-parse --git-path hooks/pre-commit"},
+        {"rev-parse --git-common-dir", "git rev-parse --git-common-dir"},
+        {"config --local", "git config --local merge.loom-checks.name \"Loom check history\""},
+    }));
+    INFO(slowAt);
+    const Repository repo;
+    loom::GitTool git = repo.git;
+    git.program = QStringLiteral(LOOM_FAKE_GIT);
+    git.environment.insert("LOOM_FAKE_GIT_MODE", "slow-at");
+    git.environment.insert("LOOM_FAKE_GIT_SLOW", slowAt);
+    git.timeoutMs = 2000;
+    const loom::HooksResult result = loom::installHooks(repo.root, "/usr/bin/loom", git);
+    CHECK(result.outcome == loom::HooksOutcome::CantWork);
+    CHECK(result.code == "git-timeout");
+    CHECK(result.message == "`" + QString::fromUtf8(command) + "` didn't finish in time, so Loom stopped it. Git may be "
+                            "waiting for something, such as another git's lock or a slow network drive; try again.");
 }
 
 TEST_CASE("new-project stops before writing anything when git's global config sets core.hooksPath", "[hooks][new-project]")

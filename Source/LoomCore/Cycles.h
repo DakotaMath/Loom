@@ -1,6 +1,6 @@
 #pragma once
 
-// Finding circles in a graph of IDs: `stated_using` and `superseded_by` here, premises in #7.
+// Finding circles in a graph of IDs: `stated_using`, `superseded_by` and premises.
 
 #include <QMap>
 #include <QString>

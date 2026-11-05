@@ -12,6 +12,7 @@
 #include <QTemporaryDir>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 using loomtest::filesUnder;
 using loomtest::gitOutput;
@@ -79,8 +80,9 @@ const std::vector<std::pair<QString, QByteArray>>& kitFiles()
          "\n"
          "Loom owns the files in this folder. Change them only with `loom` commands, or with plain edits\n"
          "that `loom validate` accepts. Run `loom validate` before every commit; the pre-commit hook runs it too.\n"
-         "Never write a check by `dakota`, never set `refuted_on` or `checked_against_pdf`, and never mark a\n"
-         "field verified: those are Dakota's clicks.\n"},
+         "Never write a check by `dakota`, never set `refuted_on` or `checked_against_pdf`, never mark a\n"
+         "field verified, never mark a proof `failed`, and never outdate checks (`--outdate-checks`): those\n"
+         "are Dakota's clicks.\n"},
         {"TeX/macros.tex", "% Macros for this project, e.g. \\newcommand{\\R}{\\mathbb{R}}\n"},
         {"TeX/preamble.tex",
          "% Packages for this project. Loom adds the theorem environments itself.\n"
@@ -325,4 +327,31 @@ TEST_CASE("new-project says which git step failed, and leaves what it made", "[n
               + QDir::toNativeSeparators(folder) + "` for you to look at.");
     CHECK(QFileInfo(folder + "/loom.toml").isFile());
     CHECK(QFileInfo(folder + "/CLAUDE.md").isFile());
+}
+
+TEST_CASE("new-project stops a git that doesn't finish at any step, with git-timeout (A16)", "[new-project][git]")
+{
+    // Steps 4 and 5, install-hooks' own git commands among them; what was made stays in place.
+    const auto [slowAt, command] = GENERATE(table<const char*, const char*>({
+        {"init", "git init -b main"},
+        {"lfs install", "git lfs install --local"},
+        {"rev-parse --git-common-dir", "git rev-parse --git-common-dir"},
+        {"add", "git add --all"},
+        {"commit", "git commit --quiet --message \"Create project Demo\""},
+    }));
+    INFO(slowAt);
+    const Workspace workspace;
+    const QString folder = workspace.dir + "/Demo";
+    loom::NewProjectRequest request = workspace.request(folder);
+    request.git = workspace.fakeGit("slow-at");
+    request.git.environment.insert("LOOM_FAKE_GIT_SLOW", slowAt);
+    request.git.timeoutMs = 2000;
+
+    const loom::NewProjectResult result = loom::createProject(request);
+    CHECK(result.outcome == loom::NewProjectOutcome::CantWork);
+    CHECK(result.code == "git-timeout");
+    CHECK(result.message == "`" + QString::fromUtf8(command) + "` didn't finish in time, so Loom stopped it. Git may be "
+                            "waiting for something, such as another git's lock or a slow network drive; try again. Loom "
+                            "left what it made in `" + QDir::toNativeSeparators(folder) + "` for you to look at.");
+    CHECK(QFileInfo(folder + "/loom.toml").isFile());
 }

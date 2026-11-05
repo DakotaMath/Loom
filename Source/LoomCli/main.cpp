@@ -35,9 +35,8 @@ QString unknownSubcommand(const QString& subcommand)
     return QStringLiteral("`%1` isn't a loom subcommand. `loom help` lists them.").arg(subcommand);
 }
 
-/// Runs `loom help [<subcommand>]`: the usage text, or one subcommand's, on stdout. Asking for
-/// help isn't wrong usage, so it exits 0 (the spec gives no exit code for `help`; flagged in the
-/// PR). With `--json` it prints `{"usage": "…"}`, a shape the spec doesn't give either.
+/// Runs `loom help [<subcommand>]`: the usage text, or one subcommand's, on stdout, exit 0
+/// (Specs/m1-core.md, "The `loom` command", A11). With `--json` it prints `{"usage": "…"}`.
 /// @param args The arguments after `help`, with the common options taken out.
 /// @returns 0, or 2 for more than one argument or one that isn't a subcommand.
 /// Side effects: prints.
@@ -128,7 +127,9 @@ int main(int argc, char* argv[])
         return usageError(error, context.json);
     const bool json = context.json;
 
-    if (args.size() == 1 && args[0] == u"--version") {
+    if (!args.isEmpty() && args[0] == u"--version") {
+        if (args.size() > 1)
+            return usageError(QStringLiteral("`loom --version` takes no arguments."), json);
         const QString version = QString::fromLatin1(loom::versionString());
         write(stdout, json ? QStringLiteral("{\"version\": \"%1\"}\n").arg(version) : QStringLiteral("loom %1\n").arg(version));
         return exitDone;

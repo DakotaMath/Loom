@@ -124,8 +124,14 @@ HooksResult installHooks(const QString& root, const QString& loomProgram, const 
 
     // `--git-path` follows core.hooksPath; `--git-common-dir` is the repository's own git
     // directory, shared by its linked worktrees, where git keeps their hooks.
-    const GitRun where = runGit(git, {QStringLiteral("rev-parse"), QStringLiteral("--git-path"), QStringLiteral("hooks/pre-commit")}, root);
-    const GitRun common = runGit(git, {QStringLiteral("rev-parse"), QStringLiteral("--git-common-dir")}, root);
+    const QStringList gitPath = {QStringLiteral("rev-parse"), QStringLiteral("--git-path"), QStringLiteral("hooks/pre-commit")};
+    const GitRun where = runGit(git, gitPath, root);
+    if (where.timedOut)
+        return failure(HooksOutcome::CantWork, "git-timeout", gitDidntRunMessage(where, gitPath));
+    const QStringList commonDir = {QStringLiteral("rev-parse"), QStringLiteral("--git-common-dir")};
+    const GitRun common = runGit(git, commonDir, root);
+    if (common.timedOut)
+        return failure(HooksOutcome::CantWork, "git-timeout", gitDidntRunMessage(common, commonDir));
     if (!where.ok() || where.output.trimmed().isEmpty() || !common.ok() || common.output.trimmed().isEmpty())
         return failure(HooksOutcome::CantWork, "git-failed",
             QStringLiteral("Loom couldn't ask git where this repository's hooks are: %1.").arg(whyGitFailed(where.ok() ? common : where)));
@@ -178,7 +184,11 @@ HooksResult installHooks(const QString& root, const QString& loomProgram, const 
         {QStringLiteral("merge.loom-checks.driver"), QStringLiteral("loom merge-checks %O %A %B")},
     };
     for (const QStringList& setting : settings) {
-        const GitRun run = runGit(git, QStringList{QStringLiteral("config"), QStringLiteral("--local")} + setting, root);
+        const QStringList set = QStringList{QStringLiteral("config"), QStringLiteral("--local")} + setting;
+        const GitRun run = runGit(git, set, root);
+        // A16: a git that hangs is `git-timeout`, wherever it hangs.
+        if (run.timedOut)
+            return failure(HooksOutcome::CantWork, "git-timeout", gitDidntRunMessage(run, set));
         if (!run.ok())
             return failure(HooksOutcome::CantWork, "git-failed",
                 QStringLiteral("Loom installed its hook, but `git config --local %1` failed: %2.").arg(setting[0], whyGitFailed(run)));

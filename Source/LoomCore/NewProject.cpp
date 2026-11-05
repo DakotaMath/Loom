@@ -167,6 +167,8 @@ NewProjectResult createProject(const NewProjectRequest& request)
     for (const QStringList& step : steps) {
         if (step.isEmpty()) {
             const HooksResult hooks = installHooks(path, request.loomProgram, git);
+            if (hooks.code == u"git-timeout")
+                return failure(NewProjectOutcome::CantWork, "git-timeout", hooks.message + leftInPlace, path);
             if (hooks.outcome != HooksOutcome::Installed)
                 return failure(NewProjectOutcome::CantWork, "hooks-failed",
                     QStringLiteral("Loom wrote the project files, but `loom install-hooks` failed: %1").arg(hooks.message) + leftInPlace, path);
@@ -175,13 +177,14 @@ NewProjectResult createProject(const NewProjectRequest& request)
         const GitRun run = runGit(git, step, path);
         if (run.ok())
             continue;
+        // A16: a git that hangs is `git-timeout`, at every step, naming the whole command.
+        if (run.timedOut)
+            return failure(NewProjectOutcome::CantWork, "git-timeout", gitDidntRunMessage(run, step) + leftInPlace, path);
         QString why = run.errors.trimmed();
         while (why.endsWith(u'.'))
             why.chop(1);
         if (why.isEmpty())
-            why = run.started    ? QStringLiteral("it exited with code %1").arg(run.exitCode)
-                : run.timedOut ? QStringLiteral("it didn't finish in time")
-                               : QStringLiteral("it didn't run");
+            why = run.started ? QStringLiteral("it exited with code %1").arg(run.exitCode) : QStringLiteral("it didn't run");
         const QString command = step.first() == u"commit" ? QStringLiteral("git commit") : QStringLiteral("git ") + step.join(u' ');
         return failure(NewProjectOutcome::CantWork, "git-failed",
             QStringLiteral("Loom wrote the project files, but `%1` failed: %2.").arg(command, why) + leftInPlace, path);

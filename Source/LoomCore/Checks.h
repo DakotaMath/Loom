@@ -108,7 +108,8 @@ struct CheckStanding {
 /// agent check and the counting Dakota check are the newest matching check of each (rule 5),
 /// where newer means a later date, or for equal dates, later in the file (rule 2); the proof is
 /// checked when both are `pass` and Dakota's is newer (rule 6); it doesn't support its statement
-/// when either is `fail` (rule 7).
+/// when either is `fail` (rule 7). A check with no valid date (missing, unreadable, or the year
+/// 0) never counts, since it has no place in the date order (A22).
 /// @param checks             The history, in file order.
 /// @param currentFingerprint The proof's fingerprint now; empty if it can't be computed, and
 ///                           then nothing matches.
