@@ -7,10 +7,11 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 -->
 # Status
 
-**Updated:** 2026-11-05 · main at 8506746
-**Current milestone:** M1, the core, is **done**: built, reviewed, fixed and re-reviewed; all 279 `ctest` tests pass on Windows. M2 (statements and review) has an approved spec, waiting to be merged
+**Updated:** 2026-11-05 · main at ad75623
+**Current milestone:** M1, the core, is **done**: built, reviewed, fixed and re-reviewed; all 279 `ctest` tests pass on Windows. **M2** (statements and review) is being built from its approved spec
 
 ## Done recently
+- The M2 spec (#32, PR #42) and dropping M3 (PR #43), merged by Dakota (2026-11-05) ([log](Wiki/logs/2026-11/2026-11-05-m2-spec.md)).
 - The M1 review, fixes and final pass (2026-11-04 to 05): review on branch `m1/review` (`Reviews/M1/`, verdict in `FINAL.md`, no blockers); fixes in PRs #21–#27, #29, #30; spec amendments A1–A23 in PRs #20, #28, #30. A proof's `level` is now in its fingerprint (A18, `loom-fingerprint-v2`) ([log](Wiki/logs/2026-11/2026-11-05-m1-review.md)).
 - #9 `loom validate`, `loom install-hooks` and the commit guard (2026-11-04): PR #19 merged ([log](Wiki/logs/2026-11/2026-11-04-validate.md)).
 - #7 the graph and computed status, `loom status`/`graph`/`refute` (2026-11-04): PR #18 merged ([log](Wiki/logs/2026-11/2026-11-04-status.md)).
@@ -22,16 +23,15 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 - The M1 spec (2026-11-03): [`Specs/m1-core.md`](Specs/m1-core.md), approved by Dakota (PR #11).
 
 ## In progress
-- #32 the M2 spec, [`Specs/m2-statements-review.md`](Specs/m2-statements-review.md): PR #42, approved by Dakota (Q1–Q6 as recommended; Q6 then changed: rendered Markdown, #41, moved to M4), waiting to be merged ([log](Wiki/logs/2026-11/2026-11-05-m2-spec.md)).
-- Dropping M3, the importer (Dakota, 2026-11-05): PR #43 changes the design; Dakota switches to Loom at the end of M2, and M4–M12 keep their numbers ([log](Wiki/logs/2026-11/2026-11-05-drop-importer.md)).
+- #33 building LaTeX in `LoomCore` and `loom build`, with the demo project (`Tests/Projects/Demo`): PR #44, waiting for review; 310/310 tests pass on Windows with TeX Live ([log](Wiki/logs/2026-11/2026-11-05-build-latex.md)).
 
 ## Next up
 Milestones M0–M12 are on GitHub; M3 is dropped and its milestone closed. M1's issues (#2–#9) are all closed.
-- M2's build issues #33–#40 are filed and can start once PR #42 is merged (#41 is now M4's, waiting for the M4 spec); #33 (`loom build`) and #34 (the app shell) start first.
+- M2's build issues #34–#40 (#41 is now M4's): #34 (the app shell) next; the others use the demo project and `Tests/Support/DemoProject` from PR #44. #36 also takes SyncTeX and the `.aux` page (Noticed in PR #44).
 - M1 follow-ups, for M2 or later: see "Follow-ups" in `Reviews/M1/FINAL.md` on `m1/review` (`\cite` of an old key is settled by the M2 spec, E3).
 
 ## Waiting on Dakota
-- Merge PR #42 (the M2 spec, #32) and PR #43 (dropping M3).
+- Review PR #44 (#33, `loom build`) and run its Windows check.
 - Close the M1 milestone on GitHub.
 - The Windows checks listed in PRs #21–#30.
 
@@ -42,4 +42,5 @@ Milestones M0–M12 are on GitHub; M3 is dropped and its milestone closed. M1's 
 - **Path checks on Windows:** `QFileInfo::canonicalFilePath()` doesn't resolve junctions; `LoomCore` uses `std::filesystem::canonical()` ([gotcha](Wiki/gotchas/qt/canonical-path-ignores-junctions.md)).
 - **Terminal checks on Windows:** `_isatty()` is true for `NUL`; `loom` uses `GetConsoleMode` ([gotcha](Wiki/gotchas/windows/isatty-true-for-nul.md)).
 - **Qt regexes:** `$` also matches before a final `\n`; anchor with `QRegularExpression::anchoredPattern` ([gotcha](Wiki/gotchas/qt/regex-dollar-before-final-newline.md)).
+- **TeX tests:** labelled `tex` (`ctest -L tex`); they skip without `latexmk`, and fail instead under `LOOM_REQUIRE_TEX=1`, as on Linux CI. BibTeX refuses a plain `max_print_line` ([gotcha](Wiki/gotchas/latex/bibtex-rejects-long-max-print-line.md)).
 - **Public repo:** never commit details of private research projects; examples use made-up papers.

@@ -68,4 +68,55 @@ QString gitDidntRunCode(const GitRun& run, const QString& missingCode)
     return run.timedOut ? QStringLiteral("git-timeout") : missingCode;
 }
 
+std::vector<GitListingEntry> parseGitListing(const QByteArray& output, bool index)
+{
+    std::vector<GitListingEntry> entries;
+    for (const QByteArray& record : output.split('\0')) {
+        const qsizetype tab = record.indexOf('\t');
+        if (tab < 0)
+            continue;
+        const QList<QByteArray> fields = record.first(tab).split(' ');
+        if (fields.size() != 3 || (index && fields[2] != "0"))
+            continue;
+        entries.push_back({QString::fromLatin1(fields[0]), index ? fields[1] : fields[2], QString::fromUtf8(record.sliced(tab + 1))});
+    }
+    return entries;
+}
+
+const QStringList& gitCatFileBatch()
+{
+    static const QStringList arguments = {QStringLiteral("cat-file"), QStringLiteral("--batch")};
+    return arguments;
+}
+
+std::optional<std::vector<QByteArray>> readGitObjects(const GitTool& git, const QString& root,
+                                                      const std::vector<QByteArray>& shas, GitRun& run)
+{
+    if (shas.empty())
+        return std::vector<QByteArray>();
+    QByteArray input;
+    for (const QByteArray& sha : shas)
+        input += sha + '\n';
+    run = runGit(git, gitCatFileBatch(), root, std::nullopt, input);
+    if (!run.ok())
+        return std::nullopt;
+    // Each object is `<sha> <type> <size>\n<contents>\n`.
+    std::vector<QByteArray> objects;
+    const QByteArray& out = run.outputBytes;
+    qsizetype at = 0;
+    for (std::size_t i = 0; i < shas.size(); ++i) {
+        const qsizetype headerEnd = out.indexOf('\n', at);
+        if (headerEnd < 0)
+            return std::nullopt;
+        const QList<QByteArray> header = out.sliced(at, headerEnd - at).split(' ');
+        bool sized = false;
+        const qsizetype size = header.size() == 3 ? header[2].toLongLong(&sized) : 0;
+        if (!sized || headerEnd + 1 + size > out.size())
+            return std::nullopt;
+        objects.push_back(out.sliced(headerEnd + 1, size));
+        at = headerEnd + 1 + size + 1;
+    }
+    return objects;
+}
+
 } // namespace loom

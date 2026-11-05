@@ -552,28 +552,8 @@ BibliographyBuilt buildBibliography(const QString& root, const QString& out, con
         return built;
     }
 
-    std::vector<BibSource> papers;
-    for (const PaperFile& file : session->contents.papers) {
-        if (!file.reading.parsed || file.reading.document.key.isEmpty()) {
-            built.problems.push_back({Severity::Error, QStringLiteral("bib-entry-skipped"), file.path, 1,
-                QStringLiteral("Loom can't read %1 (run `loom validate`), so its BibTeX entry was left out of refs.bib.").arg(file.path)});
-            continue;
-        }
-        // An entry with errors of its own is skipped, as one with unbalanced braces is: a value
-        // Loom has reported as wrong (an `arxiv_id` with `vN`, say) would go into refs.bib as is.
-        const bool hasErrors = std::any_of(file.reading.problems.begin(), file.reading.problems.end(),
-                                           [](const Problem& problem) { return problem.severity == Severity::Error; });
-        if (hasErrors) {
-            built.problems.push_back({Severity::Error, QStringLiteral("bib-entry-skipped"), file.path, 1,
-                QStringLiteral("%1's paper.toml has errors (`loom validate` lists them), so its BibTeX entry was left out "
-                               "of refs.bib.").arg(file.reading.document.key)});
-            continue;
-        }
-        papers.push_back({file.path, file.reading.document});
-    }
-    Bibliography bib = formatBibliography(papers);
-    built.problems.insert(built.problems.end(), bib.problems.begin(), bib.problems.end());
-    sortProblems(built.problems);
+    Bibliography bib = projectBibliography(session->contents);
+    built.problems = bib.problems;
 
     if (const QString error = writeProjectFile(session->project.root, path, bib.text); !error.isEmpty()) {
         result = cantWork(QStringLiteral("write-failed"), error);

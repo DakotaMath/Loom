@@ -2,6 +2,7 @@
 
 #include "LoomCore/Fingerprint.h"
 #include "LoomCore/Ids.h"
+#include "LoomCore/LatexCommands.h"
 #include "LoomCore/ProjectFiles.h"
 #include "LoomCore/ProjectToml.h"
 #include "LoomCore/StatementsAndProofs.h"
@@ -29,45 +30,6 @@ void add(std::vector<Problem>& problems, const char* code, const QString& file, 
 }
 
 // --- Bodies -------------------------------------------------------------------------------------
-
-/// One LaTeX command with its argument, as checkBodies() reads them.
-struct LatexCommand {
-    QString name;     ///< `ref`, `paperref`, `cite` or `label`.
-    QString argument; ///< What's between the braces, trimmed.
-    int line = 1;     ///< The file line.
-};
-
-/// The `\ref`, `\paperref`, `\cite` and `\label` commands in a body, in order.
-/// Rules (see checkBodies()): comments are skipped; command and argument on one line; optional
-/// arguments skipped; the name must end there (`\reference` isn't `\ref`).
-/// @param body      The body, UTF-8 with LF line endings.
-/// @param firstLine The file line the body starts on.
-/// @returns The commands. No side effects.
-std::vector<LatexCommand> latexCommands(const QByteArray& body, int firstLine)
-{
-    static const QRegularExpression command(
-        QStringLiteral(R"(\\(ref|paperref|cite|label)(?![A-Za-z@*])\s*(?:\[[^\]]*\]\s*)*\{([^{}]*)\})"));
-    std::vector<LatexCommand> commands;
-    const QStringList lines = QString::fromUtf8(body).split(u'\n');
-    for (qsizetype i = 0; i < lines.size(); ++i) {
-        QStringView line = lines[i];
-        // A `%` after an even number of backslashes starts a comment; `\%` is a percent sign.
-        for (qsizetype at = 0; at < line.size(); ++at) {
-            if (line[at] != u'%')
-                continue;
-            qsizetype slashes = 0;
-            while (at - slashes > 0 && line[at - slashes - 1] == u'\\')
-                ++slashes;
-            if (slashes % 2 == 0) {
-                line = line.first(at);
-                break;
-            }
-        }
-        for (const QRegularExpressionMatch& match : command.globalMatchView(line))
-            commands.push_back({match.captured(1), match.captured(2).trimmed(), firstLine + static_cast<int>(i)});
-    }
-    return commands;
-}
 
 /// What checkBodies() needs to know about the project, indexed once.
 struct BodyChecker {
@@ -264,70 +226,6 @@ bool isChecksPath(const QString& path)
 
 // --- Git ----------------------------------------------------------------------------------------
 
-/// One object of a listing by `git ls-files --stage -z` or `git ls-tree -r -z`.
-struct GitEntry {
-    QString mode;   ///< `100644`, `100755`, `120000` (a link), `160000` (a submodule).
-    QByteArray sha; ///< The object's name.
-    QString path;   ///< Relative to the folder git ran in, with `/`.
-};
-
-/// Reads `git ls-files --stage -z` (`<mode> <object> <stage>\t<path>\0`) or `git ls-tree -r -z`
-/// (`<mode> <type> <object>\t<path>\0`). Index entries in a merge conflict (stage 1–3) are left
-/// out; git refuses to commit while there are any. No side effects.
-std::vector<GitEntry> parseListing(const QByteArray& output, bool index)
-{
-    std::vector<GitEntry> entries;
-    for (const QByteArray& record : output.split('\0')) {
-        const qsizetype tab = record.indexOf('\t');
-        if (tab < 0)
-            continue;
-        const QList<QByteArray> fields = record.first(tab).split(' ');
-        if (fields.size() != 3 || (index && fields[2] != "0"))
-            continue;
-        entries.push_back({QString::fromLatin1(fields[0]), index ? fields[1] : fields[2], QString::fromUtf8(record.sliced(tab + 1))});
-    }
-    return entries;
-}
-
-/// The arguments readObjects() runs git with, to name the command in a message.
-const QStringList catFileBatch = {QStringLiteral("cat-file"), QStringLiteral("--batch")};
-
-/// Reads objects with `git cat-file --batch`.
-/// @param shas The objects' names.
-/// @param run  Set to what git did, so a caller can tell a git that didn't finish in time
-///             (`git-timeout`, A16) from one that failed; untouched if there was nothing to read.
-/// @returns Their contents, in the same order, or nothing if git failed or any is missing.
-/// Side effects: runs git in `root`.
-std::optional<std::vector<QByteArray>> readObjects(const GitTool& git, const QString& root, const std::vector<QByteArray>& shas,
-                                                   GitRun& run)
-{
-    if (shas.empty())
-        return std::vector<QByteArray>();
-    QByteArray input;
-    for (const QByteArray& sha : shas)
-        input += sha + '\n';
-    run = runGit(git, catFileBatch, root, std::nullopt, input);
-    if (!run.ok())
-        return std::nullopt;
-    // Each object is `<sha> <type> <size>\n<contents>\n`.
-    std::vector<QByteArray> objects;
-    const QByteArray& out = run.outputBytes;
-    qsizetype at = 0;
-    for (std::size_t i = 0; i < shas.size(); ++i) {
-        const qsizetype headerEnd = out.indexOf('\n', at);
-        if (headerEnd < 0)
-            return std::nullopt;
-        const QList<QByteArray> header = out.sliced(at, headerEnd - at).split(' ');
-        bool sized = false;
-        const qsizetype size = header.size() == 3 ? header[2].toLongLong(&sized) : 0;
-        if (!sized || headerEnd + 1 + size > out.size())
-            return std::nullopt;
-        objects.push_back(out.sliced(headerEnd + 1, size));
-        at = headerEnd + 1 + size + 1;
-    }
-    return objects;
-}
-
 /// Whether staged copies need a file's content: the files Loom reads in full. The rest are
 /// written empty, since only their existence is checked.
 bool contentNeeded(const QString& path)
@@ -378,10 +276,10 @@ std::optional<ValidationResult> copyIndex(const GitTool& git, const QString& roo
             QStringLiteral("`loom validate --staged` checks what git has staged, but `%1` isn't a git repository (%2).")
                 .arg(QDir::toNativeSeparators(root), whyGitFailed(listing)));
 
-    std::vector<GitEntry> wanted;
+    std::vector<GitListingEntry> wanted;
     std::vector<QByteArray> shas;
     std::vector<QString> empty;
-    for (const GitEntry& entry : parseListing(listing.outputBytes, true)) {
+    for (const GitListingEntry& entry : parseGitListing(listing.outputBytes, true)) {
         if (entry.mode == u"160000" || !isProjectPath(entry.path))
             continue; // A submodule, or a name Loom never reads (and Windows may not allow).
         if (contentNeeded(entry.path)) {
@@ -392,9 +290,9 @@ std::optional<ValidationResult> copyIndex(const GitTool& git, const QString& roo
         }
     }
     GitRun catFile;
-    const std::optional<std::vector<QByteArray>> objects = readObjects(git, root, shas, catFile);
+    const std::optional<std::vector<QByteArray>> objects = readGitObjects(git, root, shas, catFile);
     if (catFile.timedOut)
-        return gitDidntRun(catFile, catFileBatch);
+        return gitDidntRun(catFile, gitCatFileBatch());
     if (!objects)
         return cantWork("git-failed", QStringLiteral("Loom couldn't read the staged files from git (`git cat-file --batch` failed)."));
     for (std::size_t i = 0; i < wanted.size(); ++i) {
@@ -463,7 +361,7 @@ std::optional<ValidationResult> readCommit(const GitTool& git, const QString& ro
     CommittedFiles files;
     std::vector<QString> checksPaths;
     std::vector<QByteArray> shas;
-    for (const GitEntry& entry : parseListing(tree.outputBytes, false)) {
+    for (const GitListingEntry& entry : parseGitListing(tree.outputBytes, false)) {
         files.paths << entry.path;
         if (isChecksPath(entry.path)) {
             checksPaths.push_back(entry.path);
@@ -471,9 +369,9 @@ std::optional<ValidationResult> readCommit(const GitTool& git, const QString& ro
         }
     }
     GitRun catFile;
-    const std::optional<std::vector<QByteArray>> objects = readObjects(git, root, shas, catFile);
+    const std::optional<std::vector<QByteArray>> objects = readGitObjects(git, root, shas, catFile);
     if (catFile.timedOut)
-        return gitDidntRun(catFile, catFileBatch);
+        return gitDidntRun(catFile, gitCatFileBatch());
     if (!objects)
         return cantWork("git-failed", QStringLiteral("Loom couldn't read the last commit's check histories (`git cat-file --batch` failed)."));
     for (std::size_t i = 0; i < checksPaths.size(); ++i)

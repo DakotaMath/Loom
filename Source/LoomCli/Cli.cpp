@@ -121,6 +121,9 @@ const std::vector<UsageEntry>& usageEntries()
         {QStringLiteral("rekey"), QStringLiteral("  loom rekey <key>\n")},
         {QStringLiteral("build-bib"), QStringLiteral("  loom build-bib [--out <path>]\n")},
         {QStringLiteral("validate"), QStringLiteral("  loom validate [--staged]\n")},
+        {QStringLiteral("build"),
+         QStringLiteral("  loom build <id> [--mode alone|premises|chain] [--verbose] [--rev <commit>]\n"
+                        "                     [--timeout <seconds>]\n")},
     };
     return entries;
 }
@@ -132,6 +135,13 @@ QString commonOptionsLine()
 }
 
 } // namespace
+
+QString jsonProblem(const loom::Problem& problem)
+{
+    return QStringLiteral("{\"severity\": %1, \"code\": %2, \"file\": %3, \"line\": %4, \"message\": %5}")
+        .arg(jsonString(problem.severity == loom::Severity::Error ? QStringLiteral("error") : QStringLiteral("warning")),
+             jsonString(problem.code), jsonString(problem.file), QString::number(problem.line), jsonString(problem.message));
+}
 
 int fail(int exitCode, const QString& code, const QString& message, bool json)
 {
@@ -169,7 +179,8 @@ int usageError(const QString& problem, bool json)
 const QSet<QString>& valuelessOptions()
 {
     static const QSet<QString> options = {QStringLiteral("--json"), QStringLiteral("--version"), QStringLiteral("--staged"),
-                                          QStringLiteral("--verified"), QStringLiteral("--outdate-checks")};
+                                          QStringLiteral("--verified"), QStringLiteral("--outdate-checks"),
+                                          QStringLiteral("--verbose")};
     return options;
 }
 

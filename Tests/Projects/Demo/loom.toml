@@ -1,0 +1,19 @@
+format = 1
+name = "Demo"
+idea = """
+Made-up mathematics about tame sequences, for Loom's tests: it compiles, and it has one statement of most statuses.
+"""
+created = 2026-11-05
+
+[tex]
+preamble = ["TeX/preamble.tex", "TeX/macros.tex"]
+
+[[tags]]
+id = "tame-sequences"
+kind = "other"
+title = "Tame sequences"
+
+[[tags]]
+id = "tail-bounds"
+kind = "technique"
+title = "Tail bounds"

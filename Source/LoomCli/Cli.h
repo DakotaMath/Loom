@@ -17,6 +17,7 @@
 
 namespace loom {
 struct ChangeResult;
+struct Problem;
 }
 
 namespace cli {
@@ -53,6 +54,10 @@ QString jsonOptional(const QString& text);
 /// A JSON number for an index, or `null`. No side effects.
 QString jsonIndex(const std::optional<qsizetype>& index);
 
+/// One problem as `loom validate --json` and `loom build --json` give it (Specs/m1-core.md,
+/// "JSON shapes"): `{"severity", "code", "file", "line", "message"}`. No side effects.
+QString jsonProblem(const loom::Problem& problem);
+
 /// Reports a failure: the message on stderr and, with `--json`, the error object on stdout.
 /// @returns `exitCode`, so callers can `return fail(...);`.
 int fail(int exitCode, const QString& code, const QString& message, bool json);
@@ -83,7 +88,7 @@ std::optional<QString> subcommandUsage(const QString& subcommand);
 bool takeCommonOptions(QStringList& args, Context& context, bool& projectGiven, QString& error);
 
 /// The options of any subcommand that take no value: `--json`, `--version`, `--staged`,
-/// `--verified` and `--outdate-checks`. A new flag must be added here, or takeCommonOptions()
+/// `--verified`, `--outdate-checks` and `--verbose`. A new flag must be added here, or takeCommonOptions()
 /// would take the argument after it as its value. No side effects.
 const QSet<QString>& valuelessOptions();
 

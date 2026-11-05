@@ -1,0 +1,155 @@
+% loom.sty: the environments and commands of Loom's builds (Specs/m2-statements-review.md,
+% "The wrapper document"). Loom writes this file into every build folder on every build, from a
+% copy compiled into Loom; editing it in a build folder changes nothing. Part of Loom, GPL v3.
+%
+% `main.tex` loads it after the project's preambles, so it can see what they loaded. Every name it
+% defines starts with `loom` (or `\loom@`), so a preamble's own `theorem` environment can't clash;
+% `\paperref` is the one exception, since statement and proof bodies use it.
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{loom}[2026/11/05 Loom builds]
+\RequirePackage{amsthm}
+% For the grey of failed attempts. Part of LaTeX's required graphics bundle; a no-op when the
+% preambles already loaded color or xcolor.
+\RequirePackage{color}
+
+% --- Kinds -------------------------------------------------------------------------------------
+% Each kind's name and amsthm style: `plain` for what can be proved, `definition` for definitions,
+% questions and examples, `remark` for remarks.
+\def\loom@kind#1#2#3{%
+  \@namedef{loom@kindname@#1}{#2}%
+  \@namedef{loom@kindstyle@#1}{#3}}
+\loom@kind{definition}{Definition}{definition}
+\loom@kind{lemma}{Lemma}{plain}
+\loom@kind{proposition}{Proposition}{plain}
+\loom@kind{theorem}{Theorem}{plain}
+\loom@kind{corollary}{Corollary}{plain}
+\loom@kind{conjecture}{Conjecture}{plain}
+\loom@kind{question}{Question}{definition}
+\loom@kind{remark}{Remark}{remark}
+\loom@kind{example}{Example}{definition}
+
+% One unnumbered environment per style: the tag is the statement's number (E1), so the heading
+% is the kind's name and the tag, set in \loom@name when a statement begins.
+\theoremstyle{plain}\newtheorem*{loom@plain}{\loom@name}
+\theoremstyle{definition}\newtheorem*{loom@definition}{\loom@name}
+\theoremstyle{remark}\newtheorem*{loom@remark}{\loom@name}
+\theoremstyle{plain}
+
+% An anchor for hyperref's links, when a preamble loaded it; nothing otherwise.
+\def\loom@anchor{\@ifundefined{phantomsection}{}{\phantomsection}}
+
+% Makes the current label `#1` and writes `\label{#1}`, so `\ref{#1}` prints `#1`.
+\def\loom@label#1{\protected@edef\@currentlabel{#1}\label{#1}}
+
+% \begin{loomstatement}[<aliases>]{<kind>}{<tag>}{<title>}: **Theorem 4KX7** (title). Labels the
+% tag and each alias (a comma-separated list), so `\ref` to either prints the tag.
+\newenvironment{loomstatement}[4][]{%
+  \@ifundefined{loom@kindname@#2}%
+    {\def\loom@kindname{Statement}\def\loom@style{plain}}%
+    {\edef\loom@kindname{\@nameuse{loom@kindname@#2}}\edef\loom@style{\@nameuse{loom@kindstyle@#2}}}%
+  \def\loom@name{\loom@kindname\ #3}%
+  \begin{loom@\loom@style}[{#4}]%
+  % amsthm sets the heading when the first paragraph starts. Starting it here sets it while TeX
+  % reads main.tex, so a bad macro in a title is reported in the part Loom writes, not in the body.
+  \leavevmode
+  \loom@anchor
+  \loom@label{#3}%
+  \@for\loom@alias:=#1\do{%
+    \ifx\loom@alias\@empty\else
+      \expandafter\label\expandafter{\loom@alias}%
+    \fi}%
+  \ignorespaces
+}{\end{loom@\loom@style}}
+
+% --- Proofs ------------------------------------------------------------------------------------
+% \begin{loomproof}[<verbose|stale>]{<proof-id>}{<level>}{<premises>}: *Proof 4KX7.a (complete;
+% from 5HN8, 9D3F).* A failed proof is *Failed attempt 4KX7.b*, set in grey; a verbose version is
+% *Verbose 4KX7.a (…)*, and a stale one says it was written from an older version of the proof.
+\def\loom@failed{failed}
+\def\loom@verbose{verbose}
+\def\loom@stale{stale}
+\def\loom@grey{\color[gray]{0.45}}
+\newenvironment{loomproof}[4][]{%
+  \def\loom@variant{#1}\def\loom@level{#3}%
+  \if\relax\detokenize{#4}\relax
+    \def\loom@about{#3}%
+  \else
+    \def\loom@about{#3; from #4}%
+  \fi
+  \ifx\loom@variant\loom@stale
+    \def\loom@heading{Verbose #2: written from an older version of the proof}%
+  \else\ifx\loom@level\loom@failed
+    \ifx\loom@variant\loom@verbose
+      \def\loom@heading{{\loom@grey Failed attempt #2 (verbose)}}%
+    \else
+      \def\loom@heading{{\loom@grey Failed attempt #2}}%
+    \fi
+  \else\ifx\loom@variant\loom@verbose
+    \def\loom@heading{Verbose #2 (\loom@about)}%
+  \else
+    \def\loom@heading{Proof #2 (\loom@about)}%
+  \fi\fi\fi
+  \begin{proof}[\loom@heading]%
+  % The heading is set here, as for statements; and the colour change then goes into the
+  % paragraph, not the vertical list, where it would add space after the proof.
+  \leavevmode
+  \loom@anchor
+  \loom@label{#2}%
+  \ifx\loom@level\loom@failed\loom@grey\fi
+  \ignorespaces
+}{\end{proof}}
+
+% --- References outside the build -------------------------------------------------------------
+% A reference to a statement, alias or proof that isn't in this build prints the ID in sans serif
+% with a dotted underline, never `??`.
+\DeclareRobustCommand\loom@outsideref[1]{\leavevmode
+  \begingroup
+    \setbox\z@\hbox{\sffamily\detokenize{#1}}%
+    \rlap{\raisebox{-2.5\p@}{\hbox to\wd\z@{\xleaders\hbox to 1.6\p@{\hss\vrule\@width.5\p@\@height.5\p@\hss}\hfil}}}%
+    \box\z@
+  \endgroup}
+
+% \loomoutside[<shown>]{<id>}{<title>}: defines the label `<id>` as LaTeX would after reading it
+% from main.aux, printing `<shown>` (the tag, for an old name), else `<id>`. With hyperref, labels
+% have five parts; an empty anchor makes no link. Used in the preamble only. The title isn't
+% printed: it is there for the reader of main.tex.
+\newcommand*\loomoutside[3][]{%
+  \if\relax\detokenize{#1}\relax
+    \loom@outside{#2}{#2}%
+  \else
+    \loom@outside{#2}{#1}%
+  \fi}
+\def\loom@outside#1#2{%
+  \@ifpackageloaded{hyperref}%
+    {\expandafter\gdef\csname r@#1\endcsname{{\loom@outsideref{#2}}{}{}{}{}}}%
+    {\expandafter\gdef\csname r@#1\endcsname{{\loom@outsideref{#2}}{}}}}
+
+% --- Citing a paper's result ------------------------------------------------------------------
+% \loompaperref{<stub>}{<Key>}{<locator>}, from the wrapper, for each paper result the build cites
+% (and each old name of it). \paperref{<stub>} then prints \cite[<locator>]{<Key>}, or \cite{<Key>}
+% without a locator; a name the wrapper didn't define prints a bold [<name>?].
+\newcommand*\loompaperref[3]{\@namedef{loom@paperref@#1}{{#2}{#3}}}
+\DeclareRobustCommand\paperref[1]{%
+  \@ifundefined{loom@paperref@#1}%
+    {\textbf{[\detokenize{#1}?]}}%
+    {\expandafter\expandafter\expandafter\loom@cite\csname loom@paperref@#1\endcsname}}
+\def\loom@cite#1#2{\if\relax\detokenize{#2}\relax\cite{#1}\else\cite[#2]{#1}\fi}
+
+% --- Headings ---------------------------------------------------------------------------------
+% A middle dot (U+00B7), as the header separates the tag from the title: drawn as math's \cdot, so
+% the header needs no TS1 font.
+\DeclareRobustCommand\loom@middot{\ifmmode\cdot\else$\cdot$\fi}
+
+% \loomheader{<target and title>}{<mode>}: the line at the top of the PDF.
+\newcommand\loomheader[2]{%
+  \begingroup
+    \let\textperiodcentered\loom@middot
+    \noindent{\large\bfseries #1}\par
+    \noindent{\itshape #2}\par
+  \endgroup
+  \medskip\hrule\bigskip}
+
+% \loomsection{<name>}: a small heading between groups of statements.
+\newcommand\loomsection[1]{\par\bigskip\noindent{\small\scshape #1}\par\smallskip}
+
+\endinput
