@@ -1,6 +1,7 @@
 #include "LoomApp/StatementsPage.h"
 
 #include "LoomApp/AppSettings.h"
+#include "LoomApp/ChecksPanel.h"
 #include "LoomApp/FilePage.h"
 #include "LoomApp/FindBar.h"
 #include "LoomApp/HeaderForms.h"
@@ -17,6 +18,7 @@
 #include "LoomApp/TextDiff.h"
 
 #include "LoomCore/Ids.h"
+#include "LoomCore/ProjectFiles.h"
 
 #include <QApplication>
 #include <QDialog>
@@ -28,6 +30,7 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QMouseEvent>
+#include <QPlainTextEdit>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QSettings>
@@ -40,6 +43,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <optional>
 
 namespace loom {
 
@@ -80,6 +84,84 @@ QString listed(const QStringList& items)
 QString cursorKey(const QString& path)
 {
     return QStringLiteral("cursors/") + QString::fromLatin1(QUrl::toPercentEncoding(path));
+}
+
+/// Asks Dakota for a `needs-changes` and what needs to change (Specs/m2-statements-review.md,
+/// "Dakota's clicks": "For needs-changes, the text box for changes (required)"). Its confirming
+/// button stays disabled while the box is empty. Cancel is the default button, so Enter alone
+/// never confirms; the box has the focus, since the text is required, and Enter there is a new line.
+/// @param answer Called once: the text, or nothing if he cancelled. Side effects: opens a window-modal dialog.
+void askChanges(QWidget* parent, const QString& text, std::function<void(std::optional<QString>)> answer)
+{
+    auto* dialog = new QDialog(parent);
+    dialog->setObjectName(QStringLiteral("needsChangesDialog"));
+    dialog->setWindowTitle(QStringLiteral("Needs changes"));
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    auto* label = new QLabel(text, dialog);
+    label->setObjectName(QStringLiteral("text"));
+    label->setWordWrap(true);
+    label->setTextFormat(Qt::PlainText);
+    auto* prompt = new QLabel(QStringLiteral("What needs to change? (required)"), dialog);
+    auto* changes = new QPlainTextEdit(dialog);
+    changes->setObjectName(QStringLiteral("changes"));
+    changes->setTabChangesFocus(true);
+    auto* buttons = new QDialogButtonBox(dialog);
+    QPushButton* yes = buttons->addButton(QStringLiteral("Record needs-changes"), QDialogButtonBox::AcceptRole);
+    yes->setObjectName(QStringLiteral("confirm"));
+    yes->setAutoDefault(false);
+    yes->setEnabled(false);
+    QPushButton* cancel = buttons->addButton(QDialogButtonBox::Cancel);
+    cancel->setObjectName(QStringLiteral("cancel"));
+    cancel->setDefault(true);
+    auto* layout = new QVBoxLayout(dialog);
+    layout->addWidget(label);
+    layout->addWidget(prompt);
+    layout->addWidget(changes, 1);
+    layout->addWidget(buttons);
+    dialog->resize(520, 320);
+    QObject::connect(changes, &QPlainTextEdit::textChanged, yes, [changes, yes] { yes->setEnabled(!changes->toPlainText().trimmed().isEmpty()); });
+    QObject::connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+    QObject::connect(dialog, &QDialog::finished, dialog, [changes, answer](int result) {
+        if (result == QDialog::Accepted && !changes->toPlainText().trimmed().isEmpty())
+            answer(changes->toPlainText());
+        else
+            answer(std::nullopt);
+    });
+    dialog->open();
+    changes->setFocus();
+}
+
+/// What a check's dialog asks (Specs/m2-statements-review.md, "Dakota's clicks": *"Record your
+/// pass of 4KX7.a as it is now? With the agent's pass of 2026-11-04 this makes 4KX7.a checked:
+/// 4KX7 becomes proved; P3QA becomes proved."*). What the check does comes from LoomCore: the
+/// proof's standing before (the snapshot) and after (`asked`, its refusal for want of the click),
+/// and the status changes it carries.
+QString checkQuestion(const QString& proofId, const QString& verdict, const ProofNode& before, const CheckAdded& asked)
+{
+    const CheckStanding& was = before.checking.standing;
+    const CheckStanding& will = asked.standing;
+    QString effect;
+    if (will.checked && !was.checked) {
+        // The counting agent check is one already in the history: the new entry is Dakota's.
+        const std::vector<Check>& checks = before.checking.checks;
+        const qsizetype agent = will.countingAgent.value_or(-1);
+        effect = agent >= 0 && agent < static_cast<qsizetype>(checks.size())
+                     ? QStringLiteral("With the agent's pass of %1 this makes %2 checked")
+                           .arg(checks[static_cast<size_t>(agent)].date.date().toString(Qt::ISODate), proofId)
+                     : QStringLiteral("This makes %1 checked").arg(proofId);
+    } else if (was.checked && !will.checked) {
+        effect = QStringLiteral("This makes %1 no longer checked").arg(proofId);
+    } else if (was.supports && !will.supports) {
+        effect = QStringLiteral("This makes %1 stop supporting %2").arg(proofId, before.proves);
+    }
+    const QString statuses = statusBecomes(asked.change.statusChanges);
+    QString text = QStringLiteral("Record your %1 of %2 as it is now?").arg(verdict, proofId);
+    if (effect.isEmpty())
+        text += statuses.isEmpty() ? QStringLiteral(" No status changes.") : QStringLiteral(" %1.").arg(statuses);
+    else
+        text += statuses.isEmpty() ? QStringLiteral(" %1; no status changes.").arg(effect) : QStringLiteral(" %1: %2.").arg(effect, statuses);
+    return text;
 }
 
 } // namespace
@@ -248,6 +330,7 @@ void StatementsPage::setSession(ProjectSession* session)
         delete old;
     }
     m_buffers.clear();
+    m_clicks.clear();
     m_back.clear();
     m_forward.clear();
     m_formDrafts.clear();
@@ -278,6 +361,8 @@ void StatementsPage::setSession(ProjectSession* session)
             m_forward.push_back(place);
     }
     connect(session, &ProjectSession::snapshotChanged, this, &StatementsPage::snapshotChanged);
+    // Dakota's check buttons wait while the snapshot is older than the disk.
+    connect(session, &ProjectSession::becameStale, this, &StatementsPage::refreshClicks);
 
     const QString root = session->root();
     m_lane->run(this, [root] { return listDrafts(root); }, [this, session](std::vector<Draft> drafts) {
@@ -756,6 +841,8 @@ void StatementsPage::bufferEdited(EditBuffer* buffer)
     Q_UNUSED(buffer);
     m_draftTimer.start();
     updateUnsaved();
+    // Unsaved edits disable Dakota's clicks on the file ("Save first").
+    refreshClicks();
 }
 
 void StatementsPage::writeDrafts()
@@ -998,11 +1085,12 @@ void StatementsPage::finishSave(EditBuffer* buffer, const QByteArray& sent, cons
         // checks"); LoomCore gets exactly the proofs he was shown, and refuses if they changed.
         const QStringList proofs = result.outdatedChecks;
         const bool one = proofs.size() == 1;
-        // The spec's dialog also lists the status changes ("4KX7 proved → unchecked"); they need
-        // LoomCore's status changes between two contents, which come with #38.
-        const QString text = QStringLiteral("Saving %1 changes text that the checks of %2 read. %3 stop counting, so the statuses "
-                                            "they gave may drop.")
-                                 .arg(name, listed(proofs), one ? QStringLiteral("Its checks") : QStringLiteral("Their checks"));
+        // "Their checks stop counting: 4KX7 proved → unchecked, P3QA proved → conditional", the
+        // status changes as LoomCore computed them for the refused save.
+        const QString statuses = statusArrows(result.statusChanges);
+        const QString text = QStringLiteral("Saving %1 changes text that the checks of %2 read. %3 stop counting%4")
+                                 .arg(name, listed(proofs), one ? QStringLiteral("Its checks") : QStringLiteral("Their checks"),
+                                      statuses.isEmpty() ? QStringLiteral("; no status changes.") : QStringLiteral(": %1.").arg(statuses));
         const QString path = buffer->path();
         confirm(this, QStringLiteral("outdateChecksDialog"), QStringLiteral("Save and outdate checks"), text,
                 QStringLiteral("Save and outdate checks"), [this, path, proofs, confirmations, done](bool yes) {
@@ -1053,6 +1141,10 @@ void StatementsPage::finishSave(EditBuffer* buffer, const QByteArray& sent, cons
                             s.refutedOn.isValid() ? s.refutedOn.toString(Qt::ISODate) : QStringLiteral("no date"));
             again.refutationConfirmed = true;
         }
+        // The status changes LoomCore computed for the refused save (Specs/m2-statements-review.md,
+        // "Dakota's clicks": "The status changes in each dialog come from LoomCore").
+        if (const QString statuses = statusArrows(result.statusChanges); !statuses.isEmpty())
+            text += QStringLiteral(" Status changes: %1.").arg(statuses);
         if (!proofs.isEmpty())
             again.outdateChecks = proofs;
         confirm(this, objectName, action, text, action, [this, path, again, done](bool yes) {
@@ -1688,6 +1780,265 @@ bool StatementsPage::eventFilter(QObject* watched, QEvent* event)
         }
     }
     return QWidget::eventFilter(watched, event);
+}
+
+QString StatementsPage::checkBlocker(const QString& proofId) const
+{
+    if (!m_session || !m_snapshot)
+        return QStringLiteral("No project is open.");
+    const ProofNode* proof = m_snapshot->graph.proof(proofId);
+    if (!proof)
+        return QStringLiteral("Loom can't read this proof's front matter, so it can't be checked.");
+    if (const EditBuffer* open = buffer(proof->path)) {
+        if (open->dirty())
+            return QStringLiteral("Save first: a check records the version on disk.");
+        if (!open->exists() || open->outside() == Outside::Deleted)
+            return QStringLiteral("This proof's file is gone from disk.");
+        // Saved, but the snapshot is from before the save.
+        if (open->loaded() != m_snapshot->files.value(proof->path))
+            return QStringLiteral("Loom is reading the latest version from disk; try again in a moment.");
+    }
+    if (m_session->stale())
+        return QStringLiteral("Loom is reading the latest version from disk; try again in a moment.");
+    return {};
+}
+
+QString StatementsPage::refuteBlocker(const QString& tag) const
+{
+    if (!m_session || !m_snapshot)
+        return QStringLiteral("No project is open.");
+    const StatementNode* node = m_snapshot->graph.statement(tag);
+    if (!node || !m_snapshot->contents.statement(tag))
+        return QStringLiteral("Loom can't read this statement's front matter.");
+    if (const EditBuffer* open = buffer(node->path); open && open->dirty())
+        return QStringLiteral("Save first: refuting rewrites this statement's file.");
+    if (!node->refutedBy.isEmpty() || node->refutedOn.isValid())
+        return QStringLiteral("Already refuted by %1.").arg(node->refutedBy.isEmpty() ? QStringLiteral("(no proof)") : node->refutedBy);
+    return {};
+}
+
+void StatementsPage::refreshClicks()
+{
+    for (int i = 0; i < m_tabs->count(); ++i)
+        static_cast<FilePage*>(m_tabs->widget(i))->refreshClicks();
+}
+
+void StatementsPage::endClick(const QString& id, bool written)
+{
+    m_clicks.remove(id);
+    if (written && m_session)
+        m_session->refresh();
+    refreshClicks();
+    emit clickFinished(id, written);
+}
+
+void StatementsPage::recordCheck(const QString& proofId, const QString& verdict)
+{
+    if (!m_session || !m_snapshot || clickRunning(proofId) || !checkBlocker(proofId).isEmpty())
+        return;
+    const ProofNode* proof = m_snapshot->graph.proof(proofId);
+    NewCheck request;
+    request.by = QStringLiteral("dakota");
+    request.verdict = verdict;
+    // The fingerprint of the version shown: LoomCore refuses with `proof-changed` if the file
+    // changed since (Specs/m2-statements-review.md, "Dakota's clicks").
+    request.fingerprint = proof->checking.fingerprint;
+    // Asked first without his confirmation, for what the check would do. Its status changes don't
+    // depend on what he will write for a needs-changes, but a needs-changes needs some text to pass
+    // the rules, so the question carries a stand-in that is never written.
+    NewCheck question = request;
+    if (verdict == u"needs-changes")
+        question.changes = QStringLiteral("(written in the dialog)");
+    const QString root = m_session->root();
+    const QPointer<ProjectSession> session = m_session;
+    const std::shared_ptr<const ProjectSnapshot> snapshot = m_snapshot;
+    m_clicks.insert(proofId);
+    refreshClicks();
+    m_lane->run(this, [root, proofId, question] { return addCheck(root, proofId, question, false); },
+                [this, session, snapshot, proofId, request](CheckAdded asked) {
+                    if (m_session != session)
+                        return;
+                    const ProofNode* before = snapshot->graph.proof(proofId);
+                    if (asked.change.code != u"dakota-only" || !before) {
+                        showClickRefusal(asked.change, proofId);
+                        endClick(proofId, false);
+                        return;
+                    }
+                    const QString text = checkQuestion(proofId, request.verdict, *before, asked);
+                    const auto answer = [this, session, proofId, request](std::optional<QString> changes) {
+                        if (m_session != session)
+                            return;
+                        if (!changes) {
+                            endClick(proofId, false);
+                            return;
+                        }
+                        NewCheck confirmed = request;
+                        confirmed.changes = *changes;
+                        addConfirmedCheck(proofId, confirmed);
+                    };
+                    if (request.verdict == u"needs-changes") {
+                        askChanges(this, text, answer);
+                        return;
+                    }
+                    const QString action = QStringLiteral("Record %1").arg(request.verdict);
+                    confirm(this, QStringLiteral("checkDialog"), action, text, action,
+                            [answer](bool yes) { answer(yes ? std::optional<QString>(QString()) : std::nullopt); });
+                });
+}
+
+void StatementsPage::addConfirmedCheck(const QString& proofId, const NewCheck& request)
+{
+    const QString root = m_session->root();
+    const QPointer<ProjectSession> session = m_session;
+    m_lane->run(this, [root, proofId, request] { return addCheck(root, proofId, request, true); },
+                [this, session, proofId, request](CheckAdded added) {
+                    if (m_session != session)
+                        return;
+                    if (added.change.outcome != ChangeOutcome::Done) {
+                        showClickRefusal(added.change, proofId);
+                        endClick(proofId, false);
+                        return;
+                    }
+                    const QString statuses = statusArrows(added.change.statusChanges);
+                    emit outputLine(QStringLiteral("Recorded your %1 of %2 in %3%4.")
+                                        .arg(request.verdict, proofId, added.change.path,
+                                             statuses.isEmpty() ? QString() : QStringLiteral(" (%1)").arg(statuses)));
+                    endClick(proofId, true);
+                });
+}
+
+void StatementsPage::markProofFailed(const QString& proofId)
+{
+    if (!m_snapshot || clickRunning(proofId) || !checkBlocker(proofId).isEmpty())
+        return;
+    const ProofNode* proof = m_snapshot->graph.proof(proofId);
+    EditBuffer* open = ensureBuffer(proof->path, FileKind::Proof, proofId);
+    if (open->raw()) {
+        // The level is a field of the form; raw text without edits can always go back to it
+        // unless it doesn't parse, which the page then says.
+        QString why;
+        if (!open->setRaw(false, &why)) {
+            if (FilePage* shown = page(proofId))
+                shown->showNote(why);
+            return;
+        }
+        refreshPages();
+    }
+    // The same dialog and save as choosing failed in the level list. A copy of the level: the
+    // buffer's own field becomes `failed` before chooseFailed() keeps `previous`.
+    const QString previous = open->proof().level;
+    chooseFailed(open, previous);
+}
+
+void StatementsPage::refute()
+{
+    if (m_tag.isEmpty() || m_stub || !m_snapshot || clickRunning(m_tag) || !refuteBlocker(m_tag).isEmpty())
+        return;
+    // "Refute… (on the statement page's menu) opens the picker for proofs of other statements,
+    // then the dialog."
+    FilePage* statementPage = page(QString());
+    QWidget* anchor = statementPage ? statementPage->statementMenu() : nullptr;
+    const QPoint at = anchor ? anchor->mapToGlobal(QPoint(0, anchor->height())) : mapToGlobal(QPoint(width() / 4, 40));
+    const QString tag = m_tag;
+    m_ids->pick(IdField::RefutedBy, tag, {}, at, [this, tag](const QString& proofId) { refuteWith(tag, proofId); });
+}
+
+void StatementsPage::refuteWith(const QString& tag, const QString& proofId)
+{
+    if (!m_session || clickRunning(tag))
+        return;
+    const QString root = m_session->root();
+    const QPointer<ProjectSession> session = m_session;
+    m_clicks.insert(tag);
+    refreshClicks();
+    // Asked first without his confirmation, for what it would do.
+    m_lane->run(this, [root, tag, proofId] { return refuteStatement(root, tag, proofId, false); },
+                [this, session, root, tag, proofId](ChangeResult asked) {
+                    if (m_session != session)
+                        return;
+                    if (asked.code != u"dakota-only") {
+                        showClickRefusal(asked, tag);
+                        endClick(tag, false);
+                        return;
+                    }
+                    const QString statuses = statusBecomes(asked.statusChanges);
+                    const QString text = QStringLiteral("Mark %1 false, refuted by %2? Today's date is written as the date you accepted it.%3")
+                                             .arg(tag, proofId, statuses.isEmpty() ? QString() : QStringLiteral(" %1.").arg(statuses));
+                    confirm(this, QStringLiteral("refuteDialog"), QStringLiteral("Mark false"), text, QStringLiteral("Mark false"),
+                            [this, session, root, tag, proofId](bool yes) {
+                                if (m_session != session)
+                                    return;
+                                if (!yes) {
+                                    endClick(tag, false);
+                                    return;
+                                }
+                                m_lane->run(this, [root, tag, proofId] { return refuteStatement(root, tag, proofId, true); },
+                                            [this, session, tag](ChangeResult done) {
+                                                if (m_session != session)
+                                                    return;
+                                                if (done.outcome != ChangeOutcome::Done) {
+                                                    showClickRefusal(done, tag);
+                                                    endClick(tag, false);
+                                                    return;
+                                                }
+                                                emit outputLine(QStringLiteral("Marked %1 false in %2 (%3).")
+                                                                    .arg(tag, done.path, done.changed.join(QStringLiteral(", "))));
+                                                endClick(tag, true);
+                                            });
+                            });
+                });
+}
+
+void StatementsPage::showClickRefusal(const ChangeResult& result, const QString& id)
+{
+    const bool changed = result.code == u"proof-changed";
+    const QString text = changed ? QStringLiteral("%1 changed since you opened it, so your check wasn't recorded: a check records the "
+                                                  "version you read. Read the new version, then check it again.")
+                                       .arg(id)
+                                 : (result.message.isEmpty() ? QStringLiteral("Loom didn't write it.") : result.message);
+    emit outputLine(QStringLiteral("Didn't record your click on %1: %2").arg(id, result.message));
+    auto* box = new QMessageBox(QMessageBox::Warning, QStringLiteral("Not recorded"), text, QMessageBox::NoButton, this);
+    box->setObjectName(changed ? QStringLiteral("proofChanged") : QStringLiteral("clickRefused"));
+    box->setTextFormat(Qt::PlainText);
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    if (changed) {
+        // "A refusal because the proof changed under the dialog (proof-changed) says so and offers
+        // to show the new version."
+        QPushButton* show = box->addButton(QStringLiteral("Show the new version"), QMessageBox::AcceptRole);
+        show->setObjectName(QStringLiteral("showNew"));
+        connect(show, &QPushButton::clicked, this, [this, id] {
+            if (m_session)
+                m_session->refresh();
+            openProof(id);
+        });
+    }
+    QPushButton* close = box->addButton(QMessageBox::Close);
+    close->setObjectName(QStringLiteral("close"));
+    box->setDefaultButton(close);
+    box->open();
+}
+
+void StatementsPage::openProjectText(const QString& path)
+{
+    if (!m_session)
+        return;
+    const QString root = m_session->root();
+    m_lane->run(this, [root, path] { return readProjectFile(root, path); }, [this, path](std::optional<QByteArray> bytes) {
+        // Plain text until rendered Markdown comes (M4).
+        auto* window = new QDialog(this);
+        window->setObjectName(QStringLiteral("projectText"));
+        window->setWindowTitle(path);
+        window->setAttribute(Qt::WA_DeleteOnClose);
+        auto* text = new QPlainTextEdit(window);
+        text->setObjectName(QStringLiteral("text"));
+        text->setReadOnly(true);
+        text->setPlainText(bytes ? QString::fromUtf8(*bytes)
+                                 : QStringLiteral("%1 is missing: Loom can't find it in the project.").arg(path));
+        auto* layout = new QVBoxLayout(window);
+        layout->addWidget(text);
+        window->resize(640, 480);
+        window->show();
+    });
 }
 
 } // namespace loom

@@ -61,6 +61,7 @@ bool offers(IdField field, const IdEntry& entry, const QString& self)
     case IdField::StatedUsing: return entry.kind == IdKind::Statement || entry.kind == IdKind::Stub;
     case IdField::SupersededBy: return entry.kind == IdKind::Statement;
     case IdField::Cite: return entry.kind == IdKind::Paper;
+    case IdField::RefutedBy: return entry.kind == IdKind::Proof && entry.statement != self;
     }
     return false;
 }

@@ -2,6 +2,7 @@
 
 #include "LoomCore/ProjectFiles.h"
 #include "LoomCore/ProofChecks.h"
+#include "LoomCore/StatusChanges.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -163,10 +164,15 @@ ChangeResult commit(Session& session, const QString& path, const QByteArray& byt
         refusal.path = path;
         return refusal;
     }
+    // What the change does to statuses, for the dialog that asks for Dakota's click and for the
+    // caller once done; a refusal for the rules above changes nothing, so it carries none.
+    const std::vector<StatusChange> changes = statusChanges(session.contents, changed);
+    result.statusChanges = changes;
     if (!needsDakota.isEmpty()) {
         ChangeResult refusal = dakotaOnly(needsDakota);
         refusal.id = result.id;
         refusal.path = path;
+        refusal.statusChanges = changes;
         // So the app's dialog for the click can name the checks it outdates too, and Dakota
         // confirms both at once (Specs/m2-statements-review.md, "Dakota's clicks").
         refusal.outdatedChecks = outdatedChecks(session.contents, changed);

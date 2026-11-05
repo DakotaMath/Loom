@@ -5,6 +5,8 @@ qt_add_library(LoomAppLib STATIC
     AppSettings.h
     BottomPanel.cpp
     BottomPanel.h
+    ChecksPanel.cpp
+    ChecksPanel.h
     EditBuffer.cpp
     EditBuffer.h
     FilePage.cpp

@@ -8,6 +8,7 @@
 
 #include "LoomCore/Checks.h"
 #include "LoomCore/Problem.h"
+#include "LoomCore/StatusChanges.h"
 
 #include <QByteArray>
 #include <QDate>
@@ -73,6 +74,12 @@ struct ChangeResult {
     /// `outdates-checks` or with `dakota-only` for a click it needs first, would outdate), in path
     /// order.
     QStringList outdatedChecks;
+    /// The statuses the change makes (when done) or would make (when refused with
+    /// `outdates-checks`, or with `dakota-only` for a click it needs first), so a confirmation
+    /// dialog can name them (Specs/m2-statements-review.md, "What LoomCore gains in M2": "Every
+    /// ChangeResult … carries the status changes the edit makes or would make"). Empty otherwise,
+    /// and when no status changes.
+    std::vector<StatusChange> statusChanges;
 };
 
 /// `loom new-tag <tag> --kind … --title …`: declares a tag in `loom.toml`.
@@ -189,11 +196,12 @@ struct NewCheck {
 struct CheckAdded {
     /// How it went; `id` is the proof's ID and `path` its check history.
     ChangeResult change;
-    /// The entry appended.
+    /// The entry appended; or, refused only for want of Dakota's confirmation (`dakota-only`), the
+    /// entry that would be, so his dialog can say what it does.
     Check check;
     /// The entry's index in the history (from 0).
     qsizetype index = 0;
-    /// What the proof's checks say now, with the entry.
+    /// What the proof's checks say now, with the entry (or would say, as for `check`).
     CheckStanding standing;
 };
 
@@ -201,10 +209,11 @@ struct CheckAdded {
 /// "Adding a check"). Loom computes the fingerprint itself; the date is `options.now`. The entry
 /// is appended as text, so the entries before it stay byte for byte as they were: nothing ever
 /// edits, reorders or deletes an entry.
-/// Refuses: a check by Dakota without `dakotaConfirmed`; an agent's check without a fingerprint;
-/// a fingerprint that isn't the proof's now ("changed after you read it"); and anything that
-/// would add an error to the history (`check-by`, `check-verdict`, `check-changes-missing`,
-/// `check-record-missing`, …).
+/// Refuses, in this order: an agent's check without a fingerprint; a fingerprint that isn't the
+/// proof's now ("changed after you read it"); anything that would add an error to the history
+/// (`check-by`, `check-verdict`, `check-changes-missing`, `check-record-missing`, …); and last, a
+/// check by Dakota without `dakotaConfirmed` (`dakota-only`), whose refusal carries the status
+/// changes, entry and standing the check would give, for the app's confirmation dialog.
 /// @param typed           The proof's ID as typed.
 /// @param dakotaConfirmed True only when Dakota confirmed at a terminal; stands for his click.
 /// @returns The result. Side effects: writes `Proofs/<tag>/<proof-id>.checks.toml`.
@@ -213,10 +222,11 @@ CheckAdded addCheck(const QString& root, const QString& typed, const NewCheck& r
 
 /// `loom refute <id> --by <proof-id>`: marks a statement false (Specs/m1-core.md, "Statements",
 /// D4): sets `refuted_by` to the proof and `refuted_on` to today, the date of Dakota's click.
-/// Refuses: without `dakotaConfirmed`; a stub (it is cited from its paper, not stated here); a
-/// statement already refuted; an ID or proof that names nothing; one of the statement's own
-/// proofs (`refuted-self`: a refutation proves another statement); and anything that adds an error
-/// (`refuted-no-status` for a definition, …). Neither field is in a fingerprint, so no check is
+/// Refuses: a stub (it is cited from its paper, not stated here); a statement already refuted; an
+/// ID or proof that names nothing; one of the statement's own proofs (`refuted-self`: a
+/// refutation proves another statement); anything that adds an error (`refuted-no-status` for a
+/// definition, …); and last, without `dakotaConfirmed` (`dakota-only`), a refusal that carries the
+/// status changes the refutation would make, for the app's confirmation dialog. Neither field is in a fingerprint, so no check is
 /// outdated. A stub's refusal names its paper by key.
 /// @param typed           The statement's ID as typed.
 /// @param typedProof      The refuting proof's ID as typed.

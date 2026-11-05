@@ -396,8 +396,9 @@ CheckAdded addCheck(const QString& root, const QString& typed, const NewCheck& r
     };
     Check check;
     check.by = request.by;
-    if (check.byDakota() && !dakotaConfirmed)
-        return refuse("dakota-only", QStringLiteral("Only Dakota can add Dakota's checks, and only at a terminal."));
+    // Dakota's confirmation is asked for last, by commit(), after every rule has passed: so he is
+    // asked only about a check that can be recorded, and the refusal carries what it would do
+    // (the status changes, and the entry and standing below) for the app's dialog.
 
     // Loom computes the fingerprint itself, never on the caller's word (Specs/m1-core.md, "Adding a check").
     QString why;
@@ -458,8 +459,10 @@ CheckAdded addCheck(const QString& root, const QString& typed, const NewCheck& r
         changed.checks.push_back({path, *id, reading});
 
     result.id = *id;
-    result = commit(*session, path, bytes, changed, QStringLiteral("add the check"), result);
-    if (result.outcome == ChangeOutcome::Done) {
+    const bool needsDakota = check.byDakota() && !dakotaConfirmed;
+    result = commit(*session, path, bytes, changed, QStringLiteral("add the check"), result, std::nullopt,
+                    needsDakota ? QStringLiteral("add Dakota's checks") : QString());
+    if (result.outcome == ChangeOutcome::Done || (needsDakota && result.code == u"dakota-only")) {
         added.check = check;
         added.index = static_cast<qsizetype>(reading.checks.size()) - 1;
         added.standing = standingOf(reading.checks, *current);
@@ -510,8 +513,8 @@ ChangeResult refuteStatement(const QString& root, const QString& typed, const QS
         return result;
     const ProjectContents& contents = session->contents;
 
-    if (!dakotaConfirmed)
-        return dakotaOnly(QStringLiteral("refute a statement"));
+    // Dakota's confirmation is asked for last, by commit(), so the refusal without it carries the
+    // status changes the refutation would make, for the app's dialog.
     const ChangeResult checked = checkRefutation(contents, typed, typedProof);
     if (checked.outcome != ChangeOutcome::Done)
         return checked;
@@ -530,7 +533,8 @@ ChangeResult refuteStatement(const QString& root, const QString& typed, const QS
     }
     result.id = tag;
     result.changed = QStringList{QStringLiteral("refuted_by"), QStringLiteral("refuted_on")};
-    return commit(*session, file.path, bytes, changed, QStringLiteral("refute %1").arg(tag), result);
+    return commit(*session, file.path, bytes, changed, QStringLiteral("refute %1").arg(tag), result, std::nullopt,
+                  dakotaConfirmed ? QString() : QStringLiteral("refute a statement"));
 }
 
 } // namespace loom

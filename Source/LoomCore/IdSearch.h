@@ -37,6 +37,9 @@ enum class IdField {
     StatedUsing,  ///< A statement's `stated_using` (and the list's search): statements and stubs.
     SupersededBy, ///< A statement's `superseded_by`: statements.
     Cite,         ///< `\cite`: paper keys.
+    /// **Refute…** (Specs/m2-statements-review.md, "Status and checks in the tab"): proofs of
+    /// other statements than `self`, the statement being refuted.
+    RefutedBy,
 };
 
 /// One thing the search can find, with the words it is found by (folded: lower case, no accents).
