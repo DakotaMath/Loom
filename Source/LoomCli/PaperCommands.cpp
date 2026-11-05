@@ -32,12 +32,16 @@ void tellRenamed(const std::vector<loom::PaperRenamed>& renamed, const QString& 
     }
 }
 
-/// Says on stderr which of the draft's verified and checked dates Loom set to false (S16), so a
-/// person sees it whatever stdout is for. Says nothing when there are none.
+/// Says on stderr which of the draft's verified and checked dates Loom took out (S16, A16), so a
+/// person sees it whatever stdout is for: the entry's own `verified` is left out, since it can't
+/// be `false`, and the others are set to false. Says nothing when there are none.
 void tellUnclicked(const QStringList& unclicked)
 {
-    if (!unclicked.isEmpty())
-        write(stderr, QStringLiteral("Set to false, since verifying is Dakota's click: %1.\n").arg(listed(unclicked)));
+    QStringList setToFalse = unclicked;
+    if (setToFalse.removeAll(QStringLiteral("verified")) > 0)
+        write(stderr, QStringLiteral("Left out `verified`, since verifying is Dakota's click.\n"));
+    if (!setToFalse.isEmpty())
+        write(stderr, QStringLiteral("Set to false, since verifying is Dakota's click: %1.\n").arg(listed(setToFalse)));
 }
 
 /// `path` as the file system resolves it, absolute with `/`: every link, junction and 8.3 short
@@ -162,9 +166,11 @@ int runBuildBib(const QStringList& args, const Context& context)
                         .arg(jsonString(severity), jsonString(problem.code), jsonString(problem.file),
                              QString::number(problem.line), jsonString(problem.message));
     }
+    // A person is told where the file is; the JSON gives the project path, as every other
+    // subcommand's `path` does (A23).
     const QString path = QDir::toNativeSeparators(QDir(root).filePath(built.change.path));
     return report(built.change, context.json, path,
-                  QStringLiteral("\"path\": %1, \"problems\": [%2]").arg(jsonString(path), problems.join(u", ")));
+                  QStringLiteral("\"path\": %1, \"problems\": [%2]").arg(jsonString(built.change.path), problems.join(u", ")));
 }
 
 } // namespace cli

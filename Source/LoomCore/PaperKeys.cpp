@@ -273,4 +273,24 @@ KeyAssignment assignKey(const Paper& paper, const std::vector<KeyedPaper>& other
     return result;
 }
 
+KeyAssignment ruleKey(const Paper& paper, const std::vector<KeyedPaper>& others)
+{
+    const KeyBase base = baseKey(paper);
+    if (base.key.isEmpty())
+        return {{}, {}, base.problem};
+    if (keyFollowsRule(paper.key, base.key, others))
+        return {paper.key, {}, {}};
+    // Step 4 and A3: `MacDonald24a` whose surname is now spelt `Macdonald` keeps its `a`.
+    if (const char letter = letterAfter(paper.key, base.key)) {
+        const QString recased = base.key + QChar::fromLatin1(letter);
+        const bool held = std::any_of(others.begin(), others.end(), [&](const KeyedPaper& other) {
+            return sameKey(other.key, recased)
+                || std::any_of(other.aliases.begin(), other.aliases.end(), [&](const QString& alias) { return sameKey(alias, recased); });
+        });
+        if (!held)
+            return {recased, {}, {}};
+    }
+    return assignKey(paper, others);
+}
+
 } // namespace loom

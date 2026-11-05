@@ -289,18 +289,24 @@ std::vector<GitEntry> parseListing(const QByteArray& output, bool index)
     return entries;
 }
 
+/// The arguments readObjects() runs git with, to name the command in a message.
+const QStringList catFileBatch = {QStringLiteral("cat-file"), QStringLiteral("--batch")};
+
 /// Reads objects with `git cat-file --batch`.
 /// @param shas The objects' names.
+/// @param run  Set to what git did, so a caller can tell a git that didn't finish in time
+///             (`git-timeout`, A16) from one that failed; untouched if there was nothing to read.
 /// @returns Their contents, in the same order, or nothing if git failed or any is missing.
 /// Side effects: runs git in `root`.
-std::optional<std::vector<QByteArray>> readObjects(const GitTool& git, const QString& root, const std::vector<QByteArray>& shas)
+std::optional<std::vector<QByteArray>> readObjects(const GitTool& git, const QString& root, const std::vector<QByteArray>& shas,
+                                                   GitRun& run)
 {
     if (shas.empty())
         return std::vector<QByteArray>();
     QByteArray input;
     for (const QByteArray& sha : shas)
         input += sha + '\n';
-    const GitRun run = runGit(git, {QStringLiteral("cat-file"), QStringLiteral("--batch")}, root, 120'000, input);
+    run = runGit(git, catFileBatch, root, std::nullopt, input);
     if (!run.ok())
         return std::nullopt;
     // Each object is `<sha> <type> <size>\n<contents>\n`.
@@ -385,7 +391,10 @@ std::optional<ValidationResult> copyIndex(const GitTool& git, const QString& roo
             empty.push_back(entry.path);
         }
     }
-    const std::optional<std::vector<QByteArray>> objects = readObjects(git, root, shas);
+    GitRun catFile;
+    const std::optional<std::vector<QByteArray>> objects = readObjects(git, root, shas, catFile);
+    if (catFile.timedOut)
+        return gitDidntRun(catFile, catFileBatch);
     if (!objects)
         return cantWork("git-failed", QStringLiteral("Loom couldn't read the staged files from git (`git cat-file --batch` failed)."));
     for (std::size_t i = 0; i < wanted.size(); ++i) {
@@ -445,7 +454,10 @@ std::optional<ValidationResult> readCommit(const GitTool& git, const QString& ro
     }
 
     // Paths relative to the project, limited to it, as `ls-files` gives them.
-    const GitRun tree = runGit(git, {QStringLiteral("ls-tree"), QStringLiteral("-r"), QStringLiteral("-z"), QStringLiteral("HEAD")}, root);
+    const QStringList listTree = {QStringLiteral("ls-tree"), QStringLiteral("-r"), QStringLiteral("-z"), QStringLiteral("HEAD")};
+    const GitRun tree = runGit(git, listTree, root);
+    if (tree.timedOut) // A16: `git-timeout`, as for every git command.
+        return gitDidntRun(tree, listTree);
     if (!tree.ok())
         return cantWork("git-failed", QStringLiteral("Loom couldn't list the last commit's files: `git ls-tree` failed (%1).").arg(whyGitFailed(tree)));
     CommittedFiles files;
@@ -458,7 +470,10 @@ std::optional<ValidationResult> readCommit(const GitTool& git, const QString& ro
             shas.push_back(entry.sha);
         }
     }
-    const std::optional<std::vector<QByteArray>> objects = readObjects(git, root, shas);
+    GitRun catFile;
+    const std::optional<std::vector<QByteArray>> objects = readObjects(git, root, shas, catFile);
+    if (catFile.timedOut)
+        return gitDidntRun(catFile, catFileBatch);
     if (!objects)
         return cantWork("git-failed", QStringLiteral("Loom couldn't read the last commit's check histories (`git cat-file --batch` failed)."));
     for (std::size_t i = 0; i < checksPaths.size(); ++i)

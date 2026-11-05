@@ -421,8 +421,36 @@ TEST_CASE("Empty values in a stub are missing values", "[papers][stubs]")
         {"missing-field", 2, "`kind` is empty; every stub needs one."},
         {"missing-field", 4, "`extracted_from` is empty; every stub needs one."},
         {"missing-field", 5, "`extracted_by` is empty; every stub needs one."},
-        {"missing-field", 9, "`locators.arxiv-v1.at` is empty; every locator says where the result is."},
+        {"missing-field", 9, "`locators.arxiv-v1.at` is empty; every locator needs one."},
     });
+}
+
+TEST_CASE("A value of only whitespace in paper.toml or a stub is an empty value (A21)", "[papers][stubs]")
+{
+    // Specs/m1-core.md, "Front matter", A21. Free text (`summary`, a name's `first`) is unaffected.
+    QByteArray paper = smithJones24();
+    REQUIRE(paper.contains("doi = { value = \"10.0000/jea.2024.17\""));
+    paper.replace("doi = { value = \"10.0000/jea.2024.17\"", "doi = { value = \"  \"");
+    const qsizetype title = paper.indexOf("title = { value = \"");
+    REQUIRE(title >= 0);
+    const qsizetype titleEnd = paper.indexOf('"', title + 19);
+    paper.replace(title + 19, titleEnd - title - 19, "   ");
+    const loom::PaperReading reading = loom::readPaper(paper, paperPath);
+    std::vector<P> problems = problemsOf(reading.problems);
+    CHECK(std::count(problems.begin(), problems.end(), P{"missing-field", 34, "`published.doi` is empty; give it a value or leave it out."}) == 1);
+    CHECK(std::count_if(problems.begin(), problems.end(), [](const P& p) {
+              return std::get<2>(p) == "`work.title` is empty; every paper needs one.";
+          }) == 1);
+    CHECK(std::none_of(problems.begin(), problems.end(), [](const P& p) { return std::get<0>(p) == "wrong-type"; }));
+
+    QByteArray stub = stubToml("7RT2", "theorem", false);
+    const qsizetype at = stub.indexOf("at = \"");
+    REQUIRE(at >= 0);
+    stub.replace(at + 6, stub.indexOf('"', at + 6) - at - 6, "  ");
+    const std::vector<P> stubProblems = problemsOf(loom::readStub(stub, "Papers/SmithJones24/Statements/7RT2.toml").problems);
+    REQUIRE(stubProblems.size() == 1);
+    CHECK(std::get<0>(stubProblems[0]) == "missing-field");
+    CHECK(std::get<2>(stubProblems[0]).endsWith(".at` is empty; every locator needs one."));
 }
 
 TEST_CASE("A stub's extracted_by can't end in a line break", "[papers][stubs]")

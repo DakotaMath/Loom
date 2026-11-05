@@ -249,6 +249,27 @@ TEST_CASE("An unlettered key beside a lettered one of its base is warned about, 
     CHECK(problemsOf(project).empty());
 }
 
+TEST_CASE("A lettered key that differs from the rule's only in case keeps its letter", "[papers][contents]")
+{
+    // The key rule, step 4: a lettered key never changes; A3: case doesn't make another key. So
+    // the warning and rekey fix only the spelling and keep the letter, which says the paper was
+    // posted first. That is a case-only rename, which keeps no old key (A17).
+    const ProjectFixture project;
+    project.write("Papers/smithjones24a/paper.toml", smithJonesAs("smithjones24a", "2023-05-01", "An earlier paper"));
+    project.write("Papers/SmithJones24b/paper.toml", smithJonesAs("SmithJones24b", "2024-01-10", "A later paper"));
+    CHECK(problemsOf(project) == std::vector<P>{
+        {"Papers/smithjones24a/paper.toml", "paper-key-rule", 1,
+         "By the key rule this paper's key is `SmithJones24a`, not `smithjones24a`. Run `loom rekey smithjones24a`.", false}});
+
+    Options o;
+    const loom::PaperChange result = loom::rekeyPaper(project.root, "smithjones24a", o.options);
+    REQUIRE(result.change.outcome == loom::ChangeOutcome::Done);
+    CHECK(result.change.id == "SmithJones24a");
+    CHECK(loomtest::filesUnder(project.root + "/Papers") == QStringList{"SmithJones24a/paper.toml", "SmithJones24b/paper.toml"});
+    CHECK(project.read("Papers/SmithJones24a/paper.toml") == smithJonesAs("SmithJones24a", "2023-05-01", "An earlier paper"));
+    CHECK(problemsOf(project).empty());
+}
+
 TEST_CASE("Keys and old keys that differ only in case are duplicates (A3)", "[papers][contents]")
 {
     const ProjectFixture project;

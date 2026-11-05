@@ -334,6 +334,49 @@ TEST_CASE("Empty values in a check history are missing values", "[checks]")
         "missing-field 7 `note` is empty; give it a value or leave it out."});
 }
 
+TEST_CASE("A value of only whitespace in a check history is an empty value (A21)", "[checks]")
+{
+    // `changes` is free text and keeps its own rule.
+    const QByteArray bytes =
+        "[[checks]]\n"                                // 1
+        "by = \"  \"\n"                               // 2
+        "date = 2026-11-04T16:03:09-06:00\n"          // 3
+        "fingerprint = \"3c8e1f0a92d4\"\n"            // 4
+        "verdict = \"pass\"\n"                        // 5
+        "note = \" \"\n";                             // 6
+    const QStringList problems = describe(loom::readChecks(bytes, "x.checks.toml").problems);
+    CHECK(problems.contains("missing-field 2 `by` is empty; every check needs one."));
+    CHECK(problems.contains("missing-field 6 `note` is empty; give it a value or leave it out."));
+}
+
+TEST_CASE("A check dated in the year 0 is reported, and never counts (A9)", "[checks]")
+{
+    // Specs/m1-core.md, "Front matter", A9: TOML allows the year 0 and Qt's dates don't. A check
+    // Loom can't date has no place in the date order, so it can't be the newest of anything.
+    const QByteArray bytes =
+        "[[checks]]\n"                                 // 1
+        "by = \"agent:claude\"\n"                      // 2
+        "date = 0000-01-01T10:00:00Z\n"                // 3
+        "fingerprint = \"3c8e1f0a92d4\"\n"             // 4
+        "verdict = \"pass\"\n"                         // 5
+        "record = \"Records/2026-11/job-0142.md\"\n"   // 6
+        "\n"                                           // 7
+        "[[checks]]\n"                                 // 8
+        "by = \"dakota\"\n"                            // 9
+        "date = 2026-11-04T16:03:09-06:00\n"           // 10
+        "fingerprint = \"3c8e1f0a92d4\"\n"             // 11
+        "verdict = \"pass\"\n";                        // 12
+    const loom::ChecksReading reading = loom::readChecks(bytes, "x.checks.toml");
+    CHECK(describe(reading.problems) == QStringList{
+        "bad-value 3 `date` can't be `0000-01-01`; it must be one of the dates from 0001-01-01 on."});
+    CHECK_FALSE(reading.lossless);
+    REQUIRE(reading.checks.size() == 2);
+    const loom::CheckStanding standing = loom::standingOf(reading.checks, QStringLiteral("3c8e1f0a92d4"));
+    CHECK_FALSE(standing.countingAgent);
+    CHECK(standing.countingDakota == 1);
+    CHECK_FALSE(standing.checked);
+}
+
 TEST_CASE("A check's author can't end in a line break", "[checks]")
 {
     // Qt's `$` also matches before a final line break, so the rule must be anchored at the very end.

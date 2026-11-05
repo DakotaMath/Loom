@@ -30,9 +30,10 @@ struct EntryReader {
     bool lost = false;
 
     /// Reads a string field. A missing required field is reported at the entry's header. Every
-    /// string field here needs text: an empty one is `missing-field` (Specs/m1-core.md, "Front
-    /// matter", A2), except `changes`, which is free text and keeps its `wrong-type`; a blank
-    /// one is `wrong-type`. Either is kept as written, so rewriting loses nothing.
+    /// string field here needs text: an empty one, or one of only whitespace, is `missing-field`
+    /// (Specs/m1-core.md, "Front matter", A2, A21), except `changes`, which is free text and
+    /// keeps its `wrong-type` for either. The value is kept as written, so rewriting the entry
+    /// (merge-checks) changes nothing in it.
     /// @param required Whether every check needs the field (`by`, `fingerprint`, `verdict`).
     /// @returns The value as written; empty if absent or not a string.
     QString string(const char* key, bool required)
@@ -53,7 +54,7 @@ struct EntryReader {
         }
         const Need need = field == u"changes" ? Need::Optional : required ? Need::Required : Need::Naming;
         if (checker.reportEmpty(field, *node, QStringLiteral("check"), need))
-            return {}; // An empty value is kept as empty.
+            return fromUtf8(value->get()); // Kept as written: entries are never changed.
         if (value->get().empty())
             checker.wrongType(field, QStringLiteral("a non-empty string"), *node);
         else if (isBlankBody(QByteArray::fromStdString(value->get())))
@@ -89,7 +90,14 @@ struct EntryReader {
             return {};
         }
         const toml::date_time& dt = value->get();
-        return QDateTime(QDate(dt.date.year, dt.date.month, dt.date.day), QTime(dt.time.hour, dt.time.minute, dt.time.second),
+        // A9: a date Loom can't hold (the year 0) is `bad-value` in any file. It is dropped like
+        // any `date` Loom can't read, so the check is undated and never counts (standingOf()).
+        const QDate day = checker.date(field, dt.date, checker.line(*node));
+        if (!day.isValid()) {
+            lost = true;
+            return {};
+        }
+        return QDateTime(day, QTime(dt.time.hour, dt.time.minute, dt.time.second),
                          QTimeZone::fromSecondsAheadOfUtc(dt.offset->minutes * 60));
     }
 
@@ -287,6 +295,10 @@ CheckStanding standingOf(const std::vector<Check>& checks, const QString& curren
     for (qsizetype i = 0; i < static_cast<qsizetype>(checks.size()); ++i) {
         const Check& check = checks[i];
         if (currentFingerprint.isEmpty() || check.fingerprint != currentFingerprint) // Rule 4: only matching checks count.
+            continue;
+        // A check without a date Loom can read (missing, wrong or the year 0, which validation
+        // reports) has no place in the date order, so it is never the newest of anything (A22).
+        if (!check.date.isValid())
             continue;
         if (check.byAgent() && newer(i, standing.countingAgent))
             standing.countingAgent = i;

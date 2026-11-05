@@ -2,6 +2,8 @@
 
 #include <QProcess>
 
+#include <algorithm>
+
 namespace loom {
 
 GitRun runGit(const GitTool& git, const QStringList& arguments, const QString& workingDir, std::optional<int> timeoutMs,
@@ -37,12 +39,27 @@ GitRun runGit(const GitTool& git, const QStringList& arguments, const QString& w
     return run;
 }
 
+QString gitCommand(const QStringList& arguments)
+{
+    QString command = QStringLiteral("git");
+    for (QString argument : arguments) {
+        const bool quoted = argument.isEmpty() || argument.contains(u'"')
+                         || std::any_of(argument.cbegin(), argument.cend(), [](QChar c) { return c.isSpace(); });
+        if (quoted) {
+            argument.replace(QStringLiteral("\""), QStringLiteral("\\\""));
+            argument = u'"' + argument + u'"';
+        }
+        command += u' ' + argument;
+    }
+    return command;
+}
+
 QString gitDidntRunMessage(const GitRun& run, const QStringList& arguments)
 {
     if (run.timedOut)
-        return QStringLiteral("`git %1` didn't finish in time, so Loom stopped it. Git may be waiting for something, such as "
+        return QStringLiteral("`%1` didn't finish in time, so Loom stopped it. Git may be waiting for something, such as "
                               "another git's lock or a slow network drive; try again.")
-            .arg(arguments.value(0));
+            .arg(gitCommand(arguments));
     return QStringLiteral("Loom needs git, and `git` didn't run. Install Git for Windows and try again.");
 }
 

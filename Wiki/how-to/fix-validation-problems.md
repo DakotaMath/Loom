@@ -7,7 +7,7 @@ tags: [validate, problems, pre-commit, checks, m1]
 
 > **Summary:** Run `loom validate` (or read what the refused commit printed), find each problem's code in the tables below, and fix the file and line it names; errors block a commit, warnings don't. With `--json` every problem carries its `code`. After a clone, run `loom install-hooks` so commits are checked.
 
-**Last verified:** 2026-11-04 · commit c688de4
+**Last verified:** 2026-11-04 · commit 5626c88
 
 ## Before you start
 - A Loom project (a folder with `loom.toml`), and `loom` on `PATH`.
@@ -33,9 +33,9 @@ tags: [validate, problems, pre-commit, checks, m1]
 | `front-matter-unclosed` | error | The front matter opens with `+++` but no later line is exactly `+++`. | Add the closing `+++` line (nothing else on it, no spaces). |
 | `body-empty` | error | Nothing but whitespace below the front matter. | Write the statement or proof. A failed proof's body says what was tried and why it breaks. |
 | `unknown-field` | error | A field Loom doesn't know, usually a misspelling. The message lists the right fields. | Rename it to the field you meant, or remove it; front matter holds data, prose goes in the body. |
-| `missing-field` | error | A required field is absent (or a paper folder has no `paper.toml`), or a field is present but empty (`refuted_by = ""`): an empty value counts as a missing one, except in free text such as `differences` or a name's `first`. | Add the field, or give the empty one a value. An optional field with nothing to say is left out, never written as `""`. The spec's tables (`Specs/m1-core.md`) say what each file needs. |
+| `missing-field` | error | A required field is absent (or a paper folder has no `paper.toml`), or a field is present but empty (`refuted_by = ""`, or only spaces: `title = "   "`): an empty value counts as a missing one, except in free text such as `differences` or a name's `first`. | Add the field, or give the empty one a value. An optional field with nothing to say is left out, never written as `""`. The spec's tables (`Specs/m1-core.md`) say what each file needs. |
 | `wrong-type` | error | A field has the wrong kind of value: a string where a list belongs, a date without a time, … | Write the value in the type the message names, e.g. `tags = ["model-system"]`, `date = 2026-11-04T15:32:10-06:00`. |
-| `bad-value` | error | The value isn't one of the allowed ones (a misspelt `kind`, `level`, …). | Use one of the values the message lists. |
+| `bad-value` | error | The value isn't one of the allowed ones (a misspelt `kind`, `level`, …), or a date is in the year 0 (`0000-01-01`), which Loom can't hold; a check dated so never counts. | Use one of the values the message lists. |
 | `bad-path` | error | A path in a file is absolute, uses `\`, or has `..`; or a file resolves outside the project through a link. | Write it project-relative with `/` (`Records/2026-11/job-0142.md`). Move linked files into the project. |
 | `stray-file` | error | A file sits where Loom keeps only its own files (`Statements/`, a proof folder, a paper folder). | Move it out (notes belong in a paper's `notes.md` or outside these folders), or delete an editor backup like `4KX7.tex~`. |
 | `unknown-top-level` | warning | A file or folder at the top of the project that no milestone uses. Names later milestones use (`Threads/`, `Tasks/`, …) are skipped. | Move it into a folder Loom knows, or remove it. Scratch files belong in `.loom/`, which git ignores. |
@@ -56,7 +56,7 @@ tags: [validate, problems, pre-commit, checks, m1]
 | `id-syntax` | error | Something written where a tag belongs isn't one: tags are four characters from `0–9` and `A–Z` without I, L, O, U. | Write the tag the message suggests (an `O` is usually `0`, an `I` or `L` is `1`). |
 | `id-mismatch` | error | A file's `id` isn't its file name. | Make them agree. Tags never change after merging, so usually the `id` field is the one to fix. |
 | `id-duplicate` | error | Two files claim the same tag. | Keep the tag on one; the other needs its own (create it again with `loom new-statement`). |
-| `alias-invalid` | error | An alias has whitespace or `{}[],"`, looks like a tag, or is over 100 characters. | Change or drop it. |
+| `alias-invalid` | error | An alias has whitespace or `{}[],"`, looks like a tag (four characters the command line would read as one, such as `thm1` or `eq12`), or is over 100 characters. | Change or drop it. |
 | `alias-duplicate` | error | Two statements or stubs share an alias (or an alias is also a tag). In `paper.toml`: an old key in `aliases` is the paper's own key, or another of its old keys, in another case (`smithjones24` beside `key = "SmithJones24"`); keys compare ignoring case. | Keep it on the one it names. In `paper.toml`, delete the extra spelling from `aliases`. |
 | `ref-unknown` | error | Front matter names a tag no statement or stub has. | Fix the tag, or create the statement first. |
 | `ref-alias` | error in front matter, warning in a body | An old name (alias) is used where the tag should be. | Write the tag the message gives. In a body it still works, but the tag is clearer. |
@@ -114,7 +114,7 @@ tags: [validate, problems, pre-commit, checks, m1]
 | Code | Sev. | What it means | How to fix |
 | --- | --- | --- | --- |
 | `paper-key-mismatch` | error | `key` in `paper.toml` isn't the folder's name. | `loom rekey <key>` renames both together. |
-| `paper-key-rule` | warning | The key isn't what the key rule gives (the authors or the year changed), or it is unlettered while another paper has the same base with a letter (`SmithJones24` beside `SmithJones24a`: a shared base is always lettered). Also when no key can be made: the paper has no year, or a surname has no Latin letters. | `loom rekey <key>`. The old key stays as an alias, so `\cite` keeps working. With no key to make, add the year, or write the surname in Latin letters as the paper prints it. |
+| `paper-key-rule` | warning | The key isn't what the key rule gives (the authors or the year changed), or it is unlettered while another paper has the same base with a letter (`SmithJones24` beside `SmithJones24a`: a shared base is always lettered), or it differs from the rule's key only in case (`smithjones24a`; `rekey` keeps the letter and fixes the spelling). Also when no key can be made: the paper has no year, or a surname has no Latin letters. | `loom rekey <key>`. The old key stays as an alias, so `\cite` keeps working. With no key to make, add the year, or write the surname in Latin letters as the paper prints it. |
 | `paper-key-duplicate` | error | Two papers share a key or an old key. Keys that differ only in case (`MacDonald20`, `Macdonald20`) are the same key: they're folder names, and Windows ignores case in those. | Rekey one of them; `loom new-paper` letters shared keys (`SmithJones24a`, `…b`) itself. |
 | `field-shape` | error | A bibliographic value isn't `{ value = …, source = "…", verified = … }`. | Write it in that shape, with where it came from. |
 | `field-source` | error | A field has no `source`, or its source is a link that isn't `https://` (an old `http://` MathSciNet link). | Add the URL or the path inside `local/` it was read from; give an `https://` link. |

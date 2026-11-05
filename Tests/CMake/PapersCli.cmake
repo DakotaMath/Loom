@@ -82,7 +82,7 @@ expect_match("build-bib warns" "${last_stderr}" "refs\\.bib uses unverified fiel
 file(READ "${PROJECT}/.loom/build/refs.bib" bib)
 expect_match("refs.bib" "${bib}" "^@article{SmithJones24a,\n.*\n}\n\n@article{SmithJones24b,\n")
 run_loom_in("${PROJECT}/TeX" 0 out build-bib --out refs.bib --json)
-expect_match("build-bib --json" "${out}" "^{\"path\": \".*refs\\.bib\", \"problems\": \\[{\"severity\": \"warning\", \"code\": \"bib-unverified\"")
+expect_match("build-bib --json" "${out}" "^{\"path\": \"TeX/refs\\.bib\", \"problems\": \\[{\"severity\": \"warning\", \"code\": \"bib-unverified\"")
 if(NOT EXISTS "${PROJECT}/TeX/refs.bib")
     message(FATAL_ERROR "build-bib --out didn't write TeX/refs.bib")
 endif()
@@ -112,12 +112,13 @@ file(REMOVE_RECURSE "${PROJECT}/Papers/SmithJones24c")
 # click, and says which (S16).
 string(REGEX REPLACE "(\njournal = [^\n]*verified = )false" "\\12026-11-03" verifying "${third}")
 string(REGEX REPLACE "(\nvolume = [^\n]*verified = )false" "\\12026-11-03" verifying "${verifying}")
-file(WRITE "${WORK}/verifying.toml" "${verifying}")
+# The entry's own `verified` can't be false, so it is left out.
+file(WRITE "${WORK}/verifying.toml" "verified = 2026-11-03\n${verifying}")
 run_loom(0 out new-paper "${WORK}/verifying.toml" --json)
 expect_match("new-paper --json, dates set to false" "${out}"
-    "^{\"key\": \"SmithJones24c\", \"path\": \"Papers/SmithJones24c/paper.toml\", \"renamed\": \\[\\], \"unclicked\": \\[\"published\\.journal\", \"published\\.volume\"\\]}\n$")
+    "^{\"key\": \"SmithJones24c\", \"path\": \"Papers/SmithJones24c/paper.toml\", \"renamed\": \\[\\], \"unclicked\": \\[\"verified\", \"published\\.journal\", \"published\\.volume\"\\]}\n$")
 expect_match("new-paper says so" "${last_stderr}"
-    "^Set to false, since verifying is Dakota's click: published\\.journal and published\\.volume\\.\n$")
+    "^Left out `verified`, since verifying is Dakota's click\\.\nSet to false, since verifying is Dakota's click: published\\.journal and published\\.volume\\.\n$")
 file(READ "${PROJECT}/Papers/SmithJones24c/paper.toml" text)
 if(text MATCHES "2026-11-03")
     message(FATAL_ERROR "new-paper kept a verified date: ${text}")

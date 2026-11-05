@@ -66,8 +66,8 @@ std::optional<QString> normaliseProofId(const QString& typed);
 
 /// Why a string can't be an alias, if it can't (Specs/m1-core.md, "IDs", "Aliases": "1–100
 /// characters with no whitespace and none of `{}[],"`, isn't shaped like a tag"). "Shaped like a
-/// tag" means normaliseTag() reads it as one, so an alias can never be mistaken for a tag typed
-/// on the command line.
+/// tag" means normaliseTag() reads it as one (A19), so an alias can never be mistaken for a tag
+/// typed on the command line.
 /// @returns An empty string if `alias` is fine, else the reason as the `alias-invalid` message
 ///          words it (e.g. `it is shaped like a tag`). Uniqueness is checked across the project
 ///          elsewhere. No side effects.

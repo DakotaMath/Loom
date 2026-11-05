@@ -373,17 +373,16 @@ struct PaperReader {
         w.authors = read("authors", ValueKind::Names, false);
         w.editors = read("editors", ValueKind::Names, false);
 
-        // Both are required, so an empty one is a missing one (Specs/m1-core.md, "Front matter", A2).
+        // Both are required, so an empty one, or one of only whitespace, is a missing one
+        // (Specs/m1-core.md, "Front matter", A2, A21).
         const QString paperThing = QStringLiteral("paper");
-        if (w.type && w.typeName().isEmpty())
+        if (w.type && isBlank(w.typeName()))
             checker().emptyField(QStringLiteral("work.type"), w.type->line, paperThing, true);
         else if (w.type && !workTypes.contains(w.typeName()))
             checker().add("bad-value", w.type->line,
                 QStringLiteral("`work.type` can't be `%1`; it must be one of %2.").arg(w.typeName(), quotedList(workTypes)));
-        if (w.title && w.title->text().isEmpty())
+        if (w.title && isBlank(w.title->text()))
             checker().emptyField(QStringLiteral("work.title"), w.title->line, paperThing, true);
-        else if (w.title && w.title->text().trimmed().isEmpty())
-            checker().add("wrong-type", w.title->line, QStringLiteral("`work.title` should be a non-empty string, not an empty string."));
 
         // At least one author, or for a book with no authors, at least one editor.
         // A list Loom couldn't read was reported already.
@@ -463,9 +462,10 @@ struct PaperReader {
             std::optional<PaperField> value = field(node, label, valueKindOf(fieldName));
             if (!value)
                 continue;
-            // A2: an empty value is a missing one. The field is kept, so a rewrite keeps its source.
+            // A2: an empty value is a missing one, and A21: so is one of only whitespace. The field
+            // is kept, so a rewrite keeps its source.
             const QString text = value->text();
-            if (std::holds_alternative<QString>(value->value) && text.isEmpty())
+            if (std::holds_alternative<QString>(value->value) && isBlank(text))
                 checker().emptyField(label, value->line, QString(), false);
             else if (v.kind == u"arxiv")
                 arxivForm(fieldName, label, text, value->line);
@@ -969,15 +969,16 @@ StubReading readStub(const QByteArray& bytes, const QString& path)
             locator.version = version;
             locator.line = line;
             const toml::node* at = entry->get("at");
-            if (!at)
-                r.checker.add("missing-field", line, QStringLiteral("`%1.at` is missing; every locator says where the result is.").arg(field));
-            else if (at->is_string() && at->as_string()->get().empty()) // Specs/m1-core.md, "Front matter", A2.
-                r.checker.add("missing-field", r.checker.line(*at),
-                    QStringLiteral("`%1.at` is empty; every locator says where the result is.").arg(field));
-            else if (!at->is_string()) {
-                r.checker.wrongType(field + QStringLiteral(".at"), QStringLiteral("a string"), *at);
+            const QString atField = field + QStringLiteral(".at");
+            const QString locatorThing = QStringLiteral("locator");
+            if (!at) {
+                r.checker.missingField(atField, line, locatorThing);
+            } else if (!at->is_string()) {
+                r.checker.wrongType(atField, QStringLiteral("a string"), *at);
                 r.lost = true;
-            } else {
+            } else if (!r.checker.reportEmpty(atField, *at, locatorThing, Need::Required)) {
+                // An empty `at`, or one of only whitespace, was reported above (Specs/m1-core.md,
+                // "Front matter", A2, A8, A21).
                 locator.at = fromUtf8(at->as_string()->get());
             }
             const toml::node* checked = entry->get("checked_against_pdf");

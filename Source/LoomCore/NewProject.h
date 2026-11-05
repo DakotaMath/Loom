@@ -54,10 +54,12 @@ struct NewProjectResult {
 /// In order: refuses a non-empty folder, a file, or a folder whose parent doesn't exist; checks
 /// that `git` and `git lfs` run, that git knows the user's name and email, as the new repo
 /// will see them, and that the global or system config doesn't set `core.hooksPath` (A1: the
-/// hooks would land in a folder other repositories share); only then creates the folder, writes `loom.toml` and the project kit (with LF
-/// line endings, `gitignore` and `gitattributes` renamed to `.gitignore` and `.gitattributes`),
-/// runs `git init -b main`, `git lfs install --local` and installHooks(), and commits everything
-/// as `Create project <name>`, through the pre-commit hook like any commit.
+/// hooks would land in a folder other repositories share); only then (A20) creates the folder,
+/// writes `loom.toml` and the project kit (with LF line endings, `gitignore` and `gitattributes`
+/// renamed to `.gitignore` and `.gitattributes`), runs `git init -b main`, `git lfs install
+/// --local` and installHooks(), and commits everything as `Create project <name>`, through the
+/// pre-commit hook like any commit. A git that doesn't finish in time, at any step, is
+/// `git-timeout` (A16).
 /// @param request What to create.
 /// @returns The outcome. On any failure after the checks, what was made is left in place and
 ///          `message` says which step failed.
