@@ -204,6 +204,31 @@ public:
     /// The app's settings.
     AppSettings* settings() const { return m_settings; }
 
+    // Dakota's clicks (Specs/m2-statements-review.md, "Dakota's clicks" and "Status and checks in
+    // the tab"). Each asks LoomCore first, without his confirmation, what the click would do, shows
+    // that in its dialog, and only if he confirms runs it again confirmed. Cancelling writes nothing.
+    /// **Pass**, **Needs changes…** or **Fail** on a proof's page: records Dakota's check of the
+    /// version on disk, as `loom add-check --by dakota` would, after his confirmation.
+    /// @param verdict `pass`, `needs-changes` or `fail`.
+    void recordCheck(const QString& proofId, const QString& verdict);
+    /// **Mark this proof failed…**: sets the level to `failed` through the same dialog and save as
+    /// choosing it in the level list.
+    void markProofFailed(const QString& proofId);
+    /// **Refute…** on the open statement's menu: the ID picker for a proof of another statement,
+    /// then the dialog, then `refuteStatement`.
+    void refute();
+    /// Opens a check's `record` or `note` read-only, as plain text, in a window of its own; a
+    /// missing file says so. @param path Project-relative.
+    void openProjectText(const QString& path);
+    /// Why Dakota's check buttons on a proof's page can't be used now, or empty if they can: unsaved
+    /// edits (*"Save first: a check records the version on disk."*), or a snapshot older than the
+    /// file on disk.
+    QString checkBlocker(const QString& proofId) const;
+    /// Why **Refute…** can't be used on a statement now, or empty.
+    QString refuteBlocker(const QString& tag) const;
+    /// Whether one of Dakota's clicks on this statement or proof is running ("Busy controls").
+    bool clickRunning(const QString& id) const { return m_clicks.contains(id); }
+
 signals:
     /// Whether any file has unsaved edits changed (the side bar's dot).
     void unsavedChanged(bool any);
@@ -218,6 +243,9 @@ signals:
     void saveFailed(const QString& path);
     /// A statement or proof was created and opened.
     void created(const QString& id);
+    /// One of Dakota's clicks on a statement or proof finished: `written` if LoomCore wrote it
+    /// (false when cancelled or refused).
+    void clickFinished(const QString& id, bool written);
 
 protected:
     /// Back and forward from the mouse's buttons, anywhere in the tab.
@@ -266,6 +294,16 @@ private:
     void openFormDraft(const Draft& draft);
     /// Runs a New statement's or New proof's Create.
     void createFromDialog(bool statement);
+    /// Re-reads, on every page, whether Dakota's clicks can be used now.
+    void refreshClicks();
+    /// Records Dakota's check, confirmed, and reports how it went.
+    void addConfirmedCheck(const QString& proofId, const NewCheck& request);
+    /// Asks LoomCore what refuting `tag` by `proofId` would do, then Dakota, then refutes.
+    void refuteWith(const QString& tag, const QString& proofId);
+    /// Tells Dakota why LoomCore refused one of his clicks; for `proof-changed`, offers the new version.
+    void showClickRefusal(const ChangeResult& result, const QString& id);
+    /// Ends a click: no longer busy; re-reads the project if it wrote; clickFinished().
+    void endClick(const QString& id, bool written);
 
     AppSettings* m_settings;
     Lane* m_lane;
@@ -297,6 +335,7 @@ private:
     bool m_unsaved = false;
     QString m_pendingOpen;  ///< A statement or proof just created, opened when the snapshot has it.
     QSet<QString> m_saving; ///< Files with a save on the lane: one at a time ("Busy controls").
+    QSet<QString> m_clicks; ///< Statements and proofs with one of Dakota's clicks running.
     QPointer<NewStatementDialog> m_newStatement;
     QPointer<NewProofDialog> m_newProof;
     std::shared_ptr<const ProjectSnapshot> m_dialogSnapshot; ///< Kept alive for an open form.

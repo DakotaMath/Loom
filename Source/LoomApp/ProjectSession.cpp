@@ -20,14 +20,23 @@ ProjectSession::ProjectSession(std::unique_ptr<QLockFile> lock, std::shared_ptr<
     m_gather.setSingleShot(true);
     m_gather.setInterval(gatherMs);
     connect(&m_gather, &QTimer::timeout, this, &ProjectSession::read);
-    connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, &ProjectSession::refresh);
-    connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, &ProjectSession::refresh);
+    connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this, &ProjectSession::changeSeen);
+    connect(&m_watcher, &QFileSystemWatcher::fileChanged, this, &ProjectSession::changeSeen);
     watchFolders();
 }
 
 void ProjectSession::refresh()
 {
     m_gather.start();
+}
+
+void ProjectSession::changeSeen()
+{
+    const bool was = stale();
+    m_changeSeen = true;
+    refresh();
+    if (!was)
+        emit becameStale();
 }
 
 void ProjectSession::read()
@@ -37,9 +46,13 @@ void ProjectSession::read()
         return;
     }
     m_reading = true;
+    // This read covers every change seen so far; one seen while it runs waits for the next.
+    m_readingSeen = m_changeSeen;
+    m_changeSeen = false;
     m_lane->run(this, [root = m_root, git = m_git()] { return std::make_shared<const ProjectSnapshot>(readSnapshot(root, git)); },
                 [this](std::shared_ptr<const ProjectSnapshot> snapshot) {
                     m_reading = false;
+                    m_readingSeen = false;
                     m_snapshot = std::move(snapshot);
                     watchFolders();
                     emit snapshotChanged();

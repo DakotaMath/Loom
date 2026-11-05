@@ -87,6 +87,7 @@ QString pickerPrompt(IdField field)
     case IdField::StatedUsing: return QStringLiteral("Stated using: a statement or paper result by ID, title, tag or text");
     case IdField::SupersededBy: return QStringLiteral("Superseded by: a statement by ID, title, tag or text");
     case IdField::Cite: return QStringLiteral("A paper: its key, authors or title");
+    case IdField::RefutedBy: return QStringLiteral("Refuted by: a proof of another statement, by ID, title or text");
     }
     return {};
 }

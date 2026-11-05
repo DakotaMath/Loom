@@ -7,10 +7,11 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 -->
 # Status
 
-**Updated:** 2026-11-05 · main at 7f08250
+**Updated:** 2026-11-05 · main at b31e71e
 **Current milestone:** M1, the core, is **done**: built, reviewed, fixed and re-reviewed; all 279 `ctest` tests pass on Windows. **M2** (statements and review) is being built from its approved spec
 
 ## Done recently
+- #37 IDs with their titles and the ID picker: PR #48 merged (2026-11-05) ([log](Wiki/logs/2026-11/2026-11-05-id-picker.md)).
 - #36 compiling, the PDF pane, SyncTeX, the Problems panel and Output: PR #47 merged (2026-11-05) ([log](Wiki/logs/2026-11/2026-11-05-compile-pdf.md)).
 - #35 the Statements tab: PR #46 merged (2026-11-05) ([log](Wiki/logs/2026-11/2026-11-05-statements-editor.md)).
 - #34 the app shell: PR #45 merged (2026-11-05) ([log](Wiki/logs/2026-11/2026-11-05-app-shell.md)).
@@ -27,15 +28,15 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 - The M1 spec (2026-11-03): [`Specs/m1-core.md`](Specs/m1-core.md), approved by Dakota (PR #11).
 
 ## In progress
-- #37 IDs with their titles and the ID picker (search and previews in `LoomCore`; picker, titles, hover cards, Ctrl+click): PR #48, waiting for Dakota's review; 355 tests pass on Windows, 1 skipped ([log](Wiki/logs/2026-11/2026-11-05-id-picker.md)).
+- #38 status, checks and Dakota's clicks (status changes in `LoomCore`, approved beyond the issue's scope; the check history, Pass/Needs changes/Fail, Mark failed, Refute): PR #49, waiting for Dakota's review; 362 tests pass on Windows, 1 skipped ([log](Wiki/logs/2026-11/2026-11-05-checks-panel.md)).
 
 ## Next up
 Milestones M0–M12 are on GitHub; M3 is dropped and its milestone closed. M1's issues (#2–#9) are all closed.
-- M2's build issues #38–#40 (#41 is now M4's): #38 (status, checks and Dakota's clicks) next; all use the demo project and `Tests/Support/DemoProject` from PR #44.
+- M2's build issues #39–#40 (#41 is now M4's): #39 (git in `LoomCore` and the git panel) next, then #40 (Review, which can reuse `statusChanges()`); both use the demo project and `Tests/Support/DemoProject` from PR #44.
 - M1 follow-ups, for M2 or later: see "Follow-ups" in `Reviews/M1/FINAL.md` on `m1/review` (`\cite` of an old key is settled by the M2 spec, E3).
 
 ## Waiting on Dakota
-- Review PR #48 (#37, the ID picker) and run its Windows check; the Windows checks of PRs #46 and #47, if not done.
+- Review PR #49 (#38, checks and clicks) and run its Windows check; the Windows checks of PRs #46–#48, if not done.
 - Close the M1 milestone on GitHub.
 - The Windows checks listed in PRs #21–#30.
 

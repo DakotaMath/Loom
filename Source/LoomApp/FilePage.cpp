@@ -1,6 +1,7 @@
 #include "LoomApp/FilePage.h"
 
 #include "LoomApp/AppSettings.h"
+#include "LoomApp/ChecksPanel.h"
 #include "LoomApp/EditBuffer.h"
 #include "LoomApp/FindBar.h"
 #include "LoomApp/HeaderForms.h"
@@ -10,11 +11,14 @@
 
 #include "LoomCore/FrontMatter.h"
 
+#include <QAction>
 #include <QButtonGroup>
 #include <QFileInfo>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMenu>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QScrollBar>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -29,6 +33,26 @@ namespace {
 QString shortTime(const QDateTime& when)
 {
     return when.isValid() ? when.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm")) : QStringLiteral("an earlier session");
+}
+
+/// A status sentence as HTML, each ID in it that names a statement, proof or stub of the snapshot
+/// made a link (`href` the ID), so a click opens it.
+QString linkIds(const QString& sentence, const ProjectSnapshot* snapshot)
+{
+    // Tags are four letters and digits, proof IDs a tag, a dot and small letters
+    // (Specs/m1-core.md, "IDs"); a word of that shape that names nothing stays text.
+    static const QRegularExpression id(QStringLiteral("\\b[0-9A-Z]{4}(?:\\.[a-z]+)?\\b"));
+    QString html;
+    qsizetype at = 0;
+    for (QRegularExpressionMatchIterator it = id.globalMatch(sentence); it.hasNext();) {
+        const QRegularExpressionMatch match = it.next();
+        const QString word = match.captured();
+        const bool names = snapshot && (snapshot->graph.statement(word) || snapshot->graph.proof(word));
+        html += sentence.mid(at, match.capturedStart() - at).toHtmlEscaped();
+        html += names ? QStringLiteral("<a href=\"%1\">%1</a>").arg(word) : word;
+        at = match.capturedEnd();
+    }
+    return html + sentence.mid(at).toHtmlEscaped();
 }
 
 /// The file line a body starts on in `text`, or 0 if it has no front matter.
@@ -65,7 +89,11 @@ FilePage::FilePage(StatementsPage* owner, const QString& tag, const QString& pro
     m_heading->setTextInteractionFlags(Qt::TextSelectableByMouse);
     m_status->setObjectName(QStringLiteral("statusLine"));
     m_status->setWordWrap(true);
-    m_status->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_status->setTextFormat(Qt::RichText);
+    // "IDs in it are links" (Specs/m2-statements-review.md, "Status and checks in the tab").
+    m_status->setTextInteractionFlags(Qt::TextBrowserInteraction);
+    m_status->setOpenExternalLinks(false);
+    connect(m_status, &QLabel::linkActivated, owner, &StatementsPage::openId);
     m_raw->setObjectName(QStringLiteral("raw"));
     m_raw->setText(QStringLiteral("Raw"));
     m_raw->setCheckable(true);
@@ -109,6 +137,22 @@ FilePage::FilePage(StatementsPage* owner, const QString& tag, const QString& pro
     headingRow->addWidget(m_showProof);
     headingRow->addWidget(m_showVerbose);
     headingRow->addWidget(m_raw);
+    if (!proofPage) {
+        // The statement page's menu (Specs/m2-statements-review.md: "Refute… (on the statement
+        // page's menu)").
+        m_menu = new QToolButton(this);
+        m_menu->setObjectName(QStringLiteral("statementMenu"));
+        m_menu->setText(QStringLiteral("More"));
+        m_menu->setToolTip(QStringLiteral("More about this statement"));
+        m_menu->setPopupMode(QToolButton::InstantPopup);
+        auto* menu = new QMenu(m_menu);
+        m_refute = menu->addAction(QStringLiteral("Refute…"));
+        m_refute->setObjectName(QStringLiteral("refute"));
+        menu->setToolTipsVisible(true);
+        m_menu->setMenu(menu);
+        connect(m_refute, &QAction::triggered, owner, &StatementsPage::refute);
+        headingRow->addWidget(m_menu);
+    }
 
     auto* header = new QWidget(this);
     header->setObjectName(QStringLiteral("pageHeader"));
@@ -124,6 +168,11 @@ FilePage::FilePage(StatementsPage* owner, const QString& tag, const QString& pro
         connect(m_proofForm, &ProofForm::failedChosen, this, [this](const QString& previous) { m_owner->chooseFailed(m_main, previous); });
         connect(m_proofForm, &ProofForm::addPremiseRequested, this, [this] { m_owner->addReference(m_main, QStringLiteral("premises")); });
         connect(m_proofForm, &ProofForm::idClicked, m_owner, &StatementsPage::openId);
+        m_checks = new ChecksPanel(header);
+        headerLayout->addWidget(m_checks);
+        connect(m_checks, &ChecksPanel::checkRequested, this, [this](const QString& verdict) { m_owner->recordCheck(m_proofId, verdict); });
+        connect(m_checks, &ChecksPanel::markFailedRequested, this, [this] { m_owner->markProofFailed(m_proofId); });
+        connect(m_checks, &ChecksPanel::fileRequested, m_owner, &StatementsPage::openProjectText);
     } else {
         m_statementForm = new StatementForm(header);
         headerLayout->addWidget(m_statementForm);
@@ -222,7 +271,7 @@ void FilePage::refresh()
                                  : QStringLiteral("<span style='color:%1'>%2</span> ")
                                        .arg(statusColor(node->status, dark).name(), statusHollow(node->status) ? QStringLiteral("○") : QStringLiteral("●"));
         m_status->setText(mark + (node->explanation.isEmpty() ? QStringLiteral("<b>%1</b>").arg(statusWord(node->status).toHtmlEscaped())
-                                                              : node->explanation.toHtmlEscaped()));
+                                                              : linkIds(node->explanation, snap)));
     } else {
         m_status->setText(QStringLiteral("Loom can't read this statement's front matter, so it has no status yet."));
     }
@@ -241,6 +290,14 @@ void FilePage::refresh()
         if (m_main && !m_main->raw())
             m_proofForm->setBuffer(m_main, snap);
     }
+    if (m_checks) {
+        // The checks are the proof's, not its verbose version's.
+        m_checks->setVisible(!m_showingVerbose && m_main);
+        m_checks->setProof(snap, m_proofId);
+    }
+    if (m_menu)
+        m_menu->setVisible(!stub && m_main);
+    refreshClicks();
     m_writeVerbose->setVisible(m_showingVerbose && !m_verbose);
     m_editor->setVisible(shown != nullptr);
     m_editor->setReadOnly(!shown || shown->readOnly());
@@ -248,6 +305,20 @@ void FilePage::refresh()
     loadEditor();
     refreshBars();
     markProblems();
+}
+
+void FilePage::refreshClicks()
+{
+    if (m_checks)
+        m_checks->setBlocked(m_owner->checkBlocker(m_proofId), m_owner->clickRunning(m_proofId));
+    if (m_refute) {
+        const QString blocked = m_owner->refuteBlocker(m_tag);
+        const bool busy = m_owner->clickRunning(m_tag);
+        m_refute->setEnabled(blocked.isEmpty() && !busy);
+        m_refute->setToolTip(busy ? QStringLiteral("Recording your last click…")
+                                  : blocked.isEmpty() ? QStringLiteral("Mark this statement false, refuted by a proof of another statement")
+                                                      : blocked);
+    }
 }
 
 void FilePage::loadEditor()

@@ -64,3 +64,17 @@ if(WIN32)
     set_tests_properties(IdTests PROPERTIES
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${LOOM_QT_BIN_DIR}")
 endif()
+
+# ClicksTests: status, checks and Dakota's clicks in the Statements tab (#38). No TeX.
+qt_add_executable(ClicksTests
+    ClicksTests.cpp)
+target_link_libraries(ClicksTests PRIVATE LoomAppLib LoomTestSupport Qt6::Test)
+target_compile_definitions(ClicksTests PRIVATE
+    LOOM_SCREENSHOTS="${PROJECT_BINARY_DIR}/screenshots")
+loom_set_compiler_options(ClicksTests)
+add_test(NAME ClicksTests COMMAND ClicksTests)
+add_dependencies(ClicksTests loom)
+if(WIN32)
+    set_tests_properties(ClicksTests PROPERTIES
+        ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${LOOM_QT_BIN_DIR}")
+endif()

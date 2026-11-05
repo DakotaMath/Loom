@@ -12,12 +12,14 @@
 #include <functional>
 #include <tuple>
 
+class QAction;
 class QLabel;
 class QToolButton;
 class QVBoxLayout;
 
 namespace loom {
 
+class ChecksPanel;
 class EditBuffer;
 class FindBar;
 class LatexEditor;
@@ -55,6 +57,9 @@ public:
     /// Re-reads the buffers and the latest snapshot into the header, form, bars and editor,
     /// keeping the editor's cursor and scroll when its text is unchanged.
     void refresh();
+    /// Re-reads only whether Dakota's clicks can be used now (his check buttons, Refute…): cheap
+    /// enough for every keystroke, since unsaved edits disable them.
+    void refreshClicks();
     /// Shows a short note in a bar (e.g. why raw mode can't be left), until the next refresh() that
     /// clears it.
     void showNote(const QString& note);
@@ -71,6 +76,13 @@ public:
     QToolButton* rawToggle() const { return m_raw; }
     QToolButton* proofToggle() const { return m_showProof; }
     QToolButton* verboseToggle() const { return m_showVerbose; }
+    /// The status line: the mark, the word and LoomCore's sentence, its IDs links.
+    QLabel* statusLine() const { return m_status; }
+    /// A proof page's checks; null on the statement page.
+    ChecksPanel* checksPanel() const { return m_checks; }
+    /// The statement page's menu (hidden for a paper stub), and its **Refute…**; null on a proof page.
+    QToolButton* statementMenu() const { return m_menu; }
+    QAction* refuteAction() const { return m_refute; }
     /// The bar with this object name (`recoveryBar`, `outsideBar`, `refusalBar`, `staleBar`,
     /// `noteBar`, `stubBar`), or null.
     QWidget* bar(const QString& name) const;
@@ -105,6 +117,9 @@ private:
     QVBoxLayout* m_barsLayout;
     StatementForm* m_statementForm = nullptr;
     ProofForm* m_proofForm = nullptr;
+    ChecksPanel* m_checks = nullptr;
+    QToolButton* m_menu = nullptr;
+    QAction* m_refute = nullptr;
     FindBar* m_findBar;
     LatexEditor* m_editor;
     QWidget* m_writeVerbose;

@@ -91,6 +91,8 @@ ChangeResult dakotaOnly(const QString& what);
 /// @param needsDakota   What only Dakota can do that this change does unconfirmed (e.g. `mark a
 ///                      proof failed`); empty when it needs no click or he gave it. Its refusal
 ///                      carries the checks the change would outdate as well.
+/// The result carries the status changes the change makes, or, refused for Dakota's click or for
+/// outdated checks, would make (statusChanges()), so the dialog asking for the click can name them.
 /// @returns The result. Side effects: writes the file when nothing refuses it.
 ChangeResult commit(Session& session, const QString& path, const QByteArray& bytes, const ProjectContents& changed,
                     const QString& what, ChangeResult result, const std::optional<QStringList>& outdateChecks = std::nullopt,
