@@ -61,6 +61,17 @@ QProcessEnvironment gitEnvironment(QProcessEnvironment environment)
 
 } // namespace
 
+QString gitLfsMissingMessage()
+{
+    return QStringLiteral("Loom needs Git LFS, and `git lfs` didn't run. Git for Windows includes it; reinstall Git with LFS ticked.");
+}
+
+QString gitIdentityMissingMessage()
+{
+    return QStringLiteral("Git doesn't know your name and email yet, so Loom can't make the first commit. "
+                          "Run `git config --global user.name \"…\"` and `git config --global user.email …`, then try again.");
+}
+
 NewProjectResult createProject(const NewProjectRequest& request)
 {
     const QString path = QDir::cleanPath(QFileInfo(request.folder).absoluteFilePath());
@@ -98,9 +109,7 @@ NewProjectResult createProject(const NewProjectRequest& request)
     const QStringList lfsVersion = {QStringLiteral("lfs"), QStringLiteral("version")};
     if (const GitRun run = runGit(git, lfsVersion, runIn); !run.ok())
         return run.timedOut ? timedOut(run, lfsVersion)
-                            : failure(NewProjectOutcome::CantWork, "git-lfs-missing",
-                                  QStringLiteral("Loom needs Git LFS, and `git lfs` didn't run. Git for Windows includes it; "
-                                                 "reinstall Git with LFS ticked."), path);
+                            : failure(NewProjectOutcome::CantWork, "git-lfs-missing", gitLfsMissingMessage(), path);
 
     // Ask for the identity the new repository will see: pointing GIT_DIR at its (not yet
     // existing) .git folder makes git read the system and global config only, never the config
@@ -113,9 +122,7 @@ NewProjectResult createProject(const NewProjectRequest& request)
         if (run.timedOut)
             return timedOut(run, get);
         if (!run.ok() || run.output.trimmed().isEmpty())
-            return failure(NewProjectOutcome::CantWork, "git-identity-missing",
-                QStringLiteral("Git doesn't know your name and email yet, so Loom can't make the first commit. "
-                               "Run `git config --global user.name \"…\"` and `git config --global user.email …`, then try again."), path);
+            return failure(NewProjectOutcome::CantWork, "git-identity-missing", gitIdentityMissingMessage(), path);
     }
 
     // A1: with core.hooksPath in the global (or system) config, `git lfs install --local` and the

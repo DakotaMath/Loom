@@ -620,11 +620,17 @@ ValidationResult validateProject(const ValidationRequest& request)
     const ProjectContents& contents = loading.contents;
 
     std::optional<CommittedFiles> committed;
-    if (std::optional<ValidationResult> failed = readCommit(request.git, root, committed))
-        return *failed;
+    QString commitSkipped;
+    if (std::optional<ValidationResult> failed = readCommit(request.git, root, committed)) {
+        if (!request.commitOptional || request.staged)
+            return *failed;
+        committed.reset();
+        commitSkipped = failed->message;
+    }
 
     ValidationResult result;
     result.outcome = ValidationOutcome::Checked;
+    result.commitSkipped = commitSkipped;
     std::vector<Problem>& problems = result.problems;
     const auto take = [&](const std::vector<Problem>& more) { problems.insert(problems.end(), more.begin(), more.end()); };
     take(project.problems);

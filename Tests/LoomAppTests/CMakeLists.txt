@@ -1,10 +1,18 @@
 # LoomAppTests: Qt Test tests for the UI. CI on Linux runs them with QT_QPA_PLATFORM=offscreen.
 qt_add_executable(LoomAppTests
     MainWindowTests.cpp)
-target_link_libraries(LoomAppTests PRIVATE LoomAppLib Qt6::Test)
+target_link_libraries(LoomAppTests PRIVATE LoomAppLib LoomTestSupport Qt6::Test)
+target_compile_definitions(LoomAppTests PRIVATE
+    # The demo project, for the test that opens a copy of it outside git.
+    LOOM_DEMO_PROJECT="${PROJECT_SOURCE_DIR}/Tests/Projects/Demo"
+    # Pictures of the main screens (Specs/m2-statements-review.md, "Testing the UI": "UI tests save
+    # the main screens to build/<preset>/screenshots/<test>.png").
+    LOOM_SCREENSHOTS="${PROJECT_BINARY_DIR}/screenshots")
 loom_set_compiler_options(LoomAppTests)
 
 add_test(NAME LoomAppTests COMMAND LoomAppTests)
+# Opening a project runs git, and creating one runs the commit guard, which needs `loom`.
+add_dependencies(LoomAppTests loom)
 if(WIN32)
     # Qt finds its platform plugin next to the Qt6Core.dll it loaded, so this is enough.
     set_tests_properties(LoomAppTests PROPERTIES

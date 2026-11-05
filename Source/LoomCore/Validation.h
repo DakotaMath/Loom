@@ -31,6 +31,11 @@ struct ValidationRequest {
     /// `GIT_INDEX_FILE` must reach `git ls-files`, since `git commit <paths>` stages into a
     /// temporary index.
     GitTool git;
+    /// For the app (Specs/m2-statements-review.md, "Opening a folder": a project that isn't in a
+    /// git repository, or whose git isn't found, still opens): if git can't read the last commit,
+    /// whatever the reason, skip the checks against it rather than fail, and say why in
+    /// ValidationResult::commitSkipped. `loom validate` leaves it off. Ignored with `staged`.
+    bool commitOptional = false;
 };
 
 /// How validating went.
@@ -49,6 +54,9 @@ struct ValidationResult {
     QString message;
     /// Every problem, sorted with sortProblems(): errors first, then warnings, each in file order.
     std::vector<Problem> problems;
+    /// With ValidationRequest::commitOptional: why the checks against the last commit were
+    /// skipped (git's failure message), or empty if they ran or there was no commit to compare with.
+    QString commitSkipped;
 
     /// How many problems are errors. No side effects.
     int errors() const;
