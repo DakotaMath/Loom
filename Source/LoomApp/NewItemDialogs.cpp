@@ -10,12 +10,14 @@
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFormLayout>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QShortcut>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -69,6 +71,42 @@ QStringList idsFromField(const QString& text)
     return text.split(separators, Qt::SkipEmptyParts);
 }
 
+namespace {
+
+/// A field of IDs with a + beside it that opens the ID picker; Ctrl+Space in the field does too
+/// (Specs/m2-statements-review.md, "IDs in the editor").
+/// @returns The row's widget; `button` is set to the +.
+QWidget* withPicker(QLineEdit* field, QToolButton*& button, QWidget* parent)
+{
+    auto* row = new QWidget(parent);
+    auto* layout = new QHBoxLayout(row);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(4);
+    button = new QToolButton(row);
+    button->setObjectName(field->objectName() + QStringLiteral("Picker"));
+    button->setText(QStringLiteral("+"));
+    button->setToolTip(QStringLiteral("Choose from the project (Ctrl+Space)"));
+    layout->addWidget(field, 1);
+    layout->addWidget(button);
+    auto* shortcut = new QShortcut(QKeySequence(QKeyCombination(Qt::ControlModifier, Qt::Key_Space)), field);
+    shortcut->setContext(Qt::WidgetShortcut);
+    QObject::connect(shortcut, &QShortcut::activated, button, &QToolButton::click);
+    return row;
+}
+
+/// Adds an ID to a field of IDs, after a comma, unless it is there already.
+void appendTo(QLineEdit* field, const QString& id)
+{
+    QStringList ids = idsFromField(field->text());
+    if (ids.contains(id))
+        return;
+    ids << id;
+    field->setText(ids.join(QStringLiteral(", ")));
+}
+
+} // namespace
+
+
 NewStatementDialog::NewStatementDialog(const ProjectSnapshot* snapshot, QWidget* parent)
     : QDialog(parent)
     , m_snapshot(snapshot)
@@ -101,7 +139,7 @@ NewStatementDialog::NewStatementDialog(const ProjectSnapshot* snapshot, QWidget*
     form->addRow(QStringLiteral("Kind"), m_kind);
     form->addRow(QStringLiteral("Title"), m_title);
     form->addRow(QStringLiteral("Tags"), m_tags);
-    form->addRow(QStringLiteral("Stated using"), m_statedUsing);
+    form->addRow(QStringLiteral("Stated using"), withPicker(m_statedUsing, m_pickStatedUsing, this));
     auto* layout = new QVBoxLayout(this);
     layout->addLayout(form);
     layout->addWidget(new QLabel(QStringLiteral("The statement (LaTeX):"), this));
@@ -114,6 +152,7 @@ NewStatementDialog::NewStatementDialog(const ProjectSnapshot* snapshot, QWidget*
     connect(m_kind, &QComboBox::currentIndexChanged, this, &NewStatementDialog::changed);
     connect(m_title, &QLineEdit::textEdited, this, &NewStatementDialog::changed);
     connect(m_statedUsing, &QLineEdit::textEdited, this, &NewStatementDialog::changed);
+    connect(m_pickStatedUsing, &QToolButton::clicked, this, &NewStatementDialog::pickStatedUsing);
     connect(m_body, &LatexEditor::textChanged, this, &NewStatementDialog::changed);
     const auto showTags = [this] { m_tags->setItems(m_tagItems, [](const QString& t) { return std::pair<QString, QIcon>{t, QIcon()}; }); };
     connect(m_tags, &ChipList::addClicked, this, [this, showTags] {
@@ -233,7 +272,7 @@ NewProofDialog::NewProofDialog(const QString& tag, QWidget* parent)
 
     auto* form = new QFormLayout;
     form->addRow(QStringLiteral("Level"), m_level);
-    form->addRow(QStringLiteral("Premises"), m_premises);
+    form->addRow(QStringLiteral("Premises"), withPicker(m_premises, m_pickPremises, this));
     auto* layout = new QVBoxLayout(this);
     layout->addLayout(form);
     layout->addWidget(new QLabel(QStringLiteral("The proof (LaTeX):"), this));
@@ -245,6 +284,7 @@ NewProofDialog::NewProofDialog(const QString& tag, QWidget* parent)
     connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
     connect(m_level, &QComboBox::currentIndexChanged, this, &NewProofDialog::changed);
     connect(m_premises, &QLineEdit::textEdited, this, &NewProofDialog::changed);
+    connect(m_pickPremises, &QToolButton::clicked, this, &NewProofDialog::pickPremises);
     connect(m_body, &LatexEditor::textChanged, this, &NewProofDialog::changed);
 }
 
@@ -304,6 +344,18 @@ void NewProofDialog::reject()
 bool NewProofDialog::hasText() const
 {
     return !m_body->text().trimmed().isEmpty() || !m_premises->text().trimmed().isEmpty();
+}
+
+void NewStatementDialog::addStatedUsing(const QString& id)
+{
+    appendTo(m_statedUsing, id);
+    emit changed();
+}
+
+void NewProofDialog::addPremise(const QString& id)
+{
+    appendTo(m_premises, id);
+    emit changed();
 }
 
 } // namespace loom

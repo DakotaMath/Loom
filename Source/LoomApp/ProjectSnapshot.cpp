@@ -140,6 +140,7 @@ ProjectSnapshot readSnapshot(const QString& root, const GitTool& git)
     } else if (snapshot.unreadable.isEmpty()) {
         snapshot.unreadable = loading.message;
     }
+    snapshot.ids = std::make_shared<const IdIndex>(snapshot.contents, snapshot.graph);
 
     ValidationRequest request;
     request.root = snapshot.root;

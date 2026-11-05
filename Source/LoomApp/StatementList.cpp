@@ -1,5 +1,6 @@
 #include "LoomApp/StatementList.h"
 
+#include "LoomApp/IdTools.h"
 #include "LoomApp/LineIcons.h"
 #include "LoomApp/StatusMarks.h"
 
@@ -28,12 +29,13 @@ const QString statementRow = QStringLiteral("statement");
 const QString proofRow = QStringLiteral("proof");
 const QString stubRow = QStringLiteral("stub");
 const QString paperRow = QStringLiteral("paper");
+/// The ID a hover over a row shows the card of (none for a paper's row).
+constexpr int idRole = Qt::UserRole + 2;
 
 /// The words of a text, folded.
 QStringList wordsOf(const QString& text)
 {
-    static const QRegularExpression separators(QStringLiteral("[^\\p{L}\\p{N}]+"));
-    return foldForSearch(text).split(separators, Qt::SkipEmptyParts);
+    return loom::searchWords(text);
 }
 
 /// The rank of a status in the spec's order (proved first), for sorting by status.
@@ -45,25 +47,9 @@ int statusRank(Status status)
 
 } // namespace
 
-QString foldForSearch(const QString& text)
-{
-    const QString decomposed = text.normalized(QString::NormalizationForm_D);
-    QString folded;
-    folded.reserve(decomposed.size());
-    for (const QChar c : decomposed) {
-        if (c.category() != QChar::Mark_NonSpacing)
-            folded += c.toLower();
-    }
-    return folded;
-}
-
 bool matchesQuery(const QString& query, const QStringList& words)
 {
-    for (const QString& wanted : wordsOf(query)) {
-        if (std::none_of(words.begin(), words.end(), [&](const QString& word) { return word.startsWith(wanted); }))
-            return false;
-    }
-    return true;
+    return matchesEveryWord(query, words);
 }
 
 QStringList searchWords(const ProjectSnapshot& snapshot, const QString& tag)
@@ -112,6 +98,7 @@ StatementList::StatementList(QWidget* parent)
     m_new->setText(QStringLiteral("+"));
     m_new->setToolTip(QStringLiteral("New statement (Ctrl+N)"));
     m_tree->setObjectName(QStringLiteral("statementList"));
+    m_tree->setProperty(idRoleProperty, idRole);
     m_tree->setColumnCount(2);
     m_tree->setHeaderHidden(true);
     m_tree->setRootIsDecorated(true);
@@ -291,6 +278,14 @@ void StatementList::rebuild()
     const ProjectSnapshot& snapshot = *m_snapshot;
     const bool dark = darkTheme();
     const QString query = m_search->text();
+    // The ID picker's search (LoomCore's), over statements and stubs.
+    QSet<QString> found;
+    const bool searching = !query.trimmed().isEmpty() && snapshot.ids;
+    if (searching) {
+        for (const IdMatch& match : snapshot.ids->search(query, IdField::StatedUsing))
+            found.insert(match.entry->id);
+    }
+    const auto matches = [&](const QString& id) { return !searching || found.contains(id); };
     QPixmap empty(12, 12);
     empty.fill(Qt::transparent);
     const QIcon blank(empty);
@@ -299,7 +294,7 @@ void StatementList::rebuild()
     for (const StatementNode& node : snapshot.graph.statements) {
         if (!node.paper.isEmpty())
             continue; // Stubs come under their papers, below.
-        if (passesFilters(node) && matchesQuery(query, searchWords(snapshot, node.id)))
+        if (passesFilters(node) && matches(node.id))
             rows.push_back(&node);
     }
     // Statements whose front matter Loom couldn't read aren't in the graph; they still get a row,
@@ -315,7 +310,7 @@ void StatementList::rebuild()
         }
     }
     for (const StatementNode& node : unread) {
-        if (matchesQuery(query, {foldForSearch(node.id)}))
+        if (matches(node.id))
             rows.push_back(&node);
     }
 
@@ -353,6 +348,8 @@ void StatementList::rebuild()
         // A statement without a status gets an empty icon, so its text lines up with the others.
         item->setIcon(0, node->status == Status::None ? blank : statusIcon(node->status, dark));
         item->setToolTip(0, QStringLiteral("%1 · %2\n%3").arg(node->id, node->title, statusWord(node->status)));
+        // In the tab, hovering shows its card instead, which spells out the status too.
+        item->setData(0, idRole, node->id);
         item->setIcon(1, problemIcon({node->path}));
         item->setData(0, Qt::UserRole, node->id);
         item->setData(0, Qt::UserRole + 1, statementRow);
@@ -378,6 +375,7 @@ void StatementList::rebuild()
                                       m_unsaved.contains(file.path) || m_unsaved.contains(verbosePath)));
             child->setData(0, Qt::UserRole, file.id);
             child->setData(0, Qt::UserRole + 1, proofRow);
+            child->setData(0, idRole, file.id);
             child->setIcon(1, problemIcon({file.path, verbosePath, checksPath}));
             if (level == u"failed")
                 child->setForeground(0, palette().brush(QPalette::Disabled, QPalette::Text));
@@ -398,7 +396,7 @@ void StatementList::rebuild()
                 if (stub.paperFolder != paper.folder)
                     continue;
                 const StatementNode* node = snapshot.graph.statement(stub.tag);
-                if (node && (!passesFilters(*node) || !matchesQuery(query, searchWords(snapshot, stub.tag))))
+                if (node && (!passesFilters(*node) || !matches(stub.tag)))
                     continue;
                 auto* child = new QTreeWidgetItem(paperItem);
                 child->setText(0, QStringLiteral("%1 · %2").arg(stub.tag, node ? node->title : QString()));
@@ -407,6 +405,7 @@ void StatementList::rebuild()
                     child->setIcon(0, statusIcon(node->status, dark));
                 child->setData(0, Qt::UserRole, stub.tag);
                 child->setData(0, Qt::UserRole + 1, stubRow);
+                child->setData(0, idRole, stub.tag);
             }
             paperItem->setExpanded(true);
             if (paperItem->childCount() == 0)

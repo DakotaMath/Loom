@@ -130,6 +130,8 @@ FilePage::FilePage(StatementsPage* owner, const QString& tag, const QString& pro
         connect(m_statementForm, &StatementForm::edited, this, [this] { m_owner->bufferEdited(m_main); });
         connect(m_statementForm, &StatementForm::addStatedUsingRequested, this,
                 [this] { m_owner->addReference(m_main, QStringLiteral("statedUsing")); });
+        connect(m_statementForm, &StatementForm::chooseSupersededByRequested, this,
+                [this] { m_owner->addReference(m_main, QStringLiteral("supersededBy")); });
         connect(m_statementForm, &StatementForm::idClicked, m_owner, &StatementsPage::openId);
     }
 

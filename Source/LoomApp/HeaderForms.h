@@ -40,6 +40,9 @@ public:
     QStringList items() const { return m_items; }
     /// Whether + and × are offered.
     void setEditable(bool editable);
+    bool isEditable() const { return m_editable; }
+    /// Whether the chips are IDs: hovering one then shows its card (IdTools). Set before setItems().
+    void setShowsIds(bool ids) { m_showsIds = ids; }
     /// The + button, for menus and tests.
     QToolButton* addButton() const { return m_add; }
 
@@ -54,6 +57,7 @@ private:
     QToolButton* m_add;
     QStringList m_items;
     bool m_editable = true;
+    bool m_showsIds = false;
 };
 
 /// The statement page's form.
@@ -73,15 +77,18 @@ public:
     QLineEdit* title() const { return m_title; }
     ChipList* tags() const { return m_tags; }
     ChipList* statedUsing() const { return m_statedUsing; }
-    QLineEdit* supersededBy() const { return m_supersededBy; }
+    /// Superseded by: at most one chip, chosen with the ID picker.
+    ChipList* supersededBy() const { return m_supersededBy; }
     QPushButton* markVerified() const { return m_markVerified; }
     QLabel* info() const { return m_info; }
 
 signals:
     /// A field changed in the buffer.
     void edited();
-    /// + of `stated using` was clicked: the page asks for an ID.
+    /// + of `stated using` was clicked: the page opens the ID picker.
     void addStatedUsingRequested();
+    /// + of `superseded by` was clicked: the page opens the ID picker.
+    void chooseSupersededByRequested();
     /// An ID chip was clicked.
     void idClicked(const QString& id);
 
@@ -96,7 +103,7 @@ private:
     QLineEdit* m_title;
     ChipList* m_tags;
     ChipList* m_statedUsing;
-    QLineEdit* m_supersededBy;
+    ChipList* m_supersededBy;
     QPushButton* m_markVerified;
     QLabel* m_info;
 };

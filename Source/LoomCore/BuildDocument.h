@@ -68,6 +68,8 @@ struct BuildDocument {
     QString statement;   ///< The tag of the target's statement (the target itself, or what a proof proves).
     BuildMode mode = BuildMode::Alone;
     bool verbose = false;
+    /// A statement's preview (composePreview()), not a build of a target.
+    bool preview = false;
 
     /// `main.tex`, the copies under `src/` and `refs.bib`, in that order. Empty when refused or
     /// when a file can't be read (`build-unreadable`). `loom.sty` isn't here: see loomStyle().
@@ -132,6 +134,19 @@ struct BuildDocument {
 /// @param verbose  Whether proofs show their verbose versions.
 /// @returns The document. Reads the preamble files under `source.root`; writes nothing.
 BuildDocument composeBuild(const BuildSource& source, const QString& typedId, BuildMode mode, bool verbose);
+
+/// Composes a statement's preview, the picture a hover over its ID shows (Specs/m2-statements-review.md,
+/// "IDs in the editor", "Previews": "the statement built alone (without proofs)").
+///
+/// Rules: as composeBuild() in mode *alone*, but without the statement's proofs, without the
+/// `\loomheader` line, with `\pagestyle{empty}` (no page number), and with every `\loomoutside`
+/// title empty: LaTeX doesn't print them, and leaving them out keeps a preview's inputs, and so
+/// its cache, unchanged when another statement is renamed. A stub is refused (`build-stub`: its
+/// preview is its gist, as text); anything but a statement's exact tag is `ref-unknown`.
+/// @param source The project.
+/// @param tag    The statement's tag.
+/// @returns The document, with `preview` set. Reads the preamble files; writes nothing.
+BuildDocument composePreview(const BuildSource& source, const QString& tag);
 
 /// A body's line-preserving copy (Specs/m2-statements-review.md, "The build folder"): `bodyLine −
 /// 1` lines holding only `%` (the front matter's lines), then the body.

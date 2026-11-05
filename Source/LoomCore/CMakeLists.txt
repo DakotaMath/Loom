@@ -32,6 +32,8 @@ add_library(LoomCore STATIC
     Git.h
     Hooks.cpp
     Hooks.h
+    IdSearch.cpp
+    IdSearch.h
     Ids.cpp
     Ids.h
     LatexCommands.cpp

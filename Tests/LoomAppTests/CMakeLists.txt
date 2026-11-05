@@ -49,3 +49,18 @@ if(WIN32)
     set_tests_properties(CompileTests PROPERTIES
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${LOOM_QT_BIN_DIR}")
 endif()
+
+# IdTests: IDs in the editor (#37): the picker, titles beside IDs, hover cards, Ctrl+click. Its
+# preview case builds with TeX and skips without latexmk; the rest need no TeX.
+qt_add_executable(IdTests
+    IdTests.cpp)
+target_link_libraries(IdTests PRIVATE LoomAppLib LoomTestSupport Qt6::Test)
+target_compile_definitions(IdTests PRIVATE
+    LOOM_SCREENSHOTS="${PROJECT_BINARY_DIR}/screenshots")
+loom_set_compiler_options(IdTests)
+add_test(NAME IdTests COMMAND IdTests)
+add_dependencies(IdTests loom)
+if(WIN32)
+    set_tests_properties(IdTests PROPERTIES
+        ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${LOOM_QT_BIN_DIR}")
+endif()

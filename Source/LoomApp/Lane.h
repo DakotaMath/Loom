@@ -36,9 +36,11 @@ public:
     /// @param context The object `done` belongs to.
     /// @param work    Runs on a worker thread; returns the result. Must not touch widgets.
     /// @param done    Takes the result, on the UI thread.
+    /// @param priority Among tasks still waiting, a higher one starts first (QThreadPool's
+    ///                 priority); the app's previews run below 0, so builds Dakota asked for go first.
     /// Side effects: whatever `work` and `done` do; busy() is true until `done` has run.
     template <typename Work, typename Done>
-    void run(QObject* context, Work work, Done done)
+    void run(QObject* context, Work work, Done done, int priority = 0)
     {
         using Result = std::invoke_result_t<Work&>;
         auto result = std::make_shared<std::optional<Result>>();
@@ -51,7 +53,7 @@ public:
                     done(std::move(**result));
                 finish();
             }, Qt::QueuedConnection);
-        });
+        }, priority);
     }
 
     /// Whether any task is queued, running, or waiting for its `done`.
