@@ -22,7 +22,7 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 - The M1 spec (2026-11-03): [`Specs/m1-core.md`](Specs/m1-core.md), approved by Dakota (PR #11).
 
 ## In progress
-- #32 the M2 spec, [`Specs/m2-statements-review.md`](Specs/m2-statements-review.md): written, waiting on Dakota's answers to Q1–Q6 ([log](Wiki/logs/2026-11/2026-11-05-m2-spec.md)).
+- #32 the M2 spec, [`Specs/m2-statements-review.md`](Specs/m2-statements-review.md): PR #42, waiting on Dakota's answers to Q1–Q6 ([log](Wiki/logs/2026-11/2026-11-05-m2-spec.md)).
 
 ## Next up
 Milestones M0–M12 are on GitHub. M1's issues (#2–#9) are all closed.
@@ -30,7 +30,7 @@ Milestones M0–M12 are on GitHub. M1's issues (#2–#9) are all closed.
 - M1 follow-ups, for M2 or later: see "Follow-ups" in `Reviews/M1/FINAL.md` on `m1/review` (`\cite` of an old key is settled by the M2 spec, E3).
 
 ## Waiting on Dakota
-- The M2 spec (#32): answer Q1–Q6 on its PR and approve.
+- PR #42 (the M2 spec, #32): answer Q1–Q6 and approve.
 - Close the M1 milestone on GitHub.
 - The Windows checks listed in PRs #21–#30.
 
