@@ -462,6 +462,8 @@ void MainWindow::finishOpening(Opening opening, OpenMode mode)
     else if (opening.lock != AppLockOutcome::Taken)
         refusal = opening.lockMessage;
     if (!refusal.isEmpty()) {
+        // The project open here stays, so its unsaved edits will be asked about again.
+        m_unsavedAnswered = false;
         if (mode == OpenMode::Restore)
             statusBar()->showMessage(QStringLiteral("Loom couldn't reopen %1: %2").arg(QDir::toNativeSeparators(opening.folder.folder), refusal), 15'000);
         else

@@ -13,6 +13,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QToolButton>
@@ -34,6 +35,30 @@ QLabel* refusalLabel(QWidget* parent)
     label->setPalette(palette);
     label->hide();
     return label;
+}
+
+/// Asks before a form with text is closed, since closing it discards the text and its recovery
+/// file ("Never losing text"). Cancel is focused, as in every confirmation.
+/// @param discard Called if Dakota chooses **Discard**. Side effects: opens a window-modal box.
+void askToDiscard(QDialog* dialog, const QString& what, std::function<void()> discard)
+{
+    auto* box = new QMessageBox(QMessageBox::Question, QStringLiteral("Discard %1").arg(what),
+                                QStringLiteral("Discard %1? It hasn't been created, and its text goes.").arg(what),
+                                QMessageBox::NoButton, dialog);
+    box->setObjectName(QStringLiteral("discardNewForm"));
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    QPushButton* yes = box->addButton(QStringLiteral("Discard"), QMessageBox::DestructiveRole);
+    yes->setObjectName(QStringLiteral("confirm"));
+    QPushButton* cancel = box->addButton(QMessageBox::Cancel);
+    cancel->setObjectName(QStringLiteral("cancel"));
+    box->setDefaultButton(cancel);
+    box->setEscapeButton(cancel);
+    QObject::connect(box, &QMessageBox::finished, dialog, [box, yes, discard] {
+        if (box->clickedButton() == yes)
+            discard();
+    });
+    box->open();
+    cancel->setFocus();
 }
 
 } // namespace
@@ -161,6 +186,18 @@ void NewStatementDialog::setBusy(bool busy)
     m_create->setEnabled(!busy);
 }
 
+void NewStatementDialog::reject()
+{
+    if (m_discarding || !hasText()) {
+        QDialog::reject();
+        return;
+    }
+    askToDiscard(this, QStringLiteral("the new statement"), [this] {
+        m_discarding = true;
+        QDialog::reject();
+    });
+}
+
 bool NewStatementDialog::hasText() const
 {
     return !m_title->text().trimmed().isEmpty() || !m_body->text().trimmed().isEmpty() || !m_statedUsing->text().trimmed().isEmpty();
@@ -250,6 +287,18 @@ void NewProofDialog::showRefusal(const QString& message)
 void NewProofDialog::setBusy(bool busy)
 {
     m_create->setEnabled(!busy);
+}
+
+void NewProofDialog::reject()
+{
+    if (m_discarding || !hasText()) {
+        QDialog::reject();
+        return;
+    }
+    askToDiscard(this, QStringLiteral("the new proof"), [this] {
+        m_discarding = true;
+        QDialog::reject();
+    });
 }
 
 bool NewProofDialog::hasText() const

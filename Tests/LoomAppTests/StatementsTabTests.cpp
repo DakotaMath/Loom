@@ -36,6 +36,7 @@
 #include <QFileInfo>
 #include <QLabel>
 #include <QLineEdit>
+#include <QLockFile>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSignalSpy>
@@ -151,6 +152,9 @@ private slots:
     void aFileChangedOnDiskReloadsOrAsks();
     void recoveryAfterACrash();
     void closingWithUnsavedEditsAsks();
+    void typingDuringASaveIsKept();
+    void closingAfterAFailedOpenStillAsks();
+    void closingANewFormWithTextAsks();
     void aBrokenFileOpensInRawMode();
     void aProblemClickOpensTheLine();
 
@@ -961,6 +965,93 @@ void StatementsTabTests::closingWithUnsavedEditsAsks()
     QTRY_VERIFY(!again->isVisible());
     QVERIFY(readFile(demo.root() + QStringLiteral("/Statements/K3AB.tex")).endsWith("+++\nNot saved yet.\n"));
     QVERIFY(loom::listDrafts(demo.root()).empty());
+}
+
+void StatementsTabTests::typingDuringASaveIsKept()
+{
+    const loomtest::DemoProject demo;
+    QVERIFY2(demo.ok(), qPrintable(demo.error()));
+    const std::unique_ptr<MainWindow> window = newWindow();
+    QVERIFY(openDemo(*window, demo.root()));
+    StatementsPage* page = window->statementsPage();
+    page->openStatement(QStringLiteral("K3AB"));
+    FilePage* file = page->currentPage();
+    const QString path = demo.root() + QStringLiteral("/Statements/K3AB.tex");
+    file->editor()->setText(QStringLiteral("First.\n"));
+
+    // An agent's `loom` holds the write lock, so the save waits for it.
+    QLockFile agent(demo.root() + QStringLiteral("/.loom/write.lock"));
+    QVERIFY(agent.tryLock(0));
+    QSignalSpy saved(page, &StatementsPage::saved);
+    page->save();
+    QTest::qWait(300);
+    file->editor()->setText(QStringLiteral("First.\nSecond, typed while it saved.\n"));
+    page->save(); // One save at a time: this one doesn't start.
+    agent.unlock();
+    QTRY_COMPARE_WITH_TIMEOUT(saved.count(), 1, 15'000);
+    QVERIFY(readFile(path).endsWith("+++\nFirst.\n"));
+    // What was typed meanwhile stays, as unsaved edits on top of the saved file.
+    QCOMPARE(file->editor()->text(), QStringLiteral("First.\nSecond, typed while it saved.\n"));
+    QVERIFY(page->hasUnsavedEdits());
+    QTRY_VERIFY_WITH_TIMEOUT(loom::listDrafts(demo.root()).size() == 1, 5000);
+    page->save();
+    QTRY_COMPARE_WITH_TIMEOUT(saved.count(), 2, 15'000);
+    QVERIFY(readFile(path).endsWith("+++\nFirst.\nSecond, typed while it saved.\n"));
+    QVERIFY(!page->hasUnsavedEdits());
+}
+
+void StatementsTabTests::closingAfterAFailedOpenStillAsks()
+{
+    const loomtest::DemoProject demo;
+    QVERIFY2(demo.ok(), qPrintable(demo.error()));
+    const std::unique_ptr<MainWindow> window = newWindow();
+    QVERIFY(openDemo(*window, demo.root()));
+    StatementsPage* page = window->statementsPage();
+    page->openStatement(QStringLiteral("K3AB"));
+    page->currentPage()->editor()->setText(QStringLiteral("Not saved yet.\n"));
+
+    // Opening a folder that isn't a project: asked, kept, then refused; the demo stays open.
+    QTemporaryDir notAProject;
+    QVERIFY(writeFile(notAProject.filePath(QStringLiteral("notes.txt")), "Not a project.\n"));
+    window->openFolder(notAProject.path());
+    answer(*window, QStringLiteral("unsavedEditsMessage"), QStringLiteral("keep"));
+    QTRY_VERIFY(box(*window, QStringLiteral("openMessage")));
+    answer(*window, QStringLiteral("openMessage"), QStringLiteral("close"));
+    QCOMPARE(window->session()->root(), demo.root());
+
+    // Closing asks again: the earlier answer was about the open that didn't happen.
+    window->close();
+    answer(*window, QStringLiteral("unsavedEditsMessage"), QStringLiteral("cancel"));
+    QVERIFY(window->isVisible());
+}
+
+void StatementsTabTests::closingANewFormWithTextAsks()
+{
+    const loomtest::DemoProject demo;
+    QVERIFY2(demo.ok(), qPrintable(demo.error()));
+    const std::unique_ptr<MainWindow> window = newWindow();
+    QVERIFY(openDemo(*window, demo.root()));
+    StatementsPage* page = window->statementsPage();
+    page->newStatement();
+    QTRY_VERIFY(page->newStatementDialog());
+    loom::NewStatementDialog* form = page->newStatementDialog();
+
+    // Empty, Escape just closes it.
+    QTest::keyClick(form->title(), Qt::Key_Escape);
+    QTRY_VERIFY(!page->newStatementDialog());
+
+    // With text, Escape asks; Cancel keeps the form and its text.
+    page->newStatement();
+    QTRY_VERIFY(page->newStatementDialog());
+    form = page->newStatementDialog();
+    form->body()->setText(QStringLiteral("A long statement.\n"));
+    QTest::keyClick(form->title(), Qt::Key_Escape);
+    answer(*window, QStringLiteral("discardNewForm"), QStringLiteral("cancel"));
+    QVERIFY(page->newStatementDialog());
+    QCOMPARE(form->body()->text(), QStringLiteral("A long statement.\n"));
+    QTest::keyClick(form->title(), Qt::Key_Escape);
+    answer(*window, QStringLiteral("discardNewForm"), QStringLiteral("confirm"));
+    QTRY_VERIFY(!page->newStatementDialog());
 }
 
 void StatementsTabTests::aBrokenFileOpensInRawMode()

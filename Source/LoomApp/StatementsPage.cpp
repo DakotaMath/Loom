@@ -216,6 +216,8 @@ void StatementsPage::setSession(ProjectSession* session)
     if (m_session) {
         storeViews();
         saveState();
+        // Text typed in the last second isn't in a recovery file yet: write it before the buffers go.
+        writeDrafts();
         disconnect(m_session, nullptr, this, nullptr);
     }
     // Buffers go with their project; their recovery files stay, for next time.
@@ -830,6 +832,12 @@ void StatementsPage::saveBuffer(EditBuffer* buffer, const SaveConfirmations& con
         finish(true);
         return;
     }
+    // One save at a time per file (Specs/m2-statements-review.md, "Busy controls"): a second one
+    // would carry a `base` the first is about to change.
+    if (m_saving.contains(buffer->path())) {
+        finish(false);
+        return;
+    }
     if (buffer->recovery() == Recovery::Same)
         buffer->setRecovery(Recovery::None);
     if (buffer->recovery() == Recovery::Gone)
@@ -843,6 +851,7 @@ void StatementsPage::saveBuffer(EditBuffer* buffer, const SaveConfirmations& con
     const QString base = buffer->base();
     if (FilePage* page = currentPage())
         page->storeView();
+    m_saving.insert(path);
     m_lane->run(this,
         [root, path, id, kind, text, base, confirmations] {
             switch (kind) {
@@ -853,17 +862,18 @@ void StatementsPage::saveBuffer(EditBuffer* buffer, const SaveConfirmations& con
             }
             return ChangeResult{};
         },
-        [this, path, confirmations, done](ChangeResult result) {
+        [this, path, text, confirmations, done](ChangeResult result) {
+            m_saving.remove(path);
             // The buffer may have gone (another project opened meanwhile).
             if (EditBuffer* buffer = this->buffer(path))
-                finishSave(buffer, result, confirmations, done);
+                finishSave(buffer, text, result, confirmations, done);
             else if (done)
                 done(false);
         });
 }
 
-void StatementsPage::finishSave(EditBuffer* buffer, const ChangeResult& result, const SaveConfirmations& confirmations,
-                                std::function<void(bool)> done)
+void StatementsPage::finishSave(EditBuffer* buffer, const QByteArray& sent, const ChangeResult& result,
+                                const SaveConfirmations& confirmations, std::function<void(bool)> done)
 {
     const auto finish = [done](bool ok) {
         if (done)
@@ -873,9 +883,17 @@ void StatementsPage::finishSave(EditBuffer* buffer, const ChangeResult& result, 
     if (result.outcome == ChangeOutcome::Done) {
         // The file is now what the save wrote (or, when nothing needed writing, what was loaded).
         const QByteArray now = result.written.isEmpty() ? buffer->loaded() : result.written;
-        buffer->load(now, true);
+        if (buffer->text() == sent) {
+            buffer->load(now, true);
+            dropDraft(buffer);
+        } else {
+            // Typed while the save ran: those edits stay, now on top of the file just written,
+            // and their recovery file is written again with the new base.
+            buffer->rebase(now, true);
+            buffer->setDrafted({});
+            m_draftTimer.start();
+        }
         buffer->setRefusal({}, {});
-        dropDraft(buffer);
         emit refusalProblems({});
         emit outputLine(result.changed.isEmpty() ? QStringLiteral("Saved %1: nothing had changed.").arg(buffer->path())
                                                  : QStringLiteral("Saved %1 (%2).").arg(buffer->path(), result.changed.join(QStringLiteral(", "))));
@@ -885,6 +903,17 @@ void StatementsPage::finishSave(EditBuffer* buffer, const ChangeResult& result, 
         updateUnsaved();
         emit saved(buffer->path());
         finish(true);
+        return;
+    }
+
+    if (result.outcome == ChangeOutcome::Refused && result.code == u"outdates-checks" && result.outdatedChecks.isEmpty()
+        && confirmations.outdateChecks) {
+        // Dakota confirmed outdating checks that the save no longer outdates (the project changed
+        // meanwhile): it needs no confirmation now, so it goes again without one, and asks anew
+        // if that changes once more.
+        SaveConfirmations again = confirmations;
+        again.outdateChecks.reset();
+        saveBuffer(buffer, again, done);
         return;
     }
 
@@ -931,6 +960,13 @@ void StatementsPage::finishSave(EditBuffer* buffer, const ChangeResult& result, 
             text = QStringLiteral("Mark %1 failed? It stops supporting %2.").arg(buffer->id(), splitProofId(buffer->id()) ? splitProofId(buffer->id())->tag : QString());
             if (!proofs.isEmpty())
                 text += QStringLiteral(" Saving it also changes what the checks of %1 read, so those checks stop counting.").arg(listed(proofs));
+            // The dialog names everything it writes: the file's other unsaved edits go with it.
+            EditBuffer levelOnly = *buffer;
+            Proof p = levelOnly.proof();
+            p.level = levelOnly.loadedProof().level;
+            levelOnly.setProof(p);
+            if (!levelOnly.raw() && levelOnly.dirty())
+                text += QStringLiteral(" Your other unsaved edits to %1 are saved with it.").arg(name);
             again.failedConfirmed = true;
         } else {
             objectName = QStringLiteral("refuteDialog");
@@ -1290,6 +1326,12 @@ void StatementsPage::createFromDialog(bool statement)
                 return;
             }
             m_formDraftTimer.stop();
+            // A recovery file written while Create ran (the timer fired first) is queued after the
+            // create's removal; remove it again, after it.
+            if (m_session) {
+                const QString root = m_session->root();
+                m_lane->run(this, [root] { return removeDraft(root, NewStatementDialog::draftName()); }, [](const QString&) {});
+            }
             emit outputLine(QStringLiteral("Created %1 (%2).").arg(result.id, result.path));
             m_pendingOpen = result.id;
             disconnect(m_newStatement, &QDialog::rejected, this, nullptr);
@@ -1308,7 +1350,7 @@ void StatementsPage::createFromDialog(bool statement)
             if (result.outcome == ChangeOutcome::Done)
                 removeDraft(root, draft);
             return result;
-        }, [this](ChangeResult result) {
+        }, [this, draft](ChangeResult result) {
             if (!m_newProof)
                 return;
             m_newProof->setBusy(false);
@@ -1317,6 +1359,10 @@ void StatementsPage::createFromDialog(bool statement)
                 return;
             }
             m_formDraftTimer.stop();
+            if (m_session) {
+                const QString root = m_session->root();
+                m_lane->run(this, [root, draft] { return removeDraft(root, draft); }, [](const QString&) {});
+            }
             emit outputLine(QStringLiteral("Created %1 (%2).").arg(result.id, result.path));
             m_pendingOpen = result.id;
             disconnect(m_newProof, &QDialog::rejected, this, nullptr);

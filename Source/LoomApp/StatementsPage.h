@@ -128,6 +128,8 @@ public:
     /// Saves one buffer through LoomCore (Specs/m2-statements-review.md, "Saving"), asking for
     /// Dakota's confirmation when LoomCore says the save needs it, and saving again if he gives
     /// it. A refusal leaves the text in the editor and its recovery file, and lists the problems.
+    /// A file already being saved isn't saved a second time meanwhile (`done(false)`); text typed
+    /// while a save runs stays as unsaved edits on top of the file it wrote.
     /// @param done Called with whether it saved (false if refused or cancelled).
     void saveBuffer(EditBuffer* buffer, const SaveConfirmations& confirmations = {}, std::function<void(bool)> done = {});
     /// **Save all**: saves every buffer with unsaved edits, one after another, stopping at the
@@ -222,8 +224,9 @@ private:
     /// The bar that offers back the text of a New statement or New proof form.
     void showFormDrafts();
     /// Handles a save's result.
-    void finishSave(EditBuffer* buffer, const ChangeResult& result, const SaveConfirmations& confirmations,
-                    std::function<void(bool)> done);
+    /// @param sent The text the save sent: edits typed since stay as unsaved edits.
+    void finishSave(EditBuffer* buffer, const QByteArray& sent, const ChangeResult& result,
+                    const SaveConfirmations& confirmations, std::function<void(bool)> done);
     /// Removes a buffer's recovery file, on the lane.
     void dropDraft(EditBuffer* buffer);
     /// Where the tab is now.
@@ -269,6 +272,7 @@ private:
     std::vector<Draft> m_formDrafts;
     bool m_unsaved = false;
     QString m_pendingOpen;  ///< A statement or proof just created, opened when the snapshot has it.
+    QSet<QString> m_saving; ///< Files with a save on the lane: one at a time ("Busy controls").
     QPointer<NewStatementDialog> m_newStatement;
     QPointer<NewProofDialog> m_newProof;
     std::shared_ptr<const ProjectSnapshot> m_dialogSnapshot; ///< Kept alive for an open form.

@@ -50,6 +50,8 @@ public:
     void setBusy(bool busy);
     /// Whether anything has been typed.
     bool hasText() const;
+    /// Cancel, Escape or the window's ×: with text typed, asks before discarding it.
+    void reject() override;
 
     QComboBox* kind() const { return m_kind; }
     QLineEdit* title() const { return m_title; }
@@ -75,6 +77,7 @@ private:
     LatexEditor* m_body;
     QLabel* m_refusal;
     QPushButton* m_create;
+    bool m_discarding = false;
 };
 
 /// The New proof form: level, premises and the body.
@@ -97,6 +100,8 @@ public:
     void showRefusal(const QString& message);
     void setBusy(bool busy);
     bool hasText() const;
+    /// Cancel, Escape or the window's ×: with text typed, asks before discarding it.
+    void reject() override;
 
     QComboBox* level() const { return m_level; }
     QLineEdit* premises() const { return m_premises; }
@@ -115,6 +120,7 @@ private:
     LatexEditor* m_body;
     QLabel* m_refusal;
     QPushButton* m_create;
+    bool m_discarding = false;
 };
 
 } // namespace loom

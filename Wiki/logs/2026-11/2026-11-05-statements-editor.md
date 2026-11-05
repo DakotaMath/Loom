@@ -13,8 +13,9 @@ tags: [m2, app, ui, editor, recovery]
 ## Done
 - `LoomCore`: `EditorSaves` (`saveStatementText()`, `saveProofText()`, `saveVerboseBody()`, `markVerboseUpToDate()`, `fileBase()`), `Drafts` (recovery files under `.loom/drafts/`). `commit()` moved from `Edits.cpp` to `EditSession` so the saves share it; `ChangeResult` gains `written`, and a `dakota-only` refusal carries `outdatedChecks`.
 - `LoomApp`: `StatementsPage`, `FilePage`, `EditBuffer`, `StatementList`, `HeaderForms` (chips, the statement and proof forms), `LatexEditor`, `FindBar`, `NewItemDialogs`, `StatusMarks`, `TextDiff`; snapshots carry each file's bytes and time; the bottom panel lists a refused save's problems and opens a clicked problem's line; the window asks about unsaved edits before closing or opening another project; a Statement menu with the tab's shortcuts.
+- A reviewer (an Opus 5.5 subagent Dakota asked for) found five bugs, fixed with tests: text typed while a save ran was dropped with its recovery file (now one save at a time per file, and later typing stays as edits); after a refused open, closing no longer asked about unsaved edits; a form's recovery file could outlive its Create; Escape on a form with text discarded it unasked; the failed dialog didn't say other edits are saved with it.
 - QScintilla 2.14.1 built by `Source/CMake/QScintilla.cmake` ([decision 004](../../decisions/004-qscintilla.md)).
-- Tests: 11 Catch2 cases (saves, drafts) and 22 Qt Test functions (`StatementsTabTests`); all 335 `ctest` tests pass on Windows, one skipped (the lock-age test, as before).
+- Tests: 11 Catch2 cases (saves, drafts) and 25 Qt Test functions (`StatementsTabTests`); all 335 `ctest` tests pass on Windows, one skipped (the lock-age test, as before).
 
 ## Learned
 - QScintilla accepts `ShortcutOverride` for every key in its keymap, so Ctrl+- zoomed the editor instead of reaching the window's action ([gotcha](../../gotchas/qt/qscintilla-takes-bound-shortcuts.md)).
