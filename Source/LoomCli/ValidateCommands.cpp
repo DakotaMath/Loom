@@ -17,14 +17,6 @@ QString counted(int count, const QString& one, const QString& many)
     return QStringLiteral("%1 %2").arg(count).arg(count == 1 ? one : many);
 }
 
-/// One problem as `loom validate --json` gives it (Specs/m1-core.md, "JSON shapes").
-QString jsonProblem(const loom::Problem& problem)
-{
-    return QStringLiteral("{\"severity\": %1, \"code\": %2, \"file\": %3, \"line\": %4, \"message\": %5}")
-        .arg(jsonString(problem.severity == loom::Severity::Error ? QStringLiteral("error") : QStringLiteral("warning")),
-             jsonString(problem.code), jsonString(problem.file), QString::number(problem.line), jsonString(problem.message));
-}
-
 } // namespace
 
 int runValidate(const QStringList& args, const Context& context)

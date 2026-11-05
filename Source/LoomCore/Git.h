@@ -9,6 +9,7 @@
 #include <QStringList>
 
 #include <optional>
+#include <vector>
 
 namespace loom {
 
@@ -72,5 +73,34 @@ QString gitDidntRunMessage(const GitRun& run, const QStringList& arguments);
 /// `missingCode` (callers name a missing git differently: `git-missing`, `git-failed`).
 /// @returns The code. No side effects.
 QString gitDidntRunCode(const GitRun& run, const QString& missingCode);
+
+/// One object of a listing by `git ls-files --stage -z` or `git ls-tree -r -z`.
+struct GitListingEntry {
+    QString mode;   ///< `100644`, `100755`, `120000` (a link), `160000` (a submodule).
+    QByteArray sha; ///< The object's name.
+    QString path;   ///< Relative to the folder git ran in, with `/`.
+};
+
+/// Reads `git ls-files --stage -z` (`<mode> <object> <stage>\t<path>\0`) or `git ls-tree -r -z`
+/// (`<mode> <type> <object>\t<path>\0`). Index entries in a merge conflict (stage 1–3) are left
+/// out; git refuses to commit while there are any.
+/// @param output The listing, as git wrote it.
+/// @param index  True for `ls-files --stage`, false for `ls-tree`.
+/// @returns The entries, in git's order. No side effects.
+std::vector<GitListingEntry> parseGitListing(const QByteArray& output, bool index);
+
+/// The arguments readGitObjects() runs git with, to name the command in a message.
+const QStringList& gitCatFileBatch();
+
+/// Reads objects with `git cat-file --batch`.
+/// @param git  Which git.
+/// @param root The folder git runs in.
+/// @param shas The objects' names.
+/// @param run  Set to what git did, so a caller can tell a git that didn't finish in time
+///             (`git-timeout`, M1's A16) from one that failed; untouched if there was nothing to read.
+/// @returns Their contents, in the same order, or nothing if git failed or any is missing.
+/// Side effects: runs git in `root`.
+std::optional<std::vector<QByteArray>> readGitObjects(const GitTool& git, const QString& root,
+                                                      const std::vector<QByteArray>& shas, GitRun& run);
 
 } // namespace loom

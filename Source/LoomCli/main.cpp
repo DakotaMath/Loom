@@ -1,7 +1,8 @@
 // The `loom` command (Specs/m1-core.md, "The `loom` command"). It knows `--version`, `help`,
 // `new-project`, the statement and proof subcommands, the check subcommands, `refute`, `status`,
-// `graph`, the paper subcommands, `validate` and `install-hooks`.
+// `graph`, the paper subcommands, `validate`, `install-hooks` and `build`.
 
+#include "BuildCommands.h"
 #include "CheckCommands.h"
 #include "Cli.h"
 #include "PaperCommands.h"
@@ -181,5 +182,7 @@ int main(int argc, char* argv[])
         return runValidate(args, context);
     if (subcommand == u"install-hooks")
         return runInstallHooks(args, context);
+    if (subcommand == u"build")
+        return runBuild(args, context);
     return usageError(unknownSubcommand(subcommand), json);
 }

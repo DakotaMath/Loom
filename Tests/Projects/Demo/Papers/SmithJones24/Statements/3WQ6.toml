@@ -1,0 +1,9 @@
+id = "3WQ6"
+kind = "lemma"
+gist = "The sum of the absolute values of a sequence doesn't depend on the order of its terms"
+extracted_from = "arxiv-v1"
+extracted_by = "agent:claude-opus-5-5"
+created = 2026-11-05
+
+[locators]
+arxiv-v1 = { at = "Lemma 2.1", checked_against_pdf = false }

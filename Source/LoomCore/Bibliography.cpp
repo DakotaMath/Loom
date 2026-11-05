@@ -311,4 +311,32 @@ Bibliography formatBibliography(const std::vector<BibSource>& sources)
     return bib;
 }
 
+Bibliography projectBibliography(const ProjectContents& contents, const std::function<bool(const PaperFile&)>& include)
+{
+    std::vector<Problem> skipped;
+    std::vector<BibSource> papers;
+    for (const PaperFile& file : contents.papers) {
+        if (include && !include(file))
+            continue;
+        if (!file.reading.parsed || file.reading.document.key.isEmpty()) {
+            skipped.push_back({Severity::Error, QStringLiteral("bib-entry-skipped"), file.path, 1,
+                QStringLiteral("Loom can't read %1 (run `loom validate`), so its BibTeX entry was left out of refs.bib.").arg(file.path)});
+            continue;
+        }
+        const bool hasErrors = std::any_of(file.reading.problems.begin(), file.reading.problems.end(),
+                                           [](const Problem& problem) { return problem.severity == Severity::Error; });
+        if (hasErrors) {
+            skipped.push_back({Severity::Error, QStringLiteral("bib-entry-skipped"), file.path, 1,
+                QStringLiteral("%1's paper.toml has errors (`loom validate` lists them), so its BibTeX entry was left out "
+                               "of refs.bib.").arg(file.reading.document.key)});
+            continue;
+        }
+        papers.push_back({file.path, file.reading.document});
+    }
+    Bibliography bib = formatBibliography(papers);
+    bib.problems.insert(bib.problems.end(), skipped.begin(), skipped.end());
+    sortProblems(bib.problems);
+    return bib;
+}
+
 } // namespace loom

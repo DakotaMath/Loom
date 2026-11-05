@@ -4,6 +4,10 @@
 add_library(LoomCore STATIC
     Bibliography.cpp
     Bibliography.h
+    Build.cpp
+    Build.h
+    BuildDocument.cpp
+    BuildDocument.h
     Checks.cpp
     Checks.h
     Cycles.cpp
@@ -24,6 +28,8 @@ add_library(LoomCore STATIC
     Hooks.h
     Ids.cpp
     Ids.h
+    LatexCommands.cpp
+    LatexCommands.h
     NewProject.cpp
     NewProject.h
     PaperEdits.cpp
@@ -34,6 +40,8 @@ add_library(LoomCore STATIC
     Papers.h
     Problem.cpp
     Problem.h
+    ProcessTree.cpp
+    ProcessTree.h
     ProjectContents.cpp
     ProjectContents.h
     ProjectFiles.cpp
@@ -42,10 +50,14 @@ add_library(LoomCore STATIC
     ProjectToml.h
     ProofChecks.cpp
     ProofChecks.h
+    Revision.cpp
+    Revision.h
     StatementsAndProofs.cpp
     StatementsAndProofs.h
     Status.cpp
     Status.h
+    TexLog.cpp
+    TexLog.h
     TomlFields.cpp
     TomlFields.h
     TomlWriter.cpp
@@ -83,3 +95,11 @@ qt_add_resources(LoomCore loom_hooks
     BASE "${hooks_dir}"
     FILES
         "${hooks_dir}/pre-commit")
+
+# `loom.sty`, the package every build loads (Specs/m2-statements-review.md, "The wrapper
+# document"), written into each build folder from `:/tex/loom.sty`.
+qt_add_resources(LoomCore loom_tex
+    PREFIX "/tex"
+    BASE "${CMAKE_CURRENT_SOURCE_DIR}/TeX"
+    FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/TeX/loom.sty")

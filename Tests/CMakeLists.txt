@@ -1,5 +1,6 @@
 # Loom's tests, all run by `ctest`: Catch2 for LoomCore and `loom`, Qt Test for the UI,
 # and checks of the build itself.
+add_subdirectory(Support)
 add_subdirectory(LoomCoreTests)
 add_subdirectory(LoomAppTests)
 
@@ -61,8 +62,20 @@ add_test(NAME loom.validate
         "-DDATA=${CMAKE_CURRENT_SOURCE_DIR}/Projects/WorkedExample"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/CMake/ValidateCli.cmake")
 set_tests_properties(loom.validate PROPERTIES PASS_REGULAR_EXPRESSION "validate CLI: passed")
+# `loom build` on copies of the demo project (Tests/CMake/BuildCli.cmake). Its builds need TeX,
+# hence the label.
+add_test(NAME loom.build
+    COMMAND "${CMAKE_COMMAND}"
+        "-DLOOM=$<TARGET_FILE:loom>"
+        "-DWORK=${CMAKE_CURRENT_BINARY_DIR}/BuildCli"
+        "-DDATA=${CMAKE_CURRENT_SOURCE_DIR}/Projects/Demo"
+        "-DEDITS=${CMAKE_CURRENT_SOURCE_DIR}/Projects/Demo-edits"
+        "-DKIT=${PROJECT_SOURCE_DIR}/Templates/project"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/CMake/BuildCli.cmake")
+set_tests_properties(loom.build PROPERTIES PASS_REGULAR_EXPRESSION "build CLI: passed" LABELS tex)
 if(WIN32)
     set_tests_properties(loom.version loom.version-json loom.usage loom.new-project loom.statements loom.checks loom.papers loom.status loom.validate
+        loom.build
         PROPERTIES ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${LOOM_QT_BIN_DIR}")
 endif()
 

@@ -4,12 +4,14 @@
 // "The bibliography"): one BibTeX entry per paper, for the version in `cite`.
 
 #include "LoomCore/Papers.h"
+#include "LoomCore/ProjectContents.h"
 #include "LoomCore/Problem.h"
 
 #include <QByteArray>
 #include <QString>
 #include <QStringList>
 
+#include <functional>
 #include <vector>
 
 namespace loom {
@@ -77,5 +79,16 @@ bool endsInEscape(const QString& value);
 /// Whether a value's braces are balanced: no `}` before its `{`, and none left open. Every brace
 /// counts, `\{` and `\}` too, as BibTeX counts them (A6). No side effects.
 bool bracesBalanced(const QString& value);
+
+/// Writes the bibliography of a project's papers, as `loom build-bib` and builds do. A paper Loom
+/// can't read, or whose paper.toml has errors of its own, is left out with the error
+/// `bib-entry-skipped` (on its paper.toml, line 1): a value Loom has reported as wrong (an
+/// `arxiv_id` with `vN`, say) would otherwise go into refs.bib as is.
+/// @param contents The project's papers.
+/// @param include  Which papers to write; empty means every one. A paper left out this way gets
+///                 no problem either.
+/// @returns The text and its problems, sorted with sortProblems(). No side effects.
+Bibliography projectBibliography(const ProjectContents& contents,
+                                 const std::function<bool(const PaperFile&)>& include = {});
 
 } // namespace loom

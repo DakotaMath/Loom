@@ -1,0 +1,45 @@
+% Written by Loom for G8TV, mode chain. Don't edit: Loom rewrites it on every build.
+\documentclass[11pt]{article}
+\input{src/TeX/preamble.tex}
+\input{src/TeX/macros.tex}
+\usepackage{loom}
+\loomoutside{3WQ6}{SmithJones24, arxiv-v1: Lemma 2.1}
+\loomoutside{7RT2}{SmithJones24, Theorem 1.2}
+\loomoutside{D5MN}{Tame sequences are bounded}
+\loomoutside{D5MN.a}{Proof D5MN.a of D5MN}
+\loomoutside{E6PQ}{Products with bounded sequences stay tame}
+\loomoutside{E6PQ.a}{Proof E6PQ.a of E6PQ}
+\loomoutside{F7RS}{Rearrangements of tame sequences are tame}
+\loomoutside{F7RS.a}{Proof F7RS.a of F7RS}
+\loomoutside{H9WX}{A sharp bound for the tail}
+\loomoutside{H9WX.a}{Proof H9WX.a of H9WX}
+\loomoutside{J2YZ}{Which tail bounds are sharp?}
+\loomoutside{K3AB}{A tail bound for sums}
+\begin{document}
+\loomheader{G8TV · Tame sums commute with \badtitlemacro{} limits}{with the full chain}
+
+\loomsection{The chain}
+\begin{loomstatement}{definition}{A2DF}{Tame sequence}
+\input{src/Statements/A2DF.tex}
+\end{loomstatement}
+\begin{loomstatement}{definition}{B3GH}{The tail of a sequence}
+\input{src/Statements/B3GH.tex}
+\end{loomstatement}
+\begin{loomstatement}{lemma}{C4JK}{Tails of tame sequences vanish}
+\input{src/Statements/C4JK.tex}
+\end{loomstatement}
+\begin{loomproof}{C4JK.a}{complete}{}
+\input{src/Proofs/C4JK/C4JK.a.tex}
+\end{loomproof}
+
+\loomsection{The statement}
+\begin{loomstatement}{lemma}{G8TV}{Tame sums commute with \badtitlemacro{} limits}
+\input{src/Statements/G8TV.tex}
+\end{loomstatement}
+\begin{loomproof}{G8TV.a}{complete}{C4JK}
+\input{src/Proofs/G8TV/G8TV.a.tex}
+\end{loomproof}
+
+\bibliographystyle{amsplain}
+\bibliography{refs}
+\end{document}

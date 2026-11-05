@@ -1,0 +1,12 @@
+[[checks]]
+by = "agent:claude-opus-5-5"
+date = 2026-11-05T10:00:00-06:00
+fingerprint = "fded48f2cfbb"
+verdict = "pass"
+record = "Records/2026-11/demo-0001.md"
+
+[[checks]]
+by = "dakota"
+date = 2026-11-05T10:30:00-06:00
+fingerprint = "fded48f2cfbb"
+verdict = "pass"

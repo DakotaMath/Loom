@@ -1,5 +1,7 @@
 # loom: the command line, a thin layer over LoomCore.
 add_executable(loom
+    BuildCommands.cpp
+    BuildCommands.h
     CheckCommands.cpp
     CheckCommands.h
     Cli.cpp
