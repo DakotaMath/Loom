@@ -97,15 +97,24 @@ TEST_CASE("synctex view's first record is the box")
 
 TEST_CASE("synctex edit's file maps back to the project")
 {
-    const QString folder = QStringLiteral("C:/Projects/My Project/.loom/build/D5MN/premises");
-    // Absolute, as TeX Live on Windows writes it, with a ./ part and Windows' slashes.
+    // An absolute path as this system writes one (`C:/…` isn't absolute on Linux).
+#ifdef Q_OS_WIN
+    const QString projects = QStringLiteral("C:/Projects");
+#else
+    const QString projects = QStringLiteral("/home/someone/Projects");
+#endif
+    const QString folder = projects + QStringLiteral("/My Project/.loom/build/D5MN/premises");
+    // Absolute, as TeX Live writes it, with a ./ part.
     std::optional<SyncTexPlace> place = parseSynctexEdit(editOutput(folder + QStringLiteral("/./src/Statements/D5MN.tex")), folder);
     REQUIRE(place);
     CHECK(place->file == u"Statements/D5MN.tex");
     CHECK(place->line == 9);
-    place = parseSynctexEdit(editOutput(QStringLiteral("C:\\Projects\\My Project\\.loom\\build\\D5MN\\premises\\src\\Proofs\\D5MN\\D5MN.a.tex")), folder);
+#ifdef Q_OS_WIN
+    // Windows' slashes, and another case: Windows' file names ignore case.
+    place = parseSynctexEdit(editOutput(QStringLiteral("c:\\projects\\My Project\\.loom\\build\\D5MN\\premises\\src\\Proofs\\D5MN\\D5MN.a.tex")), folder);
     REQUIRE(place);
     CHECK(place->file == u"Proofs/D5MN/D5MN.a.tex");
+#endif
     // Relative to the build folder.
     place = parseSynctexEdit(editOutput(QStringLiteral("./src/TeX/macros.tex")), folder);
     REQUIRE(place);
@@ -116,7 +125,7 @@ TEST_CASE("synctex edit's file maps back to the project")
     CHECK(place->file == u"main.tex");
     // TeX's own files, and other folders, aren't places.
     CHECK_FALSE(parseSynctexEdit(editOutput(QStringLiteral("c:/texlive/2026/texmf-dist/tex/latex/amsmath.sty")), folder));
-    CHECK_FALSE(parseSynctexEdit(editOutput(QStringLiteral("C:/Projects/Other/src/Statements/D5MN.tex")), folder));
+    CHECK_FALSE(parseSynctexEdit(editOutput(projects + QStringLiteral("/Other/src/Statements/D5MN.tex")), folder));
     CHECK_FALSE(parseSynctexEdit(editOutput(QStringLiteral("./src/../other.tex")), folder));
     CHECK_FALSE(parseSynctexEdit("SyncTeX result begin\nSyncTeX result end\n", folder));
 }
