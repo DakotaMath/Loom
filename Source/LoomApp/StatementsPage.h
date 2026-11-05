@@ -36,6 +36,8 @@ namespace loom {
 
 class AppSettings;
 class FilePage;
+class IdPreviews;
+class IdTools;
 class Lane;
 class PdfPane;
 class StatementList;
@@ -120,6 +122,10 @@ public:
     EditBuffer* buffer(const QString& path) const;
     StatementList* list() const { return m_list; }
     PdfPane* pdfPane() const { return m_pdf; }
+    /// The ID search, previews, picker and hover card of the tab.
+    IdTools* idTools() const { return m_ids; }
+    /// Ctrl+P, *Go to statement*: the ID picker; the statement, proof or paper result chosen opens.
+    void goToStatement();
 
     // Edits.
     /// Whether any file has unsaved edits.
@@ -188,7 +194,8 @@ public:
     void writeVerbose(const QString& proofId);
     /// Dakota chose `failed` in a proof's level list: asks, then saves (or puts `previous` back).
     void chooseFailed(EditBuffer* buffer, const QString& previous);
-    /// + of stated using (`statedUsing`) or premises (`premises`): asks for an ID and adds it.
+    /// + of stated using (`statedUsing`), premises (`premises`) or superseded by (`supersededBy`):
+    /// opens the ID picker under the +, and adds (or for superseded by, sets) the ID chosen.
     void addReference(EditBuffer* buffer, const QString& field);
     /// Shows a buffer's refused-save problems in the Problems panel.
     void showRefusalProblems(EditBuffer* buffer);
@@ -276,6 +283,8 @@ private:
     QTabWidget* m_tabs;
     QToolButton* m_newProofButton;
     PdfPane* m_pdf;
+    IdPreviews* m_previews;
+    IdTools* m_ids;
     std::vector<Problem> m_buildProblems;
 
     QString m_tag;          ///< The statement (or stub) open.

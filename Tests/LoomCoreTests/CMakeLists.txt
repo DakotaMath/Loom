@@ -13,6 +13,7 @@ add_executable(LoomCoreTests
     FingerprintTests.cpp
     FrontMatterTests.cpp
     HooksTests.cpp
+    IdSearchTests.cpp
     IdsTests.cpp
     NewProjectTests.cpp
     PaperEditsTests.cpp
@@ -22,6 +23,7 @@ add_executable(LoomCoreTests
     ProjectContentsTests.cpp
     ProjectFilesTests.cpp
     ProjectFixture.h
+    PreviewTests.cpp
     ProjectTomlTests.cpp
     ProofChecksTests.cpp
     SetupCheckTests.cpp

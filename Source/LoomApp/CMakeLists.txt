@@ -13,6 +13,14 @@ qt_add_library(LoomAppLib STATIC
     FindBar.h
     HeaderForms.cpp
     HeaderForms.h
+    IdAssist.cpp
+    IdAssist.h
+    IdPicker.cpp
+    IdPicker.h
+    IdPreviews.cpp
+    IdPreviews.h
+    IdTools.cpp
+    IdTools.h
     Lane.cpp
     Lane.h
     LatexEditor.cpp

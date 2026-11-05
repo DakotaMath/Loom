@@ -374,13 +374,19 @@ QByteArray loomStyle()
     return file.readAll();
 }
 
-BuildDocument composeBuild(const BuildSource& source, const QString& typedId, BuildMode mode, bool verbose)
+namespace {
+
+/// composeBuild() and composePreview(): a preview is the statement alone, without its proofs, the
+/// header line or page numbers, and with the titles left out of `\loomoutside` (which doesn't print
+/// them), so that its inputs change only when what it shows can.
+BuildDocument compose(const BuildSource& source, const QString& typedId, BuildMode mode, bool verbose, bool preview)
 {
     const ProjectContents& contents = source.contents;
     const ProjectGraph& graph = source.graph;
     BuildDocument doc;
     doc.mode = mode;
     doc.verbose = verbose;
+    doc.preview = preview;
 
     // --- The target ------------------------------------------------------------------------------
     QString proofTarget;
@@ -452,7 +458,9 @@ BuildDocument composeBuild(const BuildSource& source, const QString& typedId, Bu
     const Statement& target = contents.statement(doc.statement)->reading.document;
 
     QStringList shown;
-    if (!proofTarget.isEmpty()) {
+    if (preview) {
+        // The statement only.
+    } else if (!proofTarget.isEmpty()) {
         shown << proofTarget;
     } else {
         std::vector<const ProofFile*> ofTarget;
@@ -682,8 +690,9 @@ BuildDocument composeBuild(const BuildSource& source, const QString& typedId, Bu
     // --- `main.tex` --------------------------------------------------------------------------------
     MainWriter main;
     const GeneratedPart whole{doc.target, doc.targetFile};
-    main.line(QStringLiteral("% Written by Loom for %1, mode %2%3. Don't edit: Loom rewrites it on every build.")
-                  .arg(doc.target, buildModeName(mode), verbose ? QStringLiteral(", verbose") : QString()),
+    main.line(QStringLiteral("% Written by Loom for %1, %2%3. Don't edit: Loom rewrites it on every build.")
+                  .arg(doc.target, preview ? QStringLiteral("a preview") : QStringLiteral("mode ") + buildModeName(mode),
+                       verbose ? QStringLiteral(", verbose") : QString()),
               whole);
     main.line(QStringLiteral("\\documentclass[11pt]{article}"), whole);
     std::vector<BuildFile> preambles;
@@ -746,7 +755,7 @@ BuildDocument composeBuild(const BuildSource& source, const QString& typedId, Bu
         labelled.insert(label);
         // The title isn't printed, but it is read: escaped whole, so a title elsewhere in the
         // project can't break this build.
-        const QString text = escapeLatexText(title, false);
+        const QString text = preview ? QString() : escapeLatexText(title, false);
         main.line(shownAs == label ? QStringLiteral("\\loomoutside{%1}{%2}").arg(label, text)
                                    : QStringLiteral("\\loomoutside[%1]{%2}{%3}").arg(shownAs, label, text),
                   part);
@@ -769,7 +778,10 @@ BuildDocument composeBuild(const BuildSource& source, const QString& typedId, Bu
     }
 
     main.line(QStringLiteral("\\begin{document}"), whole);
-    main.line(QStringLiteral("\\loomheader{%1 \u00b7 %2}{%3}").arg(doc.target, target.title, modePhrase(mode, verbose)), whole);
+    if (preview)
+        main.line(QStringLiteral("\\pagestyle{empty}"), whole);
+    else
+        main.line(QStringLiteral("\\loomheader{%1 \u00b7 %2}{%3}").arg(doc.target, target.title, modePhrase(mode, verbose)), whole);
 
     for (const Group& group : groups) {
         main.line(QString(), whole);
@@ -842,6 +854,30 @@ BuildDocument composeBuild(const BuildSource& source, const QString& typedId, Bu
     }
     sortProblems(doc.problems);
     return doc;
+}
+
+} // namespace
+
+BuildDocument composeBuild(const BuildSource& source, const QString& typedId, BuildMode mode, bool verbose)
+{
+    return compose(source, typedId, mode, verbose, false);
+}
+
+BuildDocument composePreview(const BuildSource& source, const QString& tag)
+{
+    if (!source.contents.statement(tag)) {
+        BuildDocument doc;
+        doc.preview = true;
+        if (source.contents.stub(tag)) {
+            doc.refusal = QStringLiteral("build-stub");
+            doc.refusalMessage = QStringLiteral("%1 is a paper's result: its preview is its gist, not a build.").arg(tag);
+        } else {
+            doc.refusal = QStringLiteral("ref-unknown");
+            doc.refusalMessage = QStringLiteral("`%1` isn't a statement in this project.").arg(tag);
+        }
+        return doc;
+    }
+    return compose(source, tag, BuildMode::Alone, false, true);
 }
 
 } // namespace loom

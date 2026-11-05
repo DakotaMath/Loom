@@ -26,8 +26,8 @@ namespace loom {
 
 /// Whether a statement or stub matches a search: every word of the query is the start of a word
 /// of its tag, aliases, title, tags or body, ignoring case and accents (Specs/m2-statements-review.md,
-/// "The list", "Search"). An empty query matches everything.
-/// #37 brings LoomCore's ranked ID search; this is the list's filter until then.
+/// "The list", "Search"). An empty query matches everything. LoomCore's matchesEveryWord(); the list
+/// itself filters with the ID picker's search (IdIndex::search(), IdField::StatedUsing).
 /// @param query The search box's text.
 /// @param words The statement's words, from searchWords().
 /// No side effects.
@@ -37,8 +37,7 @@ bool matchesQuery(const QString& query, const QStringList& words);
 /// to lower case without accents. No side effects.
 QStringList searchWords(const ProjectSnapshot& snapshot, const QString& tag);
 
-/// Folds text for matching: lower case, accents removed. No side effects.
-QString foldForSearch(const QString& text);
+// foldForSearch() is LoomCore's (LoomCore/IdSearch.h, included through ProjectSnapshot.h).
 
 /// The list widget.
 class StatementList : public QWidget

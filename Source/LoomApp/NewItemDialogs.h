@@ -15,6 +15,7 @@ class QComboBox;
 class QLabel;
 class QLineEdit;
 class QPushButton;
+class QToolButton;
 
 namespace loom {
 
@@ -57,6 +58,10 @@ public:
     QLineEdit* title() const { return m_title; }
     ChipList* tags() const { return m_tags; }
     QLineEdit* statedUsing() const { return m_statedUsing; }
+    /// The + beside stated using, which opens the ID picker (as Ctrl+Space in the field does).
+    QToolButton* statedUsingPicker() const { return m_pickStatedUsing; }
+    /// Adds a chosen ID to stated using (unless it's there). Side effects: emits changed().
+    void addStatedUsing(const QString& id);
     LatexEditor* body() const { return m_body; }
     QPushButton* createButton() const { return m_create; }
     QLabel* refusal() const { return m_refusal; }
@@ -66,6 +71,8 @@ signals:
     void createClicked();
     /// Anything in the form changed.
     void changed();
+    /// + of stated using (or Ctrl+Space in it): the page opens the ID picker.
+    void pickStatedUsing();
 
 private:
     const ProjectSnapshot* m_snapshot;
@@ -74,6 +81,7 @@ private:
     ChipList* m_tags;
     QStringList m_tagItems;
     QLineEdit* m_statedUsing;
+    QToolButton* m_pickStatedUsing = nullptr;
     LatexEditor* m_body;
     QLabel* m_refusal;
     QPushButton* m_create;
@@ -105,6 +113,10 @@ public:
 
     QComboBox* level() const { return m_level; }
     QLineEdit* premises() const { return m_premises; }
+    /// The + beside premises, which opens the ID picker (as Ctrl+Space in the field does).
+    QToolButton* premisesPicker() const { return m_pickPremises; }
+    /// Adds a chosen ID to premises (unless it's there). Side effects: emits changed().
+    void addPremise(const QString& id);
     LatexEditor* body() const { return m_body; }
     QPushButton* createButton() const { return m_create; }
     QLabel* refusal() const { return m_refusal; }
@@ -112,11 +124,14 @@ public:
 signals:
     void createClicked();
     void changed();
+    /// + of premises (or Ctrl+Space in it): the page opens the ID picker.
+    void pickPremises();
 
 private:
     QString m_tag;
     QComboBox* m_level;
     QLineEdit* m_premises;
+    QToolButton* m_pickPremises = nullptr;
     LatexEditor* m_body;
     QLabel* m_refusal;
     QPushButton* m_create;

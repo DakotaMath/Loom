@@ -155,7 +155,7 @@ BuildResult buildTarget(const BuildRequest& request)
     BuildSource source;
     source.root = root;
     source.config = project.config;
-    if (!request.rev.isEmpty()) {
+    if (!request.rev.isEmpty() && !request.preview) {
         const RevisionTree tree = readRevision(root, request.rev, request.git);
         if (tree.outcome == RevisionOutcome::NoCommits)
             return done(stopped(result, BuildOutcome::CantWork, QStringLiteral("no-commits"),
@@ -178,7 +178,12 @@ BuildResult buildTarget(const BuildRequest& request)
     source.graph = buildGraph(source.contents);
 
     // --- What to build -------------------------------------------------------------------------------
-    const BuildDocument doc = composeBuild(source, request.target, request.mode, request.verbose);
+    const BuildDocument doc = request.preview ? composePreview(source, request.target)
+                                              : composeBuild(source, request.target, request.mode, request.verbose);
+    if (request.preview) {
+        result.mode = BuildMode::Alone;
+        result.verbose = false;
+    }
     result.target = doc.target;
     if (!doc.refusal.isEmpty()) {
         QString message = doc.refusalMessage;
@@ -192,8 +197,22 @@ BuildResult buildTarget(const BuildRequest& request)
         return done(result);
     }
 
+    // --- A preview already made ---------------------------------------------------------------------
+    const QByteArray style = loomStyle();
+    const QString inputs = inputsHash(doc, style);
+    const QString previewPath = request.preview ? previewFile(doc.target, inputs.left(16)) : QString();
+    if (request.preview && QFileInfo::exists(QDir(root).filePath(previewPath))) {
+        result.folder = QStringLiteral(".loom/build/preview/") + doc.target;
+        result.reused = true;
+        result.outcome = BuildOutcome::Succeeded;
+        result.problems = doc.problems;
+        result.pdf = previewPath;
+        return done(result);
+    }
+
     // --- The folder, one build at a time ------------------------------------------------------------
-    result.folder = buildFolder(doc.target, request.mode, request.verbose, result.rev);
+    result.folder = request.preview ? QStringLiteral(".loom/build/preview/") + doc.target
+                                    : buildFolder(doc.target, request.mode, request.verbose, result.rev);
     const QDir folder(QDir(root).filePath(result.folder));
     if (!QDir().mkpath(folder.path()))
         return done(stopped(result, BuildOutcome::CantWork, QStringLiteral("write-failed"),
@@ -214,8 +233,6 @@ BuildResult buildTarget(const BuildRequest& request)
     const QString pdfPath = folder.filePath(QStringLiteral("main.pdf"));
     const QString lastGoodPath = folder.filePath(QStringLiteral("last-good.pdf"));
     const QString recordPath = folder.filePath(QStringLiteral("loom-build.toml"));
-    const QByteArray style = loomStyle();
-    const QString inputs = inputsHash(doc, style);
     result.command = QStringLiteral("latexmk ") + latexmkArguments().join(u' ');
     const auto finish = [&](BuildResult r, const QString& outcome) {
         r.seconds = static_cast<double>(clock.elapsed()) / 1000.0;
@@ -223,6 +240,24 @@ BuildResult buildTarget(const BuildRequest& request)
             r.lastGoodPdf = relative(QStringLiteral("last-good.pdf"));
         writeProjectFile(root, relative(QStringLiteral("loom-build.toml")), formatLastBuild(r, inputs, outcome));
         return r;
+    };
+    // A preview without errors: kept under its hash, replacing the tag's older ones.
+    const auto keepPreview = [&](BuildResult& r) {
+        const QDir previews(QDir(root).filePath(QStringLiteral(".loom/build/preview")));
+        const QString kept = QDir(root).filePath(previewPath);
+        const QString temporary = kept + QStringLiteral(".part");
+        QFile::remove(temporary);
+        if (!QFile::copy(pdfPath, temporary) || !QFile::rename(temporary, kept)) {
+            QFile::remove(temporary);
+            r.pdf = relative(QStringLiteral("main.pdf"));
+            return;
+        }
+        const QString name = QFileInfo(kept).fileName();
+        for (const QString& old : previews.entryList({doc.target + QStringLiteral("-*.pdf")}, QDir::Files)) {
+            if (old != name)
+                QFile::remove(previews.filePath(old));
+        }
+        r.pdf = previewPath;
     };
 
     // --- Unchanged since a good build: its result ----------------------------------------------------
@@ -236,6 +271,8 @@ BuildResult buildTarget(const BuildRequest& request)
         sortUniqueProblems(result.problems);
         result.outcome = BuildOutcome::Succeeded;
         result.pdf = relative(QStringLiteral("main.pdf"));
+        if (request.preview)
+            keepPreview(result);
         return finish(result, QStringLiteral("succeeded"));
     }
 
@@ -302,10 +339,19 @@ BuildResult buildTarget(const BuildRequest& request)
         result.outcome = BuildOutcome::Failed;
         return finish(result, QStringLiteral("failed"));
     }
+    result.outcome = BuildOutcome::Succeeded;
+    if (request.preview) {
+        keepPreview(result);
+        return finish(result, QStringLiteral("succeeded"));
+    }
     QFile::remove(lastGoodPath);
     QFile::copy(pdfPath, lastGoodPath);
-    result.outcome = BuildOutcome::Succeeded;
     return finish(result, QStringLiteral("succeeded"));
+}
+
+QString previewFile(const QString& tag, const QString& hash)
+{
+    return QStringLiteral(".loom/build/preview/%1-%2.pdf").arg(tag, hash);
 }
 
 BuildOutput readBuildOutput(const QString& root, const QString& folder, int lockWaitMs)

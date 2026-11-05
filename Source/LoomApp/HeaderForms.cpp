@@ -1,6 +1,7 @@
 #include "LoomApp/HeaderForms.h"
 
 #include "LoomApp/EditBuffer.h"
+#include "LoomApp/IdTools.h"
 #include "LoomApp/ProjectSnapshot.h"
 #include "LoomApp/StatusMarks.h"
 
@@ -72,6 +73,8 @@ void ChipList::setItems(const QStringList& items, const Describe& describe)
         label->setText(text);
         label->setIcon(icon);
         connect(label, &QToolButton::clicked, this, [this, id] { emit chipClicked(id); });
+        if (m_showsIds)
+            label->setProperty(idProperty, id); // Hovering shows the ID's card (IdTools).
         auto* remove = new QToolButton(chip);
         remove->setObjectName(QStringLiteral("remove"));
         remove->setText(QStringLiteral("×"));
@@ -102,7 +105,7 @@ StatementForm::StatementForm(QWidget* parent)
     , m_title(new QLineEdit(this))
     , m_tags(new ChipList(QStringLiteral("tags"), this))
     , m_statedUsing(new ChipList(QStringLiteral("statedUsing"), this))
-    , m_supersededBy(new QLineEdit(this))
+    , m_supersededBy(new ChipList(QStringLiteral("supersededBy"), this))
     , m_markVerified(new QPushButton(QStringLiteral("Mark verified"), this))
     , m_info(new QLabel(this))
 {
@@ -111,8 +114,9 @@ StatementForm::StatementForm(QWidget* parent)
     for (const QString& kind : statementKinds)
         m_kind->addItem(kindTitle(kind), kind);
     m_title->setObjectName(QStringLiteral("title"));
-    m_supersededBy->setObjectName(QStringLiteral("supersededBy"));
-    m_supersededBy->setPlaceholderText(QStringLiteral("The tag of the statement that replaces this one"));
+    m_statedUsing->setShowsIds(true);
+    m_supersededBy->setShowsIds(true);
+    m_supersededBy->addButton()->setToolTip(QStringLiteral("Choose the statement that replaces this one"));
     m_markVerified->setObjectName(QStringLiteral("markVerified"));
     m_markVerified->setToolTip(QStringLiteral("Sets `verified` to today: you checked this front matter"));
     m_info->setObjectName(QStringLiteral("statementInfo"));
@@ -134,7 +138,16 @@ StatementForm::StatementForm(QWidget* parent)
 
     connect(m_kind, &QComboBox::currentIndexChanged, this, [this] { store(); });
     connect(m_title, &QLineEdit::textEdited, this, [this] { store(); });
-    connect(m_supersededBy, &QLineEdit::textEdited, this, [this] { store(); });
+    // Superseded by is one ID, chosen with the picker: + while there is none, x to clear it.
+    connect(m_supersededBy, &ChipList::addClicked, this, &StatementForm::chooseSupersededByRequested);
+    connect(m_supersededBy, &ChipList::removeClicked, this, [this] {
+        Statement s = m_buffer->statement();
+        s.supersededBy.clear();
+        m_buffer->setStatement(s);
+        refresh();
+        emit edited();
+    });
+    connect(m_supersededBy, &ChipList::chipClicked, this, &StatementForm::idClicked);
     connect(m_markVerified, &QPushButton::clicked, this, [this] {
         if (!m_buffer)
             return;
@@ -213,8 +226,9 @@ void StatementForm::refresh()
         return {tag + QStringLiteral(" (not in loom.toml)"), QIcon()};
     });
     m_statedUsing->setItems(s.statedUsing, [this](const QString& id) { return describeId(m_snapshot, id); });
-    if (m_supersededBy->text() != s.supersededBy)
-        m_supersededBy->setText(s.supersededBy);
+    m_supersededBy->setItems(s.supersededBy.isEmpty() ? QStringList() : QStringList{s.supersededBy},
+                             [this](const QString& id) { return describeId(m_snapshot, id); });
+    m_supersededBy->addButton()->setVisible(m_supersededBy->isEditable() && s.supersededBy.isEmpty());
 
     QStringList info;
     if (!s.aliases.isEmpty())
@@ -236,7 +250,6 @@ void StatementForm::store()
     Statement s = m_buffer->statement();
     s.kind = m_kind->currentData().toString();
     s.title = m_title->text();
-    s.supersededBy = m_supersededBy->text().trimmed();
     m_buffer->setStatement(s);
     emit edited();
 }
@@ -250,6 +263,7 @@ ProofForm::ProofForm(QWidget* parent)
 {
     setObjectName(QStringLiteral("proofForm"));
     m_level->setObjectName(QStringLiteral("level"));
+    m_premises->setShowsIds(true);
     for (const QString& level : proofLevels)
         m_level->addItem(level, level);
     m_markVerified->setObjectName(QStringLiteral("markVerified"));

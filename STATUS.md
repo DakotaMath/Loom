@@ -7,10 +7,11 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 -->
 # Status
 
-**Updated:** 2026-11-05 · main at 81b7311
+**Updated:** 2026-11-05 · main at 7f08250
 **Current milestone:** M1, the core, is **done**: built, reviewed, fixed and re-reviewed; all 279 `ctest` tests pass on Windows. **M2** (statements and review) is being built from its approved spec
 
 ## Done recently
+- #36 compiling, the PDF pane, SyncTeX, the Problems panel and Output: PR #47 merged (2026-11-05) ([log](Wiki/logs/2026-11/2026-11-05-compile-pdf.md)).
 - #35 the Statements tab: PR #46 merged (2026-11-05) ([log](Wiki/logs/2026-11/2026-11-05-statements-editor.md)).
 - #34 the app shell: PR #45 merged (2026-11-05) ([log](Wiki/logs/2026-11/2026-11-05-app-shell.md)).
 - #33 building LaTeX in `LoomCore` and `loom build`, with the demo project: PR #44 merged (2026-11-05) ([log](Wiki/logs/2026-11/2026-11-05-build-latex.md)).
@@ -26,15 +27,15 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 - The M1 spec (2026-11-03): [`Specs/m1-core.md`](Specs/m1-core.md), approved by Dakota (PR #11).
 
 ## In progress
-- #36 compiling, the PDF pane (Qt PDF), SyncTeX, the Problems panel and Output's channels: PR #47, reviewed by a subagent and fixed, waiting for Dakota's review; 343 tests pass on Windows, 1 skipped ([log](Wiki/logs/2026-11/2026-11-05-compile-pdf.md)).
+- #37 IDs with their titles and the ID picker (search and previews in `LoomCore`; picker, titles, hover cards, Ctrl+click): PR #48, waiting for Dakota's review; 355 tests pass on Windows, 1 skipped ([log](Wiki/logs/2026-11/2026-11-05-id-picker.md)).
 
 ## Next up
 Milestones M0–M12 are on GitHub; M3 is dropped and its milestone closed. M1's issues (#2–#9) are all closed.
-- M2's build issues #37–#40 (#41 is now M4's): #37 (IDs with their titles and the picker) next; all use the demo project and `Tests/Support/DemoProject` from PR #44.
+- M2's build issues #38–#40 (#41 is now M4's): #38 (status, checks and Dakota's clicks) next; all use the demo project and `Tests/Support/DemoProject` from PR #44.
 - M1 follow-ups, for M2 or later: see "Follow-ups" in `Reviews/M1/FINAL.md` on `m1/review` (`\cite` of an old key is settled by the M2 spec, E3).
 
 ## Waiting on Dakota
-- Review PR #47 (#36, compiling and the PDF pane) and run its Windows check; PR #46's Windows check, if not done.
+- Review PR #48 (#37, the ID picker) and run its Windows check; the Windows checks of PRs #46 and #47, if not done.
 - Close the M1 milestone on GitHub.
 - The Windows checks listed in PRs #21–#30.
 
@@ -45,6 +46,7 @@ Milestones M0–M12 are on GitHub; M3 is dropped and its milestone closed. M1's 
 - **Fingerprints are v2** (A18): checks written before PR #29 no longer match.
 - **Path checks on Windows:** `QFileInfo::canonicalFilePath()` doesn't resolve junctions; `LoomCore` uses `std::filesystem::canonical()` ([gotcha](Wiki/gotchas/qt/canonical-path-ignores-junctions.md)).
 - **Terminal checks on Windows:** `_isatty()` is true for `NUL`; `loom` uses `GetConsoleMode` ([gotcha](Wiki/gotchas/windows/isatty-true-for-nul.md)).
+- **QScintilla annotations:** `annotation(line)` returns garbage in 2.14.1; read them with `SCI_ANNOTATIONGETTEXT` ([gotcha](Wiki/gotchas/qt/qscintilla-annotation-returns-garbage.md)).
 - **QScintilla takes shortcuts** its keymap binds while an editor has focus ([gotcha](Wiki/gotchas/qt/qscintilla-takes-bound-shortcuts.md)).
 - **Qt regexes:** `$` also matches before a final `\n`; anchor with `QRegularExpression::anchoredPattern` ([gotcha](Wiki/gotchas/qt/regex-dollar-before-final-newline.md)).
 - **TeX tests:** labelled `tex` (`ctest -L tex`); they skip without `latexmk`, and fail instead under `LOOM_REQUIRE_TEX=1`, as on Linux CI. BibTeX refuses a plain `max_print_line` ([gotcha](Wiki/gotchas/latex/bibtex-rejects-long-max-print-line.md)).

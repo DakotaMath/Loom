@@ -5,6 +5,7 @@
 // Project lane; neither touches a widget.
 
 #include "LoomCore/Git.h"
+#include "LoomCore/IdSearch.h"
 #include "LoomCore/Problem.h"
 #include "LoomCore/ProjectContents.h"
 #include "LoomCore/ProjectToml.h"
@@ -15,6 +16,7 @@
 #include <QHash>
 #include <QString>
 
+#include <memory>
 #include <vector>
 
 namespace loom {
@@ -60,6 +62,9 @@ struct ProjectSnapshot {
     ProjectConfig config;       ///< `loom.toml`.
     ProjectContents contents;   ///< Every statement, proof and paper.
     ProjectGraph graph;         ///< With every computed status.
+    /// The ID search over the contents (the ID picker, the list's search, IDs in the editor);
+    /// never null in a snapshot readSnapshot() made.
+    std::shared_ptr<const IdIndex> ids;
     /// The bytes of every statement, proof, verbose proof, paper stub and preamble file, by project-relative
     /// path, as read for this snapshot: what the editor opens, and compares with what it loaded to
     /// see a file changed outside Loom (Specs/m2-statements-review.md, "Never losing text").

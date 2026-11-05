@@ -4,6 +4,10 @@
 #include "LoomApp/FilePage.h"
 #include "LoomApp/FindBar.h"
 #include "LoomApp/HeaderForms.h"
+#include "LoomApp/IdAssist.h"
+#include "LoomApp/IdPicker.h"
+#include "LoomApp/IdPreviews.h"
+#include "LoomApp/IdTools.h"
 #include "LoomApp/Lane.h"
 #include "LoomApp/LatexEditor.h"
 #include "LoomApp/NewItemDialogs.h"
@@ -15,13 +19,11 @@
 #include "LoomCore/Ids.h"
 
 #include <QApplication>
-#include <QCompleter>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFileInfo>
 #include <QHBoxLayout>
 #include <QHeaderView>
-#include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
@@ -139,6 +141,8 @@ StatementsPage::StatementsPage(AppSettings* settings, Lane* lane, Lane* buildLan
     , m_tabs(new QTabWidget(this))
     , m_newProofButton(new QToolButton(this))
     , m_pdf(new PdfPane(settings, buildLane, this))
+    , m_previews(new IdPreviews(settings, buildLane, this))
+    , m_ids(new IdTools(settings, m_previews, this))
 {
     setObjectName(QStringLiteral("statementsPage"));
     m_tabs->setObjectName(QStringLiteral("pages"));
@@ -198,6 +202,23 @@ StatementsPage::StatementsPage(AppSettings* settings, Lane* lane, Lane* buildLan
     connect(m_pdf, &PdfPane::outputLine, this, &StatementsPage::outputLine);
     connect(m_settings, &AppSettings::changed, this, &StatementsPage::applyEditorFont);
     qApp->installEventFilter(this);
+
+    // IDs (Specs/m2-statements-review.md, "IDs in the editor"): Ctrl+click and the card open them;
+    // ties in the picker go to what was opened most recently.
+    connect(m_ids, &IdTools::openRequested, this, &StatementsPage::openId);
+    m_ids->setRecent([this] {
+        QStringList recent;
+        const auto add = [&](const QString& id) {
+            if (!id.isEmpty() && !recent.contains(id))
+                recent << id;
+        };
+        add(m_tag);
+        for (auto it = m_back.rbegin(); it != m_back.rend(); ++it) {
+            add(it->page);
+            add(it->tag);
+        }
+        return recent;
+    });
 }
 
 StatementsPage::~StatementsPage()
@@ -240,6 +261,7 @@ void StatementsPage::setSession(ProjectSession* session)
     m_state.reset();
     m_session = session;
     m_snapshot = session ? session->snapshot() : nullptr;
+    m_ids->setSnapshot(m_snapshot);
     m_list->setSnapshot(m_snapshot);
     updateUnsaved();
     if (!session)
@@ -394,6 +416,7 @@ void StatementsPage::snapshotChanged()
     if (!m_session)
         return;
     m_snapshot = m_session->snapshot();
+    m_ids->setSnapshot(m_snapshot);
     m_list->setSnapshot(m_snapshot);
     checkOutside();
     if (!m_pendingOpen.isEmpty()) {
@@ -513,6 +536,7 @@ void StatementsPage::rebuildPages(const QString& select)
         if (stub)
             page->bind(ensureBuffer(stub->path, FileKind::Stub, m_tag), nullptr);
         m_tabs->addTab(page, QStringLiteral("Paper result"));
+        new IdAssist(page->editor(), m_ids);
         applyEditorFont();
         updatePdfTarget();
         return;
@@ -521,6 +545,7 @@ void StatementsPage::rebuildPages(const QString& select)
     auto* statementPage = new FilePage(this, m_tag, QString());
     statementPage->bind(ensureBuffer(statementPath, FileKind::Statement, m_tag), nullptr);
     m_tabs->addTab(statementPage, QStringLiteral("Statement"));
+    new IdAssist(statementPage->editor(), m_ids);
     int selected = 0;
     for (const QString& id : pageIds()) {
         const QString path = QStringLiteral("Proofs/%1/%2.tex").arg(m_tag, id);
@@ -530,6 +555,7 @@ void StatementsPage::rebuildPages(const QString& select)
             verbose = ensureBuffer(verbosePath, FileKind::Verbose, id);
         auto* page = new FilePage(this, m_tag, id);
         page->bind(ensureBuffer(path, FileKind::Proof, id), verbose);
+        new IdAssist(page->editor(), m_ids);
         const int index = m_tabs->addTab(page, splitProofId(id) ? splitProofId(id)->letters : id);
         if (id == select)
             selected = index;
@@ -1240,50 +1266,57 @@ void StatementsPage::addReference(EditBuffer* buffer, const QString& field)
 {
     if (!m_snapshot || !buffer)
         return;
-    // Typing the ID until the ID picker comes (#37), with the IDs and titles to complete from.
-    auto* dialog = new QInputDialog(this);
-    dialog->setObjectName(QStringLiteral("addReferenceDialog"));
-    dialog->setAttribute(Qt::WA_DeleteOnClose);
-    dialog->setWindowTitle(field == u"premises" ? QStringLiteral("Add a premise") : QStringLiteral("Add to stated using"));
-    dialog->setLabelText(QStringLiteral("The statement's tag (or an old name):"));
-    dialog->setOkButtonText(QStringLiteral("Add"));
-    QStringList choices;
-    for (const StatementNode& node : m_snapshot->graph.statements)
-        choices << QStringLiteral("%1 · %2").arg(node.id, node.title);
-    if (auto* edit = dialog->findChild<QLineEdit*>()) {
-        auto* completer = new QCompleter(choices, edit);
-        completer->setCaseSensitivity(Qt::CaseInsensitive);
-        completer->setFilterMode(Qt::MatchContains);
-        edit->setCompleter(completer);
+    // The picker opens under the field's + (Specs/m2-statements-review.md, "IDs in the editor": "in
+    // the form: under the field"), offering what the field takes; only what it lists can be added.
+    FilePage* page = currentPage();
+    QWidget* plus = nullptr;
+    IdField offer = IdField::StatedUsing;
+    if (field == u"premises") {
+        offer = IdField::Premises;
+        if (page && page->proofForm())
+            plus = page->proofForm()->premises()->addButton();
+    } else if (field == u"supersededBy") {
+        offer = IdField::SupersededBy;
+        if (page && page->statementForm())
+            plus = page->statementForm()->supersededBy()->addButton();
+    } else if (page && page->statementForm()) {
+        plus = page->statementForm()->statedUsing()->addButton();
     }
+    const QPoint at = plus ? plus->mapToGlobal(QPoint(0, plus->height())) : mapToGlobal(QPoint(width() / 4, 40));
+    // A proof's premises never offer the statement it proves; a statement's fields never offer itself.
+    const QString self = buffer->kind() == FileKind::Proof ? m_tag : buffer->id();
     const QString path = buffer->path();
-    connect(dialog, &QInputDialog::textValueSelected, this, [this, path, field](const QString& value) {
+    m_ids->pick(offer, self, {}, at, [this, path, field](const QString& id) {
         EditBuffer* buffer = this->buffer(path);
         if (!buffer || !m_snapshot)
             return;
-        const QString typed = value.section(QStringLiteral(" · "), 0, 0).trimmed();
-        const std::optional<QString> tag = resolveStatement(m_snapshot->contents, typed);
-        FilePage* page = currentPage();
-        if (!tag) {
-            if (page)
-                page->showNote(QStringLiteral("`%1` isn't a statement or paper stub in this project.").arg(typed));
-            return;
-        }
         if (field == u"premises") {
             Proof p = buffer->proof();
-            if (!p.premises.contains(*tag))
-                p.premises << *tag;
+            if (!p.premises.contains(id))
+                p.premises << id;
             buffer->setProof(p);
+        } else if (field == u"supersededBy") {
+            Statement s = buffer->statement();
+            s.supersededBy = id;
+            buffer->setStatement(s);
         } else {
             Statement s = buffer->statement();
-            if (!s.statedUsing.contains(*tag))
-                s.statedUsing << *tag;
+            if (!s.statedUsing.contains(id))
+                s.statedUsing << id;
             buffer->setStatement(s);
         }
         refreshPages();
         bufferEdited(buffer);
     });
-    dialog->open();
+}
+
+void StatementsPage::goToStatement()
+{
+    if (!m_snapshot)
+        return;
+    // Centred near the top of the tab, as a command palette.
+    const QPoint at = mapToGlobal(QPoint(std::max(0, (width() - 820) / 2), 48));
+    m_ids->pick(IdField::Ref, {}, {}, at, [this](const QString& id) { openId(id); });
 }
 
 void StatementsPage::showRefusalProblems(EditBuffer* buffer)
@@ -1317,6 +1350,14 @@ void StatementsPage::newStatement()
     m_newStatement = new NewStatementDialog(m_dialogSnapshot.get(), this);
     m_newStatement->setAttribute(Qt::WA_DeleteOnClose);
     m_newStatement->body()->setEditorFont(QFont(m_settings->editorFontFamily(), m_settings->editorFontSize()));
+    new IdAssist(m_newStatement->body(), m_ids);
+    connect(m_newStatement, &NewStatementDialog::pickStatedUsing, this, [this] {
+        QToolButton* plus = m_newStatement->statedUsingPicker();
+        m_ids->pick(IdField::StatedUsing, {}, {}, plus->mapToGlobal(QPoint(0, plus->height())), [this](const QString& id) {
+            if (m_newStatement)
+                m_newStatement->addStatedUsing(id);
+        }, m_newStatement);
+    });
     connect(m_newStatement, &NewStatementDialog::changed, this, [this] { m_formDraftTimer.start(); });
     connect(m_newStatement, &NewStatementDialog::createClicked, this, [this] { createFromDialog(true); });
     connect(m_newStatement, &QDialog::rejected, this, [this] {
@@ -1341,6 +1382,14 @@ void StatementsPage::newProof()
     m_newProof = new NewProofDialog(m_tag, this);
     m_newProof->setAttribute(Qt::WA_DeleteOnClose);
     m_newProof->body()->setEditorFont(QFont(m_settings->editorFontFamily(), m_settings->editorFontSize()));
+    new IdAssist(m_newProof->body(), m_ids);
+    connect(m_newProof, &NewProofDialog::pickPremises, this, [this] {
+        QToolButton* plus = m_newProof->premisesPicker();
+        m_ids->pick(IdField::Premises, m_newProof->tag(), {}, plus->mapToGlobal(QPoint(0, plus->height())), [this](const QString& id) {
+            if (m_newProof)
+                m_newProof->addPremise(id);
+        }, m_newProof);
+    });
     connect(m_newProof, &NewProofDialog::changed, this, [this] { m_formDraftTimer.start(); });
     connect(m_newProof, &NewProofDialog::createClicked, this, [this] { createFromDialog(false); });
     const QString draft = NewProofDialog::draftName(m_tag);

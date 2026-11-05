@@ -41,6 +41,9 @@ struct BuildRequest {
     std::shared_ptr<std::atomic_bool> stop;
     /// How long to wait for another build of the same folder to finish before giving up.
     int lockWaitMs = 120'000;
+    /// Build the preview of the statement `target` (an exact tag), composePreview(), instead of a
+    /// build of it; `mode`, `verbose` and `rev` are then ignored.
+    bool preview = false;
 };
 
 /// How a build went.
@@ -110,8 +113,20 @@ struct BuildResult {
 ///   Succeeded, and `main.pdf` is copied to `last-good.pdf`. `loom-build.toml` records the target,
 ///   mode, verbose, commit, inputs' hash, time, result and seconds.
 ///
+/// - **Previews** (`preview`; Specs/m2-statements-review.md, "IDs in the editor", "Previews") are
+///   built in `.loom/build/preview/<tag>/` and kept as `.loom/build/preview/<tag>-<hash>.pdf`,
+///   `<hash>` being the first 16 hex digits of the inputs' hash: if that file is there, it is the
+///   result at once (`reused`), without taking the folder's lock. A preview without errors is
+///   copied there (through a temporary name, so a reader never sees half a file), and the tag's
+///   older previews are removed. `pdf` is that file; there is no `last-good.pdf`.
+///
 /// @returns The result. Side effects: writes under `.loom/`; runs `latexmk` (and, for `rev`, git).
 BuildResult buildTarget(const BuildRequest& request);
+
+/// The cached preview of a statement, project-relative: `.loom/build/preview/<tag>-<hash>.pdf`.
+/// @param tag  The statement's tag.
+/// @param hash The first 16 hex digits of the preview's inputs' hash. No side effects.
+QString previewFile(const QString& tag, const QString& hash);
 
 /// What a build left in its folder, for the app to show (Specs/m2-statements-review.md, "The PDF
 /// pane").

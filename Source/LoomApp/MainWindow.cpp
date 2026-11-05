@@ -302,6 +302,8 @@ void MainWindow::createActions()
     add(QStringLiteral("Show in the P&DF"), QKeySequence(QKeyCombination(Qt::ControlModifier, Qt::Key_J)),
         [this] { m_statementsPage->showCursorInPdf(); });
     statement->addSeparator();
+    add(QStringLiteral("&Go to statement…"), QKeySequence(QKeyCombination(Qt::ControlModifier, Qt::Key_P)),
+        [this] { m_statementsPage->goToStatement(); });
     add(QStringLiteral("&Back"), QKeySequence(QKeyCombination(Qt::AltModifier, Qt::Key_Left)), [this] { m_statementsPage->back(); });
     add(QStringLiteral("&Forward"), QKeySequence(QKeyCombination(Qt::AltModifier, Qt::Key_Right)), [this] { m_statementsPage->forward(); });
     statement->addSeparator();
