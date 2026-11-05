@@ -56,6 +56,8 @@ jobs:
         with:
           version: 6.11.1
           arch: ${{ matrix.qt-arch }}
+          # Qt PDF, for the Statements tab's PDF pane (Wiki/decisions/005-qt-pdf.md).
+          modules: qtpdf
           cache: true
           # aqtinstall 3.3.0, the action's default, can't install Qt 6.11 on Windows; the fix is
           # on its main branch but not released. Wiki/gotchas/ci/aqtinstall-qt-6-11-windows.md

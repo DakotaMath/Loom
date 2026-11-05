@@ -14,6 +14,7 @@
 #include <QDirIterator>
 #include <QElapsedTimer>
 #include <QFileInfo>
+#include <QLockFile>
 #include <QMap>
 #include <QStandardPaths>
 #include <QThread>
@@ -124,6 +125,35 @@ TEST_CASE("An error is reported at its source line, and the last good PDF is kep
     const BuildResult again = buildTarget(requestFor(demo, QStringLiteral("K3AB")));
     CHECK_FALSE(again.reused);
     CHECK(again.outcome == BuildOutcome::Failed);
+}
+
+TEST_CASE("What a build left is read under its lock", "[tex]")
+{
+    REQUIRE_TEX();
+    const DemoProject demo;
+    INFO(demo.error().toStdString());
+    REQUIRE(demo.ok());
+    const BuildResult result = buildTarget(requestFor(demo, QStringLiteral("D5MN"), BuildMode::Premises));
+    REQUIRE(result.outcome == BuildOutcome::Succeeded);
+
+    const BuildOutput output = readBuildOutput(demo.root(), result.folder);
+    CHECK(output.read);
+    CHECK(output.pdf == readFile(demo.root() + u'/' + result.pdf));
+    CHECK(output.lastGoodPdf == readFile(demo.root() + u'/' + result.lastGoodPdf));
+    CHECK(output.lastGoodTime.isValid());
+    CHECK(output.aux.contains("\\newlabel{D5MN}"));
+    CHECK(output.inputs == QStringList{"Proofs/D5MN/D5MN.a.tex", "Statements/A2DF.tex", "Statements/C4JK.tex", "Statements/D5MN.tex", "TeX/macros.tex", "TeX/preamble.tex"});
+
+    // While another build of the folder holds its lock, nothing is read.
+    QLockFile lock(demo.root() + u'/' + result.folder + QStringLiteral("/build.lock"));
+    REQUIRE(lock.tryLock(0));
+    const BuildOutput locked = readBuildOutput(demo.root(), result.folder, 300);
+    CHECK_FALSE(locked.read);
+    CHECK(locked.pdf.isEmpty());
+    lock.unlock();
+
+    // A folder that doesn't exist.
+    CHECK_FALSE(readBuildOutput(demo.root(), buildFolder(QStringLiteral("K3AB"), BuildMode::Chain, false)).read);
 }
 
 TEST_CASE("An unchanged build is reused; a change builds again", "[tex]")

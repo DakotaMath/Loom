@@ -64,6 +64,8 @@ add_library(LoomCore STATIC
     StatementsAndProofs.h
     Status.cpp
     Status.h
+    SyncTex.cpp
+    SyncTex.h
     TexLog.cpp
     TexLog.h
     TomlFields.cpp

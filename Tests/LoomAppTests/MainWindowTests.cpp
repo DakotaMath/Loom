@@ -364,7 +364,7 @@ void MainWindowTests::openingAProjectWithErrors()
     QCOMPARE(window->bottomPanel()->currentWidget(), window->bottomPanel()->problems());
     bool listed = false;
     for (int i = 0; i < window->bottomPanel()->problems()->topLevelItemCount(); ++i)
-        listed = listed || window->bottomPanel()->problems()->topLevelItem(i)->text(0) == QStringLiteral("Statements/M4CD.tex");
+        listed = listed || window->bottomPanel()->problems()->topLevelItem(i)->data(loom::BottomPanel::FileColumn, Qt::UserRole) == QStringLiteral("Statements/M4CD.tex");
     QVERIFY(listed);
     screenshot(window.get(), QStringLiteral("project-with-errors"));
 }

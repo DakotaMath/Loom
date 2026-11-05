@@ -319,6 +319,14 @@ void FilePage::markProblems()
                 add(problem, bodyLine);
         }
     }
+    // The latest build's problems, while the text is what was built (unsaved edits move lines).
+    if (!shown->dirty()) {
+        const int bodyLine = shown->kind() == FileKind::Verbose ? std::max(1, shown->loadedBodyLine()) : shown->loadedBodyLine();
+        for (const Problem& problem : m_owner->buildProblems()) {
+            if (problem.file == shown->path())
+                add(problem, bodyLine);
+        }
+    }
     const int refusedBodyLine = bodyLineOf(shown->text(), shown->path());
     for (const Problem& problem : shown->refusalProblems()) {
         if (problem.file == shown->path())

@@ -14,6 +14,7 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
+#include <QDirIterator>
 #include <QLockFile>
 
 #include <toml++/toml.hpp>
@@ -305,6 +306,33 @@ BuildResult buildTarget(const BuildRequest& request)
     QFile::copy(pdfPath, lastGoodPath);
     result.outcome = BuildOutcome::Succeeded;
     return finish(result, QStringLiteral("succeeded"));
+}
+
+BuildOutput readBuildOutput(const QString& root, const QString& folder, int lockWaitMs)
+{
+    BuildOutput output;
+    const QDir dir(QDir(root).filePath(folder));
+    if (folder.isEmpty() || !dir.exists())
+        return output;
+    QLockFile lock(dir.filePath(QStringLiteral("build.lock")));
+    lock.setStaleLockTime(0); // As buildTarget() takes it.
+    if (!lock.tryLock(lockWaitMs))
+        return output;
+    const auto read = [&](const QString& name) {
+        QFile file(dir.filePath(name));
+        return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+    };
+    output.read = true;
+    output.pdf = read(QStringLiteral("main.pdf"));
+    output.lastGoodPdf = read(QStringLiteral("last-good.pdf"));
+    if (!output.lastGoodPdf.isEmpty())
+        output.lastGoodTime = QFileInfo(dir.filePath(QStringLiteral("last-good.pdf"))).lastModified();
+    output.aux = read(QStringLiteral("main.aux"));
+    const QString src = dir.filePath(QStringLiteral("src")) + u'/';
+    for (QDirIterator it(src, QDir::Files, QDirIterator::Subdirectories); it.hasNext();)
+        output.inputs << it.next().mid(src.size());
+    output.inputs.sort();
+    return output;
 }
 
 } // namespace loom

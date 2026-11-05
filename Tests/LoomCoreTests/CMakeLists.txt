@@ -27,6 +27,7 @@ add_executable(LoomCoreTests
     SetupCheckTests.cpp
     StatementsAndProofsTests.cpp
     StatusTests.cpp
+    SyncTexTests.cpp
     TestSupport.cpp
     TestSupport.h
     TexLogTests.cpp

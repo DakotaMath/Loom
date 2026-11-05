@@ -25,6 +25,8 @@ qt_add_library(LoomAppLib STATIC
     NewItemDialogs.h
     NewProjectDialog.cpp
     NewProjectDialog.h
+    PdfPane.cpp
+    PdfPane.h
     ProjectSession.cpp
     ProjectSession.h
     ProjectSnapshot.cpp
@@ -47,7 +49,7 @@ qt_add_library(LoomAppLib STATIC
     Tabs.h
     TextDiff.cpp
     TextDiff.h)
-target_link_libraries(LoomAppLib PUBLIC LoomCore Qt6::Widgets QScintilla)
+target_link_libraries(LoomAppLib PUBLIC LoomCore Qt6::Widgets Qt6::Pdf Qt6::PdfWidgets QScintilla)
 loom_set_compiler_options(LoomAppLib)
 
 qt_add_executable(LoomApp WIN32 main.cpp)

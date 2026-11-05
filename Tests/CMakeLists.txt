@@ -84,7 +84,7 @@ endif()
 # whitespace between words.
 set(link_check_dir "${CMAKE_CURRENT_SOURCE_DIR}/CMake/CoreLinkCheck")
 set(ws "[ \t\r\n]+")
-foreach(case clean direct-gui direct-widgets webengine through-target link-only versionless)
+foreach(case clean direct-gui direct-widgets webengine pdf through-target link-only versionless)
     add_test(NAME cmake.core-link-check.${case}
         COMMAND "${CMAKE_COMMAND}"
             -S "${link_check_dir}"
@@ -101,6 +101,8 @@ set_tests_properties(cmake.core-link-check.direct-widgets PROPERTIES
     PASS_REGULAR_EXPRESSION "LoomCore${ws}must${ws}not${ws}link${ws}Qt6::Widgets\\.")
 set_tests_properties(cmake.core-link-check.webengine PROPERTIES
     PASS_REGULAR_EXPRESSION "LoomCore${ws}must${ws}not${ws}link${ws}Qt6::WebEngineWidgets\\.")
+set_tests_properties(cmake.core-link-check.pdf PROPERTIES
+    PASS_REGULAR_EXPRESSION "LoomCore${ws}must${ws}not${ws}link${ws}Qt6::Pdf\\.")
 set_tests_properties(cmake.core-link-check.through-target PROPERTIES
     PASS_REGULAR_EXPRESSION "LoomCore${ws}must${ws}not${ws}link${ws}Qt6::Gui${ws}\\(through${ws}Helper\\)")
 set_tests_properties(cmake.core-link-check.link-only PROPERTIES

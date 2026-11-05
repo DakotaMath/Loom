@@ -60,7 +60,7 @@ struct ProjectSnapshot {
     ProjectConfig config;       ///< `loom.toml`.
     ProjectContents contents;   ///< Every statement, proof and paper.
     ProjectGraph graph;         ///< With every computed status.
-    /// The bytes of every statement, proof, verbose proof and paper stub file, by project-relative
+    /// The bytes of every statement, proof, verbose proof, paper stub and preamble file, by project-relative
     /// path, as read for this snapshot: what the editor opens, and compares with what it loaded to
     /// see a file changed outside Loom (Specs/m2-statements-review.md, "Never losing text").
     QHash<QString, QByteArray> files;
