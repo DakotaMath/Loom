@@ -593,7 +593,10 @@ void StatementsTabTests::newStatementAndNewProof()
     QVERIFY(file.endsWith("+++\nIf $a$ and $b$ are tame, so is $a + b$.\n"));
     QVERIFY(!QFileInfo::exists(demo.root() + QStringLiteral("/.loom/drafts/new/statement.txt")));
 
-    // + Proof (Ctrl+Shift+N): the new proof's page opens.
+    // + Proof (Ctrl+Shift+N): the new proof's page opens. The offscreen platform (Linux CI)
+    // doesn't make the window active again when a dialog closes, and a shortcut needs it active.
+    window->activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(window.get()));
     QTest::keyClick(window.get(), Qt::Key_N, Qt::ControlModifier | Qt::ShiftModifier);
     QTRY_VERIFY(page->newProofDialog());
     loom::NewProofDialog* proofForm = page->newProofDialog();
