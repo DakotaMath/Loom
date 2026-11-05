@@ -270,6 +270,40 @@ TEST_CASE("validate reports a git failure reading the last commit", "[validate]"
     CHECK(result.message.startsWith("Loom couldn't read the last commit to compare the checks with it"));
 }
 
+TEST_CASE("validate for the app skips the checks against the commit when git can't read it", "[validate]")
+{
+    // Specs/m2-statements-review.md, "Opening a folder": a project whose git isn't found still
+    // opens, with its validation problems. `loom validate` (commitOptional off) still fails.
+    const Copy copy(QStringLiteral(LOOM_WORKED_EXAMPLE));
+    copy.commitAll();
+    const QString missing = copy.temp.path() + "/no-such-git";
+    const char* mode = GENERATE("missing", "dubious");
+    INFO(mode);
+    loom::ValidationRequest request;
+    request.root = copy.root;
+    request.git = copy.git;
+    if (QByteArray(mode) == "missing") {
+        request.git.program = missing;
+    } else {
+        request.git.program = QStringLiteral(LOOM_FAKE_GIT);
+        request.git.environment.insert("LOOM_FAKE_GIT_MODE", mode);
+    }
+
+    const loom::ValidationResult strict = loom::validateProject(request);
+    CHECK(strict.outcome == loom::ValidationOutcome::CantWork);
+
+    request.commitOptional = true;
+    const loom::ValidationResult lenient = loom::validateProject(request);
+    REQUIRE(lenient.outcome == loom::ValidationOutcome::Checked);
+    CHECK(lenient.commitSkipped == strict.message);
+    CHECK(lenient.errors() == 2); // The worked example's two premise cycles.
+    CHECK(lenient.warnings() == 3);
+
+    // With a git that works, nothing is skipped.
+    request.git = copy.git;
+    CHECK(loom::validateProject(request).commitSkipped.isEmpty());
+}
+
 TEST_CASE("validate stops a git that doesn't finish, with git-timeout (A16)", "[validate][git]")
 {
     // Every git command validate runs, reading the last commit or the staged files.

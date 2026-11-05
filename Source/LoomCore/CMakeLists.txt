@@ -2,6 +2,8 @@
 # No UI code: it links Qt6::Core and toml++ only, and the top-level CMakeLists.txt fails the
 # configure if anything adds a UI module (Source/CMake/LoomCoreLinkCheck.cmake).
 add_library(LoomCore STATIC
+    AppLock.cpp
+    AppLock.h
     Bibliography.cpp
     Bibliography.h
     Build.cpp
@@ -52,6 +54,8 @@ add_library(LoomCore STATIC
     ProofChecks.h
     Revision.cpp
     Revision.h
+    SetupCheck.cpp
+    SetupCheck.h
     StatementsAndProofs.cpp
     StatementsAndProofs.h
     Status.cpp

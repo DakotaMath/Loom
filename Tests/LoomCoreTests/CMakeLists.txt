@@ -1,6 +1,7 @@
 # LoomCoreTests: Catch2 tests for LoomCore. catch_discover_tests registers each TEST_CASE with
 # CTest by running the program to list them, which on Windows needs Qt's DLLs on the PATH.
 add_executable(LoomCoreTests
+    AppLockTests.cpp
     BibliographyTests.cpp
     BuildDocumentTests.cpp
     BuildTests.cpp
@@ -21,6 +22,7 @@ add_executable(LoomCoreTests
     ProjectFixture.h
     ProjectTomlTests.cpp
     ProofChecksTests.cpp
+    SetupCheckTests.cpp
     StatementsAndProofsTests.cpp
     StatusTests.cpp
     TestSupport.cpp
@@ -38,6 +40,15 @@ target_link_libraries(loom-fake-git PRIVATE Qt6::Core)
 loom_set_compiler_options(loom-fake-git)
 add_dependencies(LoomCoreTests loom-fake-git)
 target_compile_definitions(LoomCoreTests PRIVATE LOOM_FAKE_GIT="$<TARGET_FILE:loom-fake-git>")
+
+# A stand-in for each tool *Check my setup* runs, copied under each tool's name (FakeTool.cpp).
+# Plain C++, so it runs with a PATH holding only stand-ins, without Qt's DLLs.
+add_executable(loom-fake-tool FakeTool.cpp)
+loom_set_compiler_options(loom-fake-tool)
+# std::getenv is fine here; MSVC would warn that it's "unsafe".
+target_compile_definitions(loom-fake-tool PRIVATE _CRT_SECURE_NO_WARNINGS)
+add_dependencies(LoomCoreTests loom-fake-tool)
+target_compile_definitions(LoomCoreTests PRIVATE LOOM_FAKE_TOOL="$<TARGET_FILE:loom-fake-tool>")
 
 # The pre-commit hook runs `loom validate --staged`, so the tests that commit need this build's `loom`.
 add_dependencies(LoomCoreTests loom)

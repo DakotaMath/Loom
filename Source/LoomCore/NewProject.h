@@ -50,6 +50,15 @@ struct NewProjectResult {
     QString path;
 };
 
+/// M1's message for a missing Git LFS (`git-lfs-missing`), shared with *Check my setup*
+/// (Specs/m2-statements-review.md, "Settings": "Missing says: M1's message").
+/// @returns The message. No side effects.
+QString gitLfsMissingMessage();
+
+/// M1's message for git without a name and email (`git-identity-missing`), shared with *Check my
+/// setup*. @returns The message. No side effects.
+QString gitIdentityMissingMessage();
+
 /// Creates a project (Specs/m1-core.md, "The project folder", steps 1 to 6).
 /// In order: refuses a non-empty folder, a file, or a folder whose parent doesn't exist; checks
 /// that `git` and `git lfs` run, that git knows the user's name and email, as the new repo
