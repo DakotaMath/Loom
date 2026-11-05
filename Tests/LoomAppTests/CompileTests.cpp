@@ -135,6 +135,7 @@ private slots:
     void withoutLatexmkThePaneSaysSo();
     void aPaperResultIsntBuilt();
     void problemsNameFilesAndF8Steps();
+    void fitWidthSettlesAtEverySize();
 
 private:
     /// A new window on the test's settings, shown.
@@ -712,6 +713,40 @@ void CompileTests::findInThePdf()
     QTest::keyClick(text, Qt::Key_Return);
     auto* count = pdf->findBar()->findChild<QLabel*>(QStringLiteral("pdfFindCount"));
     QTRY_VERIFY2(count->text().startsWith(QStringLiteral("1 of ")), qPrintable(count->text()));
+}
+
+
+void CompileTests::fitWidthSettlesAtEverySize()
+{
+    // At Fit width, a vertical scroll bar that came and went changed the width the page was fitted
+    // to, and at some sizes QPdfView laid out for ever: the window hung
+    // (Wiki/gotchas/qt/qpdfview-fit-width-scrollbar-loop.md). The bar is always there now, so the
+    // view's width never depends on the page, at any size of the window.
+    REQUIRE_TEX();
+    const loomtest::DemoProject demo;
+    QVERIFY2(demo.ok(), qPrintable(demo.error()));
+    const std::unique_ptr<MainWindow> window = newWindow();
+    QVERIFY(openDemo(*window, demo.root()));
+    StatementsPage* page = window->statementsPage();
+    PdfPane* pdf = page->pdfPane();
+    page->openStatement(QStringLiteral("K3AB"));
+    QTRY_VERIFY_WITH_TIMEOUT(builtAs(pdf, QStringLiteral("K3AB")), buildWaitMs);
+    QTRY_COMPARE(pdf->document()->status(), QPdfDocument::Status::Ready);
+    QCOMPARE(pdf->view()->zoomMode(), QPdfView::ZoomMode::FitToWidth);
+    QCOMPARE(pdf->view()->verticalScrollBarPolicy(), Qt::ScrollBarAlwaysOn);
+
+    // Through the heights where the page goes from fitting to not fitting, and widths around them.
+    for (int width = 1100; width <= 1300; width += 50) {
+        for (int height = 300; height <= 1400; height += 11) {
+            window->resize(width, height);
+            QCoreApplication::processEvents();
+            QCoreApplication::processEvents();
+            const int settled = pdf->view()->viewport()->width();
+            QCoreApplication::processEvents();
+            QCOMPARE(pdf->view()->viewport()->width(), settled);
+            QVERIFY(pdf->view()->verticalScrollBar()->isVisible());
+        }
+    }
 }
 
 QTEST_MAIN(CompileTests)

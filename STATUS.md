@@ -46,6 +46,7 @@ Milestones M0–M12 are on GitHub; M3 is dropped and its milestone closed. M1's 
 - **Fingerprints are v2** (A18): checks written before PR #29 no longer match.
 - **Path checks on Windows:** `QFileInfo::canonicalFilePath()` doesn't resolve junctions; `LoomCore` uses `std::filesystem::canonical()` ([gotcha](Wiki/gotchas/qt/canonical-path-ignores-junctions.md)).
 - **Terminal checks on Windows:** `_isatty()` is true for `NUL`; `loom` uses `GetConsoleMode` ([gotcha](Wiki/gotchas/windows/isatty-true-for-nul.md)).
+- **QPdfView at Fit width** hangs at some sizes unless its vertical scroll bar is always on ([gotcha](Wiki/gotchas/qt/qpdfview-fit-width-scrollbar-loop.md)).
 - **QScintilla annotations:** `annotation(line)` returns garbage in 2.14.1; read them with `SCI_ANNOTATIONGETTEXT` ([gotcha](Wiki/gotchas/qt/qscintilla-annotation-returns-garbage.md)).
 - **QScintilla takes shortcuts** its keymap binds while an editor has focus ([gotcha](Wiki/gotchas/qt/qscintilla-takes-bound-shortcuts.md)).
 - **Qt regexes:** `$` also matches before a final `\n`; anchor with `QRegularExpression::anchoredPattern` ([gotcha](Wiki/gotchas/qt/regex-dollar-before-final-newline.md)).

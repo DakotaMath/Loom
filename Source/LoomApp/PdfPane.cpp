@@ -74,6 +74,10 @@ LoomPdfView::LoomPdfView(QWidget* parent)
     setObjectName(QStringLiteral("pdfView"));
     setPageMode(PageMode::MultiPage);
     setZoomMode(ZoomMode::FitToWidth);
+    // Always there: at Fit width, a scroll bar that comes and goes changes the width the page is
+    // fitted to, and at some widths QPdfView lays out for ever (the window hangs).
+    // Wiki/gotchas/qt/qpdfview-fit-width-scrollbar-loop.md
+    setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
     m_markTimer.setSingleShot(true);
     m_markTimer.setInterval(PdfPane::markMs);
     connect(&m_markTimer, &QTimer::timeout, this, [this] {
