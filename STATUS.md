@@ -7,10 +7,11 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 -->
 # Status
 
-**Updated:** 2026-11-05 · main at 0794f50
-**Current milestone:** M1, the core, is **done**: built, reviewed, fixed and re-reviewed; all 279 `ctest` tests pass on Windows. **M2** (statements and review) is being built from its approved spec
+**Updated:** 2026-11-06 · main at cb0a446
+**Current milestone:** M1, the core, is **done**: built, reviewed, fixed and re-reviewed; all 279 `ctest` tests pass on Windows. **M2** (statements and review) is built, its review next. **M4**'s spec (tasks and jobs) is written and waits for Dakota
 
 ## Done recently
+- #40 the Review tab: PR #51 merged (2026-11-05) ([log](Wiki/logs/2026-11/2026-11-05-review-tab.md)). M2's build issues are all done.
 - #39 git in `LoomCore` and the git panel: PR #50 merged (2026-11-05) ([log](Wiki/logs/2026-11/2026-11-05-git-panel.md)).
 - #38 status, checks and Dakota's clicks: PR #49 merged (2026-11-05) ([log](Wiki/logs/2026-11/2026-11-05-checks-panel.md)).
 - #37 IDs with their titles and the ID picker: PR #48 merged (2026-11-05) ([log](Wiki/logs/2026-11/2026-11-05-id-picker.md)).
@@ -30,15 +31,16 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 - The M1 spec (2026-11-03): [`Specs/m1-core.md`](Specs/m1-core.md), approved by Dakota (PR #11).
 
 ## In progress
-- #40 the Review tab: PR open, waiting for Dakota's review and Windows check ([log](Wiki/logs/2026-11/2026-11-05-review-tab.md)).
+- #52 the M4 spec (`Specs/m4-tasks-jobs.md`): PR open, waiting for Dakota's answers to Q1–Q9 and approval ([log](Wiki/logs/2026-11/2026-11-06-m4-spec.md)).
 
 ## Next up
 Milestones M0–M12 are on GitHub; M3 is dropped and its milestone closed. M1's issues (#2–#9) are all closed.
-- Once #40 is merged, M2's build issues are all done (#41 is now M4's): then M2's review.
+- M2's review. M4's build issues (#53–#61, #41) wait for the M4 spec's approval; then #53, #54, #55 and #41 first.
 - M1 follow-ups, for M2 or later: see "Follow-ups" in `Reviews/M1/FINAL.md` on `m1/review` (`\cite` of an old key is settled by the M2 spec, E3).
 
 ## Waiting on Dakota
-- Review the PR for #40 (Review) and run its Windows check; the Windows checks of PRs #46–#50, if not done.
+- Answer the M4 spec's open questions (Q1–Q9) and approve it (#52); #53 is labelled `needs-dakota` until then.
+- The Windows checks of PRs #46–#51, if not done.
 - Close the M1 milestone on GitHub.
 - The Windows checks listed in PRs #21–#30.
 
