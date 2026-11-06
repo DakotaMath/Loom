@@ -125,4 +125,8 @@ struct CommittedFiles {
 /// @returns The problems, unsorted. No side effects.
 std::vector<Problem> checkAgainstCommit(const ProjectContents& contents, const CommittedFiles& committed);
 
+/// The message of M1's `deleted-since-commit` warning for `id`, shared by validation and Review's
+/// plain words so the two say the same. No side effects.
+QString deletedSinceCommitMessage(const QString& id);
+
 } // namespace loom

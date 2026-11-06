@@ -29,6 +29,7 @@ add_executable(LoomCoreTests
     ProofChecksTests.cpp
     SetupCheckTests.cpp
     StatementsAndProofsTests.cpp
+    ReviewChangesTests.cpp
     StatusChangesTests.cpp
     StatusTests.cpp
     SyncTexTests.cpp

@@ -29,6 +29,7 @@ class BottomPanel;
 class GitPanel;
 class Lane;
 class ProjectSession;
+class ReviewPage;
 class SettingsPage;
 class SideBar;
 class StartScreen;
@@ -90,6 +91,7 @@ public:
     StartScreen* startScreen() const { return m_startScreen; }
     SettingsPage* settingsPage() const { return m_settingsPage; }
     StatementsPage* statementsPage() const { return m_statementsPage; }
+    ReviewPage* reviewPage() const { return m_reviewPage; }
     BottomPanel* bottomPanel() const { return m_bottomPanel; }
     GitPanel* gitPanel() const { return m_gitPanel; }
     QWidget* page(Tab tab) const;
@@ -151,7 +153,7 @@ private:
     StartScreen* m_startScreen;
     SettingsPage* m_settingsPage;
     std::map<Tab, QWidget*> m_tabPages;
-    QLabel* m_reviewNote;
+    ReviewPage* m_reviewPage;
     QSplitter* m_splitter;
     BottomPanel* m_bottomPanel;
     GitPanel* m_gitPanel;

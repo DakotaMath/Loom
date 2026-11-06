@@ -514,6 +514,13 @@ std::vector<Problem> checkDisk(const QString& root, const ProjectContents& conte
     return problems;
 }
 
+QString deletedSinceCommitMessage(const QString& id)
+{
+    return QStringLiteral("%1 was in the last commit but its file is gone. Tags are permanent: supersede a statement, "
+                          "or mark a proof `failed`, instead of deleting it.")
+        .arg(id);
+}
+
 std::vector<Problem> checkAgainstCommit(const ProjectContents& contents, const CommittedFiles& committed)
 {
     std::vector<Problem> problems;
@@ -529,9 +536,7 @@ std::vector<Problem> checkAgainstCommit(const ProjectContents& contents, const C
     for (const QString& path : committed.paths) {
         const QString id = idOfPath(path);
         if (!id.isEmpty() && !present.contains(id))
-            add(problems, "deleted-since-commit", path, 1,
-                QStringLiteral("%1 was in the last commit but its file is gone. Tags are permanent: supersede a statement, "
-                               "or mark a proof `failed`, instead of deleting it.").arg(id));
+            add(problems, "deleted-since-commit", path, 1, deletedSinceCommitMessage(id));
     }
 
     // Checks are append-only (Specs/m1-core.md, "Checks", rule 1, and A7): every committed entry

@@ -60,6 +60,8 @@ add_library(LoomCore STATIC
     ProjectToml.h
     ProofChecks.cpp
     ProofChecks.h
+    ReviewChanges.cpp
+    ReviewChanges.h
     Revision.cpp
     Revision.h
     SetupCheck.cpp
