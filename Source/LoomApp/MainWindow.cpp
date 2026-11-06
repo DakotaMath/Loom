@@ -7,6 +7,7 @@
 #include "LoomApp/NewProjectDialog.h"
 #include "LoomApp/PdfPane.h"
 #include "LoomApp/ProjectSession.h"
+#include "LoomApp/ReviewPage.h"
 #include "LoomApp/SettingsPage.h"
 #include "LoomApp/SetupCheckView.h"
 #include "LoomApp/SideBar.h"
@@ -70,27 +71,6 @@ QString count(int n, const char* one, const char* many)
     return QStringLiteral("%1 %2").arg(n).arg(QString::fromLatin1(n == 1 ? one : many));
 }
 
-/// A page for a tab whose contents come in a later issue: its name and a line.
-QWidget* placeholderPage(const QString& objectName, const QString& title, QLabel* note, QWidget* parent)
-{
-    auto* page = new QWidget(parent);
-    page->setObjectName(objectName);
-    auto* heading = new QLabel(title, page);
-    QFont font = heading->font();
-    font.setBold(true);
-    font.setPointSizeF(font.pointSizeF() * 1.3);
-    heading->setFont(font);
-    note->setParent(page);
-    note->setWordWrap(true);
-    note->setForegroundRole(QPalette::PlaceholderText);
-    auto* layout = new QVBoxLayout(page);
-    layout->setContentsMargins(24, 18, 24, 18);
-    layout->addWidget(heading);
-    layout->addWidget(note);
-    layout->addStretch(1);
-    return page;
-}
-
 /// Shows a file in Explorer, selected; elsewhere opens its folder.
 void revealInExplorer(const QString& file)
 {
@@ -135,8 +115,8 @@ MainWindow::MainWindow(AppSettings* settings, QWidget* parent)
 
     m_statementsPage = new StatementsPage(m_settings, m_projectLane, m_buildLane, m_pages);
     m_tabPages[Tab::Statements] = m_statementsPage;
-    m_reviewNote = new QLabel;
-    m_tabPages[Tab::Review] = placeholderPage(QStringLiteral("reviewPage"), QStringLiteral("Review"), m_reviewNote, m_pages);
+    m_reviewPage = new ReviewPage(m_settings, m_gitLane, m_buildLane, m_pages);
+    m_tabPages[Tab::Review] = m_reviewPage;
     m_settingsPage = new SettingsPage(m_settings, m_buildLane, m_pages);
     m_tabPages[Tab::Settings] = m_settingsPage;
     for (const auto& [tab, page] : m_tabPages)
@@ -203,6 +183,22 @@ MainWindow::MainWindow(AppSettings* settings, QWidget* parent)
             m_bottomPanel->showProblems();
         }
     });
+    // Review: its badge, its git commands and builds in Output, and Open in Statements.
+    connect(m_reviewPage, &ReviewPage::countChanged, this, [this](int count) { m_sideBar->button(Tab::Review)->setBadgeCount(count); });
+    connect(m_reviewPage, &ReviewPage::gitSteps, this, [this](const std::vector<GitStep>& steps) {
+        for (const GitStep& step : steps)
+            m_bottomPanel->appendOutput(OutputChannel::Git, gitStepText(step), step.started);
+    });
+    connect(m_reviewPage, &ReviewPage::buildFinished, this, &MainWindow::logBuild);
+    connect(m_reviewPage, &ReviewPage::openRequested, this, [this](const QString& statement, const QString& proof) {
+        if (!m_session)
+            return;
+        showTab(Tab::Statements);
+        if (proof.isEmpty())
+            m_statementsPage->openStatement(statement);
+        else
+            m_statementsPage->openProof(proof);
+    });
     connect(m_statementsPage, &StatementsPage::unsavedChanged, this,
             [this](bool any) { m_sideBar->button(Tab::Statements)->setBadgeDot(any); });
     m_splitter = new QSplitter(Qt::Vertical, this);
@@ -267,6 +263,7 @@ MainWindow::~MainWindow()
     // The page keeps its state before the session goes; the lanes wait for their work before the
     // window's parts go; the session's lock goes with it.
     m_gitPanel->setSession(nullptr, nullptr);
+    m_reviewPage->setSession(nullptr);
     m_statementsPage->setSession(nullptr);
     delete m_projectLane;
     delete m_buildLane;
@@ -573,6 +570,7 @@ void MainWindow::finishOpening(Opening opening, OpenMode mode)
     // Its unsaved edits were asked about before this open started (openFolder()).
     m_unsavedAnswered = false;
     m_gitPanel->setSession(nullptr, nullptr);
+    m_reviewPage->setSession(nullptr);
     m_statementsPage->setSession(nullptr);
     m_bottomPanel->setBuildProblems({});
     m_bottomPanel->setCommitProblems({});
@@ -595,6 +593,7 @@ void MainWindow::finishOpening(Opening opening, OpenMode mode)
         m_tabActions.at(info.tab)->setEnabled(true);
     m_statementsPage->setSession(m_session);
     m_gitPanel->setSession(m_session, m_statementsPage);
+    m_reviewPage->setSession(m_session);
     showTab(tab);
     updateFromSnapshot();
     emit projectOpened(snapshot.root);
@@ -708,8 +707,6 @@ void MainWindow::updateFromSnapshot()
         m_errorsBar->hide();
     }
 
-    m_reviewNote->setText(snapshot->gitProblem.isEmpty() ? QStringLiteral("Your uncommitted changes, compiled before and after, come next.")
-                                                         : snapshot->gitProblem);
 }
 
 void MainWindow::logBuild(const BuildResult& result)

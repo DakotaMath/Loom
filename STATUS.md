@@ -7,10 +7,11 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 -->
 # Status
 
-**Updated:** 2026-11-05 · main at 6b59d6e
+**Updated:** 2026-11-05 · main at 0794f50
 **Current milestone:** M1, the core, is **done**: built, reviewed, fixed and re-reviewed; all 279 `ctest` tests pass on Windows. **M2** (statements and review) is being built from its approved spec
 
 ## Done recently
+- #39 git in `LoomCore` and the git panel: PR #50 merged (2026-11-05) ([log](Wiki/logs/2026-11/2026-11-05-git-panel.md)).
 - #38 status, checks and Dakota's clicks: PR #49 merged (2026-11-05) ([log](Wiki/logs/2026-11/2026-11-05-checks-panel.md)).
 - #37 IDs with their titles and the ID picker: PR #48 merged (2026-11-05) ([log](Wiki/logs/2026-11/2026-11-05-id-picker.md)).
 - #36 compiling, the PDF pane, SyncTeX, the Problems panel and Output: PR #47 merged (2026-11-05) ([log](Wiki/logs/2026-11/2026-11-05-compile-pdf.md)).
@@ -29,15 +30,15 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 - The M1 spec (2026-11-03): [`Specs/m1-core.md`](Specs/m1-core.md), approved by Dakota (PR #11).
 
 ## In progress
-- #39 git in `LoomCore` and the git panel: PR #50, waiting for Dakota's review and Windows check ([log](Wiki/logs/2026-11/2026-11-05-git-panel.md)).
+- #40 the Review tab: PR open, waiting for Dakota's review and Windows check ([log](Wiki/logs/2026-11/2026-11-05-review-tab.md)).
 
 ## Next up
 Milestones M0–M12 are on GitHub; M3 is dropped and its milestone closed. M1's issues (#2–#9) are all closed.
-- M2's last build issue, #40 (Review): it can reuse `statusChanges()`, and `parseGitStatus()` and `fileDiff()` from #39 (#41 is now M4's).
+- Once #40 is merged, M2's build issues are all done (#41 is now M4's): then M2's review.
 - M1 follow-ups, for M2 or later: see "Follow-ups" in `Reviews/M1/FINAL.md` on `m1/review` (`\cite` of an old key is settled by the M2 spec, E3).
 
 ## Waiting on Dakota
-- Review PR #50 (#39, the git panel) and run its Windows check; the Windows checks of PRs #46–#49, if not done.
+- Review the PR for #40 (Review) and run its Windows check; the Windows checks of PRs #46–#50, if not done.
 - Close the M1 milestone on GitHub.
 - The Windows checks listed in PRs #21–#30.
 
@@ -48,7 +49,7 @@ Milestones M0–M12 are on GitHub; M3 is dropped and its milestone closed. M1's 
 - **Fingerprints are v2** (A18): checks written before PR #29 no longer match.
 - **Path checks on Windows:** `QFileInfo::canonicalFilePath()` doesn't resolve junctions; `LoomCore` uses `std::filesystem::canonical()` ([gotcha](Wiki/gotchas/qt/canonical-path-ignores-junctions.md)).
 - **Terminal checks on Windows:** `_isatty()` is true for `NUL`; `loom` uses `GetConsoleMode` ([gotcha](Wiki/gotchas/windows/isatty-true-for-nul.md)).
-- **QPdfView at Fit width** hangs at some sizes unless its vertical scroll bar is always on ([gotcha](Wiki/gotchas/qt/qpdfview-fit-width-scrollbar-loop.md)).
+- **QPdfView at Fit width** hangs at some sizes unless its vertical scroll bar is always on ([gotcha](Wiki/gotchas/qt/qpdfview-fit-width-scrollbar-loop.md)); it renders pages in the background, so a screenshot needs a moment ([gotcha](Wiki/gotchas/qt/qpdfview-grab-before-render.md)).
 - **QScintilla annotations:** `annotation(line)` returns garbage in 2.14.1; read them with `SCI_ANNOTATIONGETTEXT` ([gotcha](Wiki/gotchas/qt/qscintilla-annotation-returns-garbage.md)).
 - **QScintilla takes shortcuts** its keymap binds while an editor has focus ([gotcha](Wiki/gotchas/qt/qscintilla-takes-bound-shortcuts.md)).
 - **Qt regexes:** `$` also matches before a final `\n`; anchor with `QRegularExpression::anchoredPattern` ([gotcha](Wiki/gotchas/qt/regex-dollar-before-final-newline.md)).

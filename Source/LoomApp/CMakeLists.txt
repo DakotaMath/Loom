@@ -43,6 +43,8 @@ qt_add_library(LoomAppLib STATIC
     ProjectSession.h
     ProjectSnapshot.cpp
     ProjectSnapshot.h
+    ReviewPage.cpp
+    ReviewPage.h
     SettingsPage.cpp
     SettingsPage.h
     SetupCheckView.cpp

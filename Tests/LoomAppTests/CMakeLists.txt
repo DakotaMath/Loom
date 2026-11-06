@@ -93,3 +93,19 @@ if(WIN32)
     set_tests_properties(GitPanelTests PROPERTIES
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${LOOM_QT_BIN_DIR}")
 endif()
+
+# ReviewTests: the Review tab (#40), on the demo with the `review` overlay. Its before-and-after
+# cases build with TeX, hence the label; they skip without latexmk, the rest need no TeX.
+qt_add_executable(ReviewTests
+    ReviewTests.cpp)
+target_link_libraries(ReviewTests PRIVATE LoomAppLib LoomTestSupport Qt6::Test)
+target_compile_definitions(ReviewTests PRIVATE
+    LOOM_SCREENSHOTS="${PROJECT_BINARY_DIR}/screenshots")
+loom_set_compiler_options(ReviewTests)
+add_test(NAME ReviewTests COMMAND ReviewTests)
+add_dependencies(ReviewTests loom)
+set_tests_properties(ReviewTests PROPERTIES LABELS tex)
+if(WIN32)
+    set_tests_properties(ReviewTests PROPERTIES
+        ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${LOOM_QT_BIN_DIR}")
+endif()
