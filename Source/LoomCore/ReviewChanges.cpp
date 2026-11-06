@@ -3,6 +3,7 @@
 #include "LoomCore/Checks.h"
 #include "LoomCore/ProjectContents.h"
 #include "LoomCore/ProofChecks.h"
+#include "LoomCore/Validation.h"
 
 #include <QSet>
 
@@ -151,10 +152,14 @@ private:
 void deletedLines(Lines& lines, const QString& id)
 {
     lines.add(QStringLiteral("deleted"), QStringLiteral("deleted"));
-    lines.add(QStringLiteral("%1 was in the last commit but its file is gone. Tags are permanent: supersede a statement, "
-                             "or mark a proof `failed`, instead of deleting it.")
-                  .arg(id),
-              QStringLiteral("deleted"), true);
+    lines.add(deletedSinceCommitMessage(id), QStringLiteral("deleted"), true);
+}
+
+/// The line for a file that was in the last commit but couldn't be read there, and can now: it
+/// isn't new, and there is nothing to compare its fields with.
+void readableNow(Lines& lines)
+{
+    lines.add(QStringLiteral("couldn't be read at the last commit; it can now"), QStringLiteral("front matter"));
 }
 
 /// The plain lines for a file Loom doesn't read, or can't read on one side.
@@ -176,7 +181,9 @@ void plainFile(Lines& lines, FileChange change)
 /// `text changed`, and the checks this file's change alone outdates.
 void bodyLine(Lines& lines, const ProjectContents& before, const ProjectContents& after, const QString& path)
 {
-    const QStringList outdated = outdatedChecks(before, withFileFrom(before, after, path));
+    QStringList outdated = outdatedChecks(before, withFileFrom(before, after, path));
+    // A proof deleted in the working tree has no checks left to outdate.
+    outdated.removeIf([&](const QString& id) { return !after.proof(id); });
     lines.add(outdated.isEmpty() ? QStringLiteral("text changed")
                                  : QStringLiteral("text changed; outdates the checks of %1").arg(outdated.join(QStringLiteral(", "))),
               QStringLiteral("text"));
@@ -198,8 +205,12 @@ void statementLines(Lines& lines, const ProjectContents& before, const ProjectCo
         lines.add(QStringLiteral("the front matter can't be read; the Problems panel says why"), QStringLiteral("front matter"), true);
         return;
     }
-    if (!old || !old->reading.parsed) {
+    if (!old) {
         lines.add(QStringLiteral("new %1 %2").arg(now->reading.document.kind, label(now->tag)), QStringLiteral("new"));
+        return;
+    }
+    if (!old->reading.parsed) {
+        readableNow(lines);
         return;
     }
     const Statement& b = old->reading.document;
@@ -250,7 +261,11 @@ void proofLines(Lines& lines, const ProjectContents& before, const ProjectConten
         return;
     }
     const Proof& a = now->reading.document;
-    if (!old || !old->reading.parsed) {
+    if (old && !old->reading.parsed) {
+        readableNow(lines);
+        return;
+    }
+    if (!old) {
         QStringList premises;
         for (const QString& premise : a.premises)
             premises << label(premise);
@@ -261,7 +276,8 @@ void proofLines(Lines& lines, const ProjectContents& before, const ProjectConten
     }
     const Proof& b = old->reading.document;
     lines.field(QStringLiteral("id"), b.id, a.id);
-    lines.field(QStringLiteral("proves"), b.proves, a.proves);
+    lines.field(QStringLiteral("proves"), b.proves.isEmpty() ? QString() : label(b.proves), a.proves.isEmpty() ? QString() : label(a.proves),
+                QStringLiteral("proves"));
     lines.add(listChange(QStringLiteral("premises"), b.premises, a.premises, label), QStringLiteral("premises"));
     lines.field(QStringLiteral("level"), b.level, a.level);
     lines.field(QStringLiteral("created"), dateText(b.created), dateText(a.created));
@@ -286,8 +302,16 @@ void verboseLines(Lines& lines, const ProjectContents& before, const ProjectCont
         lines.add(QStringLiteral("verbose version removed"), what);
         return;
     }
+    if (!now->reading.parsed) {
+        lines.add(QStringLiteral("the verbose version can't be read; the Problems panel says why"), what, true);
+        return;
+    }
     if (!old) {
         lines.add(QStringLiteral("verbose version added"), what);
+        return;
+    }
+    if (!old->reading.parsed) {
+        readableNow(lines);
         return;
     }
     if (old->reading.document.body != now->reading.document.body)
@@ -308,6 +332,8 @@ void checksLines(Lines& lines, const ProjectContents& before, const ProjectConte
         lines.add(QStringLiteral("the check history can't be read; the Problems panel says why"), QStringLiteral("check"), true);
         return;
     }
+    if (!now)
+        lines.add(QStringLiteral("deleted"), QStringLiteral("deleted"), true); // Committed checks are never removed (M1).
     const std::vector<Check> none;
     const std::vector<Check>& committed = old && old->reading.parsed ? old->reading.checks : none;
     const std::vector<Check>& current = now ? now->reading.checks : none;
@@ -420,7 +446,9 @@ void paperLines(Lines& lines, const ProjectContents& before, const ProjectConten
     const PaperFile* old = fileAt(before.papers, path);
     const PaperFile* now = fileAt(after.papers, path);
     if (!now || !now->reading.parsed || !old || !old->reading.parsed) {
-        if (now && now->reading.parsed && (!old || !old->reading.parsed)) {
+        if (now && now->reading.parsed && old) {
+            readableNow(lines);
+        } else if (now && now->reading.parsed) {
             const Paper& a = now->reading.document;
             const QString title = a.work.title ? a.work.title->text() : QString();
             lines.add(title.isEmpty() ? QStringLiteral("new paper %1").arg(a.key) : QStringLiteral("new paper %1%2%3").arg(a.key, dot, title),
@@ -510,7 +538,11 @@ void stubLines(Lines& lines, const ProjectContents& before, const ProjectContent
     }
     const auto label = [&](const QString& id) { return named(before, after, id); };
     const Stub& a = now->reading.document;
-    if (!old || !old->reading.parsed) {
+    if (old && !old->reading.parsed) {
+        readableNow(lines);
+        return;
+    }
+    if (!old) {
         lines.add(QStringLiteral("new %1 %2").arg(a.kind, label(now->tag)), QStringLiteral("new"));
         return;
     }

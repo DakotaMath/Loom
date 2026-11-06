@@ -194,6 +194,8 @@ private slots:
     void openInStatementsOpensTheFile();
     void updatesWhenFilesChange();
     void neverChangesAFileOrGit();
+    void buildsWaitWhileTheTabIsHidden();
+    void anotherProjectDropsTheOldBuilds();
 
 private:
     /// A new window on the test's settings, shown, with the demo open on the Review tab and its list read.
@@ -497,6 +499,76 @@ void ReviewTests::neverChangesAFileOrGit()
         QVERIFY(waitForList(*window));
     }
     QCOMPARE(fingerprintOf(demo), before);
+}
+
+void ReviewTests::buildsWaitWhileTheTabIsHidden()
+{
+    const loomtest::DemoProject demo(QStringLiteral("review"));
+    QVERIFY2(demo.ok(), qPrintable(demo.error()));
+    // Without latexmk each build ends at once (tex-missing), which is all this needs to count.
+    m_settings->setLatexmkPath(m_temp->filePath(QStringLiteral("no-such-latexmk")));
+    const auto window = openReview(demo.root());
+    QVERIFY(window);
+    ReviewPage* page = window->reviewPage();
+    Builds built(page);
+    QVERIFY(clickItem(page->entries(), QStringLiteral("C4JK")));
+    QVERIFY(waitForBuilds(page));
+    QCOMPARE(built.results.size(), std::size_t(2));
+
+    // On another tab, files change and the list is read again, but nothing is built: the Build
+    // lane is the Statements tab's too.
+    window->showTab(Tab::Statements);
+    built.results.clear();
+    QSignalSpy shown(page, &ReviewPage::listShown);
+    QVERIFY(writeFile(demo.root() + QStringLiteral("/Notes/plan.md"), "# A plan\n"));
+    window->session()->refresh();
+    QVERIFY(shown.wait(30'000));
+    QVERIFY(waitForList(*window));
+    QVERIFY(waitForBuilds(page));
+    QCOMPARE(built.results.size(), std::size_t(0));
+    QCOMPARE(page->list().count(), 5);
+
+    // Back on Review, the side of now builds.
+    window->showTab(Tab::Review);
+    QTRY_VERIFY(!built.results.empty());
+    QVERIFY(waitForBuilds(page));
+    QCOMPARE(page->building(), 0);
+}
+
+void ReviewTests::anotherProjectDropsTheOldBuilds()
+{
+    const loomtest::DemoProject first(QStringLiteral("review"));
+    QVERIFY2(first.ok(), qPrintable(first.error()));
+    const loomtest::DemoProject second(QStringLiteral("review"));
+    QVERIFY2(second.ok(), qPrintable(second.error()));
+    const auto window = openReview(first.root());
+    QVERIFY(window);
+    ReviewPage* page = window->reviewPage();
+    Builds built(page);
+
+    // Builds of the first project start; the second opens before they finish.
+    QVERIFY(clickItem(page->entries(), QStringLiteral("C4JK")));
+    QSignalSpy finished(window.get(), &MainWindow::openFinished);
+    window->openFolder(second.root());
+    QVERIFY(finished.wait(30'000));
+    QCOMPARE(page->building(), 0);
+    built.results.clear();
+
+    // The first project's results arrive and are dropped: no count below zero, nothing logged.
+    QVERIFY(window->buildLane()->waitUntilIdle(2 * buildWaitMs));
+    QCOMPARE(page->building(), 0);
+    QCOMPARE(built.results.size(), std::size_t(0));
+
+    // The second project's list and builds work as usual (it opened on Statements).
+    window->showTab(Tab::Review);
+    QVERIFY(waitForList(*window));
+    QCOMPARE(page->list().count(), 4);
+    QVERIFY(clickItem(page->entries(), QStringLiteral("C4JK")));
+    QVERIFY(waitForBuilds(page));
+    QCOMPARE(page->building(), 0);
+    QCOMPARE(built.results.size(), std::size_t(2));
+    for (const loom::BuildResult& result : built.results)
+        QVERIFY(result.folder.startsWith(u".loom/"));
 }
 
 QTEST_MAIN(ReviewTests)

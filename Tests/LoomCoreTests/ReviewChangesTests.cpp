@@ -219,6 +219,21 @@ TEST_CASE("A statement's front-matter changes in plain words", "[review]")
         edit(demo, path, "superseded_by = \"D5MN\"\nrefuted_by = \"G8TV.a\"\nrefuted_on = 2026-11-06\n", "");
         CHECK(linesOf(middle, demo, path) == QStringList{QStringLiteral("no longer superseded"), QStringLiteral("no longer refuted")});
     }
+    SECTION("refuted, not yet accepted; an alias removed")
+    {
+        edit(demo, path, "created = 2026-11-05\n", "aliases = [\"lem:tails\", \"lem:vanish\"]\ncreated = 2026-11-05\n");
+        const ProjectContents middle = contentsOf(demo.root());
+        edit(demo, path, "aliases = [\"lem:tails\", \"lem:vanish\"]\n", "aliases = [\"lem:tails\"]\nrefuted_by = \"G8TV.a\"\n");
+        CHECK(linesOf(middle, demo, path)
+              == QStringList{QStringLiteral(u"aliases: \u2212lem:vanish"), QStringLiteral("refuted by G8TV.a (not yet accepted)")});
+    }
+    SECTION("a file that couldn't be read at the last commit")
+    {
+        edit(demo, path, "kind = \"lemma\"", "kind = = \"lemma\"");
+        const ProjectContents broken = contentsOf(demo.root());
+        edit(demo, path, "kind = = \"lemma\"", "kind = \"lemma\"");
+        CHECK(linesOf(broken, demo, path) == QStringList{QStringLiteral("couldn't be read at the last commit; it can now")});
+    }
     SECTION("the body, with the checks it outdates")
     {
         edit(demo, path, "tend to zero", "go to zero");
@@ -260,6 +275,12 @@ TEST_CASE("A proof's changes in plain words", "[review]")
         CHECK(linesOf(before, demo, QStringLiteral("Proofs/G8TV/G8TV.a.tex"))
               == QStringList{QStringLiteral(u"premises: +D5MN · Tame sequences are bounded, −C4JK · Tails of tame sequences vanish"),
                              QStringLiteral(u"level: complete → sketch")});
+    }
+    SECTION("proves, with titles")
+    {
+        edit(demo, QStringLiteral("Proofs/G8TV/G8TV.a.tex"), "proves = \"G8TV\"", "proves = \"K3AB\"");
+        CHECK(linesOf(before, demo, QStringLiteral("Proofs/G8TV/G8TV.a.tex"))
+              == QStringList{QStringLiteral(u"proves: G8TV \u00b7 Tame sums commute with limits \u2192 K3AB \u00b7 A tail bound for sums")});
     }
     SECTION("the body of a checked proof")
     {
@@ -320,6 +341,26 @@ TEST_CASE("Checks and verbose versions in plain words", "[review]")
         CHECK(file.lines[1].text == u"check: agent claude-opus-5-5 fail (this version)");
         CHECK(file.proofId == u"G8TV.a");
     }
+    SECTION("a committed check removed")
+    {
+        const QString path = QStringLiteral("Proofs/G8TV/G8TV.a.checks.toml");
+        write(demo, path, "");
+        const loom::FileChanges file = loom::fileChanges(before, contentsOf(demo.root()), path, FileChange::Changed);
+        REQUIRE(file.lines.size() == 1);
+        CHECK(file.lines[0].text == u"check changed: agent claude-opus-5-5, 2026-11-05 10:00");
+        CHECK(file.lines[0].warning);
+    }
+    SECTION("a check history deleted, and one new")
+    {
+        const QString path = QStringLiteral("Proofs/G8TV/G8TV.a.checks.toml");
+        REQUIRE(QFile::remove(demo.root() + u'/' + path));
+        const ProjectContents without = contentsOf(demo.root());
+        const loom::FileChanges gone = loom::fileChanges(before, without, path, FileChange::Deleted);
+        CHECK(texts(gone) == QStringList{QStringLiteral("deleted"), QStringLiteral("check changed: agent claude-opus-5-5, 2026-11-05 10:00")});
+        CHECK(gone.lines[0].warning);
+        CHECK(texts(loom::fileChanges(without, before, path, FileChange::New))
+              == QStringList{QStringLiteral("check: agent claude-opus-5-5 pass (this version)")});
+    }
     SECTION("a verbose version marked up to date, changed, removed and added")
     {
         const QString path = QStringLiteral("Proofs/E6PQ/E6PQ.a.verbose.tex");
@@ -365,6 +406,16 @@ TEST_CASE("Papers and stubs in plain words", "[review]")
         CHECK(linesOf(before, demo, path)
               == QStringList{QStringLiteral(u"published at: \"Theorem 1.2\" → \"Theorem 1.3\""),
                              QStringLiteral("published no longer checked against the PDF")});
+    }
+    SECTION("a deleted stub, with M1's warning")
+    {
+        const QString path = QStringLiteral("Papers/SmithJones24/Statements/3WQ6.toml");
+        REQUIRE(QFile::remove(demo.root() + u'/' + path));
+        const loom::FileChanges file = loom::fileChanges(before, contentsOf(demo.root()), path, FileChange::Deleted);
+        REQUIRE(file.lines.size() == 2);
+        CHECK(file.lines[0].text == u"deleted");
+        CHECK(file.lines[1].warning);
+        CHECK(file.lines[1].text.startsWith(u"3WQ6 was in the last commit"));
     }
     SECTION("the paper's entry groups paper.toml and its stubs")
     {

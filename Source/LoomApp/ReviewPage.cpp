@@ -30,6 +30,7 @@
 #include <QVBoxLayout>
 
 #include <optional>
+#include <utility>
 
 namespace loom {
 
@@ -223,7 +224,7 @@ void ReviewSide::showErrors(const QString& heading, const std::vector<Problem>& 
     for (const Problem& problem : problems) {
         if (problem.severity != Severity::Error)
             continue;
-        lines << (problem.file.isEmpty() ? problem.message : QStringLiteral("%1:%2: %3").arg(problem.file).arg(problem.line).arg(problem.message));
+        lines << (problem.file.isEmpty() ? problem.message : QStringLiteral("%1:%2: %3").arg(problem.file, QString::number(problem.line), problem.message));
     }
     m_errors->setPlainText(lines.join(u'\n'));
     m_stack->setCurrentWidget(m_errors);
@@ -408,16 +409,21 @@ void ReviewPage::setSession(ProjectSession* session)
 {
     if (m_session)
         disconnect(m_session, nullptr, this, nullptr);
-    if (m_stop)
-        m_stop->store(true);
+    stopBuilds();
+    // Results of the old project's tasks still arrive; each checks this generation and is dropped
+    // without touching the counters below.
     ++m_generation;
-    ++m_buildGeneration;
     ++m_diffGeneration;
     m_session = session;
     m_reading = false;
     m_again = false;
     m_building = 0;
+    m_sideBuilds[0] = m_sideBuilds[1] = {};
+    m_deferred = false;
+    m_deferredRebuild = false;
     m_readingDiff = false;
+    m_diffKey.clear();
+    m_diff->clear();
     m_list = {};
     m_head.clear();
     m_problem.clear();
@@ -446,6 +452,12 @@ void ReviewPage::refresh()
 void ReviewPage::showEvent(QShowEvent* event)
 {
     QWidget::showEvent(event);
+    // Builds put off while the tab was hidden run now.
+    if (m_deferred) {
+        m_deferred = false;
+        if (const ReviewEntry* entry = shown())
+            showEntry(*entry, std::exchange(m_deferredRebuild, false));
+    }
     refresh();
 }
 
@@ -474,8 +486,10 @@ void ReviewPage::read()
             const QString& root = snapshot->root;
             // "The list (left), from `git status --porcelain=v2 -z --untracked-files=all` (ignored
             // files excluded)".
-            const QStringList arguments{QStringLiteral("status"), QStringLiteral("--porcelain=v2"), QStringLiteral("-z"),
-                                        QStringLiteral("--untracked-files=all")};
+            // `--no-optional-locks`: git status may otherwise refresh and rewrite `.git/index`, and
+            // Review never changes git; it would also hold `index.lock` against an agent's commit.
+            const QStringList arguments{QStringLiteral("--no-optional-locks"), QStringLiteral("status"), QStringLiteral("--porcelain=v2"),
+                                        QStringLiteral("-z"), QStringLiteral("--untracked-files=all")};
             const GitRun status = runLogged(git, arguments, root, read.steps);
             if (!status.ok()) {
                 read.problem = status.started ? QStringLiteral("Loom couldn't read the changed files: %1").arg(status.errors.trimmed())
@@ -508,9 +522,10 @@ void ReviewPage::read()
             return read;
         },
         [this](Read read) {
-            m_reading = false;
+            // A read for the project open before: its flag was reset when that project closed.
             if (read.generation != m_generation)
                 return;
+            m_reading = false;
             showList(std::move(read));
             if (m_again) {
                 m_again = false;
@@ -577,10 +592,12 @@ void ReviewPage::showList(Read read)
         m_note->setText(m_problem);
         m_right->setCurrentWidget(m_note);
         m_shownKey.clear();
+        stopBuilds();
     } else if (m_list.entries.empty() && m_list.statusChanges.empty()) {
         m_note->setText(QStringLiteral("No uncommitted changes: the project is as it was at the last commit."));
         m_right->setCurrentWidget(m_note);
         m_shownKey.clear();
+        stopBuilds();
     } else if (!selected.isEmpty() && selectEntry(selected)) {
         // The entry is still there: its changes again, its side of now built again (LoomCore
         // reuses the build when nothing changed), and the side at HEAD if HEAD moved.
@@ -588,6 +605,7 @@ void ReviewPage::showList(Read read)
             showEntry(*entry, headMoved);
     } else {
         m_shownKey.clear();
+        stopBuilds();
         m_note->setText(QStringLiteral("Choose a change on the left to see it compiled before and after."));
         m_right->setCurrentWidget(m_note);
     }
@@ -640,6 +658,13 @@ void ReviewPage::showSelected()
 void ReviewPage::showEntry(const ReviewEntry& entry, bool rebuild)
 {
     m_right->setCurrentWidget(m_entryPage);
+    if (entry.key != m_diffKey) {
+        // Another entry: a diff still being read for the one before is dropped, and its text goes.
+        m_diffKey = entry.key;
+        ++m_diffGeneration;
+        m_readingDiff = false;
+        m_diff->clear();
+    }
     m_heading->setText(QStringLiteral(u"%1 — %2").arg(entry.name, changeMark(entry.change)));
 
     // 1. Changes in plain words, one line each, under the file they belong to; a selected proof's
@@ -678,7 +703,15 @@ void ReviewPage::showEntry(const ReviewEntry& entry, bool rebuild)
     m_changes->setVisible(!entry.details.empty());
 
     updateControls();
+    if (!isVisible()) {
+        // The tab is hidden: building now would only hold the Build lane, which the Statements
+        // tab's builds share. It happens when the tab is shown (showEvent()).
+        m_deferred = true;
+        m_deferredRebuild = m_deferredRebuild || rebuild;
+        return;
+    }
     if (entry.group != ReviewGroup::Statements || m_raw) {
+        stopBuilds(); // The PDFs aren't shown: their builds aren't needed.
         m_content->setCurrentWidget(m_diff);
         readDiff();
         return;
@@ -687,13 +720,19 @@ void ReviewPage::showEntry(const ReviewEntry& entry, bool rebuild)
     // 2. Before and after. Both start again for a new entry, mode or HEAD; a result of an older
     // build is then dropped. Otherwise only the side of now builds again.
     if (rebuild || m_shownHead != m_head || !m_stop) {
-        if (m_stop)
-            m_stop->store(true);
+        stopBuilds();
         m_stop = std::make_shared<std::atomic_bool>(false);
-        ++m_buildGeneration;
         build(m_before, true);
     }
     build(m_after, false);
+}
+
+void ReviewPage::stopBuilds()
+{
+    if (m_stop)
+        m_stop->store(true);
+    m_stop.reset();
+    ++m_buildGeneration;
 }
 
 void ReviewPage::updateControls()
@@ -754,6 +793,15 @@ void ReviewPage::build(ReviewSide* side, bool atHead)
         side->showMessage(QStringLiteral("New: not in the last commit."));
         return;
     }
+    // One build per side at a time: a request while this side's build of the same generation
+    // runs becomes one more build after it, so snapshots in a row don't queue a build each.
+    SideBuild& state = m_sideBuilds[atHead ? 0 : 1];
+    if (state.running == m_buildGeneration) {
+        state.again = true;
+        return;
+    }
+    state.running = m_buildGeneration;
+    state.again = false;
     BuildRequest request;
     request.root = m_session->root();
     request.target = entry->key;
@@ -769,6 +817,7 @@ void ReviewPage::build(ReviewSide* side, bool atHead)
     side->setBuilding(true);
     ++m_building;
     const int generation = m_buildGeneration;
+    const int session = m_generation;
     const QString key = entry->key;
     struct Built {
         BuildResult result;
@@ -782,8 +831,14 @@ void ReviewPage::build(ReviewSide* side, bool atHead)
                 built.output = readBuildOutput(request.root, built.result.folder);
             return built;
         },
-        [this, side, generation, key](Built built) {
+        [this, side, atHead, generation, session, key](Built built) {
+            if (session != m_generation)
+                return; // The project open before: its counters were reset when it closed.
             --m_building;
+            SideBuild& state = m_sideBuilds[atHead ? 0 : 1];
+            const bool again = state.running == generation && state.again;
+            if (state.running == generation)
+                state = {};
             const bool current = generation == m_buildGeneration && key == m_shownKey;
             if (current) {
                 side->setBuilding(false);
@@ -811,6 +866,8 @@ void ReviewPage::build(ReviewSide* side, bool atHead)
             }
             if (built.result.outcome != BuildOutcome::Stopped)
                 emit buildFinished(built.result);
+            if (again && current)
+                build(side, atHead);
             if (m_building == 0)
                 emit buildsFinished();
         });
@@ -823,6 +880,7 @@ void ReviewPage::readDiff()
         return;
     m_readingDiff = true;
     const int generation = ++m_diffGeneration;
+    const int session = m_generation;
     if (m_diff->document()->isEmpty())
         m_diff->setPlainText(QStringLiteral(u"Reading the diff…"));
     m_gitLane->run(this,
@@ -848,7 +906,9 @@ void ReviewPage::readDiff()
             }
             return std::make_pair(parts.join(u'\n'), std::move(steps));
         },
-        [this, generation](std::pair<QString, std::vector<GitStep>> diff) {
+        [this, generation, session](std::pair<QString, std::vector<GitStep>> diff) {
+            if (session != m_generation)
+                return; // The project open before: its commands aren't this one's Output.
             if (!diff.second.empty())
                 emit gitSteps(diff.second);
             if (generation != m_diffGeneration)

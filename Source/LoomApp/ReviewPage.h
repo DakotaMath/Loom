@@ -184,6 +184,9 @@ private:
     void updateControls();
     /// The shown entry, or null.
     const ReviewEntry* shown() const;
+    /// Stops the running builds of both sides and drops their results: the sides aren't shown,
+    /// or both start again.
+    void stopBuilds();
     /// Keeps the two PDF views scrolled together while *Link scrolling* is on.
     void linkScroll(LoomPdfView* from, LoomPdfView* to);
 
@@ -210,6 +213,16 @@ private:
     int m_building = 0;
     int m_buildGeneration = 0; ///< Bumped when both sides start again; older results are dropped.
     std::shared_ptr<std::atomic_bool> m_stop;
+    /// Each side's build (at `HEAD`, now): the generation of the one running (-1 for none), and
+    /// whether another was asked for meanwhile.
+    struct SideBuild {
+        int running = -1;
+        bool again = false;
+    };
+    SideBuild m_sideBuilds[2];
+    bool m_deferred = false;        ///< The shown entry's builds wait for the tab to be shown.
+    bool m_deferredRebuild = false; ///< ...and both sides must start again then.
+    QString m_diffKey;              ///< The entry the raw diff shown is of.
     bool m_readingDiff = false;
     int m_diffGeneration = 0;
     bool m_syncing = false;
