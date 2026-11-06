@@ -2,6 +2,7 @@
 
 #include "LoomApp/AppSettings.h"
 #include "LoomApp/BottomPanel.h"
+#include "LoomApp/GitPanel.h"
 #include "LoomApp/Lane.h"
 #include "LoomApp/NewProjectDialog.h"
 #include "LoomApp/PdfPane.h"
@@ -13,6 +14,7 @@
 #include "LoomApp/StatementsPage.h"
 
 #include "LoomCore/AppLock.h"
+#include "LoomCore/GitOperations.h"
 #include "LoomCore/Version.h"
 
 #include <QAction>
@@ -26,6 +28,7 @@
 #include <QFileInfo>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMouseEvent>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QProcess>
@@ -216,12 +219,38 @@ MainWindow::MainWindow(AppSettings* settings, QWidget* parent)
     rightLayout->addWidget(m_errorsBar);
     rightLayout->addWidget(m_splitter, 1);
 
+    // The git panel, on the right of every tab (Specs/m2-statements-review.md, "The git panel").
+    m_gitPanel = new GitPanel(m_settings, m_gitLane, m_projectLane, this);
+    m_gitPanel->hide();
+    connect(m_gitPanel, &GitPanel::gitSteps, this, [this](const std::vector<GitStep>& steps) {
+        for (const GitStep& step : steps)
+            m_bottomPanel->appendOutput(OutputChannel::Git, gitStepText(step), step.started);
+    });
+    connect(m_gitPanel, &GitPanel::commitProblems, this, [this](const std::vector<Problem>& problems) {
+        m_bottomPanel->setCommitProblems(problems);
+        if (!problems.empty()) {
+            m_bottomPanel->show();
+            m_bottomPanel->showProblems();
+        }
+    });
+    connect(m_gitPanel, &GitPanel::checksFinished, this, [this](const std::vector<Problem>& problems) {
+        m_bottomPanel->setProblems(problems);
+        m_bottomPanel->show();
+        m_bottomPanel->showProblems();
+    });
+    // After an operation the project is re-read; the open editors follow *Never losing text*.
+    connect(m_gitPanel, &GitPanel::repositoryChanged, this, [this] {
+        if (m_session)
+            m_session->refresh();
+    });
+
     auto* central = new QWidget(this);
     auto* layout = new QHBoxLayout(central);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
     layout->addWidget(m_sideBar);
     layout->addWidget(right, 1);
+    layout->addWidget(m_gitPanel);
     setCentralWidget(central);
 
     createActions();
@@ -237,6 +266,7 @@ MainWindow::~MainWindow()
         view->stop();
     // The page keeps its state before the session goes; the lanes wait for their work before the
     // window's parts go; the session's lock goes with it.
+    m_gitPanel->setSession(nullptr, nullptr);
     m_statementsPage->setSession(nullptr);
     delete m_projectLane;
     delete m_buildLane;
@@ -272,6 +302,9 @@ void MainWindow::createActions()
     view->addSeparator();
     QAction* panel = view->addAction(QStringLiteral("&Bottom panel"), this, &MainWindow::toggleBottomPanel);
     panel->setShortcut(QKeySequence(QKeyCombination(Qt::ControlModifier, Qt::Key_QuoteLeft)));
+    QAction* git = view->addAction(QStringLiteral("&Git panel"), this, &MainWindow::toggleGitPanel);
+    git->setObjectName(QStringLiteral("gitPanelAction"));
+    git->setShortcut(QKeySequence(QKeyCombination(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_G)));
     // F8 / Shift+F8: the next and previous problem, opened at its line.
     const auto stepProblem = [this](bool forward) {
         if (!m_session)
@@ -348,6 +381,9 @@ void MainWindow::createStatusBar()
 {
     m_branch = new QLabel(this);
     m_branch->setObjectName(QStringLiteral("branch"));
+    m_branch->setToolTip(QStringLiteral("The branch: click for the git panel (Ctrl+Shift+G)"));
+    m_branch->setCursor(Qt::PointingHandCursor);
+    m_branch->installEventFilter(this);
     m_buildState = new QLabel(this);
     m_buildState->setObjectName(QStringLiteral("buildState"));
     m_problemCounts = new QToolButton(this);
@@ -455,6 +491,23 @@ void MainWindow::toggleBottomPanel()
     m_bottomPanel->setVisible(!m_bottomPanel->isVisible());
 }
 
+void MainWindow::toggleGitPanel()
+{
+    if (!m_session)
+        return;
+    m_gitPanel->setVisible(!m_gitPanel->isVisible());
+}
+
+bool MainWindow::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched == m_branch && event->type() == QEvent::MouseButtonRelease
+        && static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton) {
+        toggleGitPanel();
+        return true;
+    }
+    return QMainWindow::eventFilter(watched, event);
+}
+
 void MainWindow::openFolder(const QString& path, OpenMode mode)
 {
     const QString folder = QDir::cleanPath(QFileInfo(path).absoluteFilePath());
@@ -519,8 +572,10 @@ void MainWindow::finishOpening(Opening opening, OpenMode mode)
     // Opening another project in a window that has one: the old one closes, releasing its lock.
     // Its unsaved edits were asked about before this open started (openFolder()).
     m_unsavedAnswered = false;
+    m_gitPanel->setSession(nullptr, nullptr);
     m_statementsPage->setSession(nullptr);
     m_bottomPanel->setBuildProblems({});
+    m_bottomPanel->setCommitProblems({});
     m_buildState->hide();
     delete m_session;
     m_session = new ProjectSession(std::move(opening.lockFile), opening.snapshot, m_projectLane,
@@ -539,6 +594,7 @@ void MainWindow::finishOpening(Opening opening, OpenMode mode)
     for (const TabInfo& info : projectTabs())
         m_tabActions.at(info.tab)->setEnabled(true);
     m_statementsPage->setSession(m_session);
+    m_gitPanel->setSession(m_session, m_statementsPage);
     showTab(tab);
     updateFromSnapshot();
     emit projectOpened(snapshot.root);
@@ -627,8 +683,9 @@ void MainWindow::updateFromSnapshot()
     const QString name = snapshot->config.name.isEmpty() ? QFileInfo(snapshot->root).fileName() : snapshot->config.name;
     setWindowTitle(snapshot->branch.isEmpty() ? QStringLiteral("%1 · Loom").arg(name)
                                               : QStringLiteral("%1 · %2 · Loom").arg(name, snapshot->branch));
-    m_branch->setText(snapshot->branch);
-    m_branch->setVisible(!snapshot->branch.isEmpty());
+    // The branch, shown at all times: a detached HEAD says so; without git, nothing.
+    m_branch->setText(!snapshot->branch.isEmpty() ? snapshot->branch : QStringLiteral("Not on a branch"));
+    m_branch->setVisible(!snapshot->branch.isEmpty() || snapshot->gitProblem.isEmpty());
 
     QStringList counts;
     if (snapshot->errors > 0)

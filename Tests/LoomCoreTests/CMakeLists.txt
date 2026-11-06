@@ -12,6 +12,7 @@ add_executable(LoomCoreTests
     EditsTests.cpp
     FingerprintTests.cpp
     FrontMatterTests.cpp
+    GitOperationsTests.cpp
     HooksTests.cpp
     IdSearchTests.cpp
     IdsTests.cpp

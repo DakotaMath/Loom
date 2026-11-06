@@ -30,6 +30,8 @@ add_library(LoomCore STATIC
     FrontMatter.h
     Git.cpp
     Git.h
+    GitOperations.cpp
+    GitOperations.h
     Hooks.cpp
     Hooks.h
     IdSearch.cpp

@@ -78,3 +78,18 @@ if(WIN32)
     set_tests_properties(ClicksTests PROPERTIES
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${LOOM_QT_BIN_DIR}")
 endif()
+
+# GitPanelTests: the git panel (#39): commit, a refused commit's problems, switching refused, the
+# push listing. No TeX; the commits run the commit guard, which needs `loom`.
+qt_add_executable(GitPanelTests
+    GitPanelTests.cpp)
+target_link_libraries(GitPanelTests PRIVATE LoomAppLib LoomTestSupport Qt6::Test)
+target_compile_definitions(GitPanelTests PRIVATE
+    LOOM_SCREENSHOTS="${PROJECT_BINARY_DIR}/screenshots")
+loom_set_compiler_options(GitPanelTests)
+add_test(NAME GitPanelTests COMMAND GitPanelTests)
+add_dependencies(GitPanelTests loom)
+if(WIN32)
+    set_tests_properties(GitPanelTests PROPERTIES
+        ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${LOOM_QT_BIN_DIR}")
+endif()

@@ -26,6 +26,7 @@ namespace loom {
 
 class AppSettings;
 class BottomPanel;
+class GitPanel;
 class Lane;
 class ProjectSession;
 class SettingsPage;
@@ -80,6 +81,9 @@ public:
     void checkSetup();
     /// Shows or hides the bottom panel.
     void toggleBottomPanel();
+    /// Ctrl+Shift+G, or a click on the branch in the status bar: shows or hides the git panel.
+    /// Needs a project.
+    void toggleGitPanel();
 
     // The parts, for tests.
     SideBar* sideBar() const { return m_sideBar; }
@@ -87,6 +91,7 @@ public:
     SettingsPage* settingsPage() const { return m_settingsPage; }
     StatementsPage* statementsPage() const { return m_statementsPage; }
     BottomPanel* bottomPanel() const { return m_bottomPanel; }
+    GitPanel* gitPanel() const { return m_gitPanel; }
     QWidget* page(Tab tab) const;
     QWidget* errorsBar() const { return m_errorsBar; }
     Lane* projectLane() const { return m_projectLane; }
@@ -104,6 +109,8 @@ protected:
     void closeEvent(QCloseEvent* event) override;
     /// Re-reads the project when the window is activated, since watchers miss changes on some drives.
     void changeEvent(QEvent* event) override;
+    /// A click on the branch in the status bar opens the git panel.
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     struct Opening;
@@ -147,6 +154,7 @@ private:
     QLabel* m_reviewNote;
     QSplitter* m_splitter;
     BottomPanel* m_bottomPanel;
+    GitPanel* m_gitPanel;
     QWidget* m_errorsBar;
     QLabel* m_errorsText;
 

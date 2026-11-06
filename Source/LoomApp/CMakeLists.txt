@@ -13,6 +13,8 @@ qt_add_library(LoomAppLib STATIC
     FilePage.h
     FindBar.cpp
     FindBar.h
+    GitPanel.cpp
+    GitPanel.h
     HeaderForms.cpp
     HeaderForms.h
     IdAssist.cpp
