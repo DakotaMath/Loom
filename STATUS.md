@@ -31,7 +31,7 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 - The M1 spec (2026-11-03): [`Specs/m1-core.md`](Specs/m1-core.md), approved by Dakota (PR #11).
 
 ## In progress
-- #52 the M4 spec (`Specs/m4-tasks-jobs.md`): PR open, waiting for Dakota's answers to Q1–Q9 and approval ([log](Wiki/logs/2026-11/2026-11-06-m4-spec.md)).
+- #52 the M4 spec (`Specs/m4-tasks-jobs.md`): PR #62 open, waiting for Dakota's answers to Q1–Q9 and approval ([log](Wiki/logs/2026-11/2026-11-06-m4-spec.md)).
 
 ## Next up
 Milestones M0–M12 are on GitHub; M3 is dropped and its milestone closed. M1's issues (#2–#9) are all closed.
