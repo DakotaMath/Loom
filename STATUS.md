@@ -29,7 +29,7 @@ In progress, Next up, Waiting on Dakota (same as the needs-dakota label), Watch 
 - The M1 spec (2026-11-03): [`Specs/m1-core.md`](Specs/m1-core.md), approved by Dakota (PR #11).
 
 ## In progress
-- #39 git in `LoomCore` and the git panel: PR open, waiting for Dakota's review and Windows check ([log](Wiki/logs/2026-11/2026-11-05-git-panel.md)).
+- #39 git in `LoomCore` and the git panel: PR #50, waiting for Dakota's review and Windows check ([log](Wiki/logs/2026-11/2026-11-05-git-panel.md)).
 
 ## Next up
 Milestones M0–M12 are on GitHub; M3 is dropped and its milestone closed. M1's issues (#2–#9) are all closed.
@@ -37,7 +37,7 @@ Milestones M0–M12 are on GitHub; M3 is dropped and its milestone closed. M1's 
 - M1 follow-ups, for M2 or later: see "Follow-ups" in `Reviews/M1/FINAL.md` on `m1/review` (`\cite` of an old key is settled by the M2 spec, E3).
 
 ## Waiting on Dakota
-- Review the #39 PR (the git panel) and run its Windows check; the Windows checks of PRs #46–#49, if not done.
+- Review PR #50 (#39, the git panel) and run its Windows check; the Windows checks of PRs #46–#49, if not done.
 - Close the M1 milestone on GitHub.
 - The Windows checks listed in PRs #21–#30.
 
