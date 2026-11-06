@@ -29,6 +29,7 @@ Traps, dead ends and their fixes, in one folder per area (`qt`, `build`, `git`, 
 
 | Page | Summary |
 | --- | --- |
+| [`git check-ref-format --branch` accepts `@{-1}` and prints another name](git/check-ref-format-branch-expands.md) | `git check-ref-format --branch <name>` doesn't only check a name: it expands `@{-1}` (and `@{-N}`) to the branch checked out before, prints that, and exits 0. Exit 0 alone doesn't mean `<name>` is a valid new branch name. Also check that what it prints is exactly the name given. |
 | [`git rev-parse --git-path hooks/…` follows `core.hooksPath` out of the repository](git/hookspath-moves-hooks.md) | Asking git where a hook goes (`git rev-parse --git-path hooks/pre-commit`) gives `core.hooksPath` when it is set, locally or globally, which can be a folder every repository on the machine shares. Writing a hook there changes every one of those repositories. Check that the answer is inside the repository's own git directory (`git rev-parse --git-common-dir`), and refuse if it isn't; `loom install-hooks` and `loom new-project` do (A1). |
 | [A failing `git rev-parse` doesn't mean "no repository" or "no commit yet"](git/rev-parse-failures.md) | `git rev-parse` fails the same way (exit 128) for "not a git repository", for a repository git refuses to use ("dubious ownership") and for a damaged one. Treating every failure as "nothing to compare with" silently skips checks. Tell the cases apart: `rev-parse --git-dir`'s message, read with `LC_ALL=C`, for "no repository"; `rev-parse --verify --quiet HEAD^{commit}` exiting 1 with nothing on stderr for "no commit yet"; anything else is a failure to report. |
 
@@ -67,6 +68,7 @@ Traps, dead ends and their fixes, in one folder per area (`qt`, `build`, `git`, 
 
 | Page | Summary |
 | --- | --- |
+| [`TZ=America/Chicago date` in Git Bash gives UTC's date](windows/git-bash-tz-ignores-iana-names.md) | On Windows, Git Bash's `date` doesn't know IANA names such as `America/Chicago`, so `TZ=America/Chicago date +%F` silently prints the UTC date: tomorrow's date every evening in Central time. On Windows, use plain `date` (the system clock is in Central time) or ask PowerShell. |
 | [On Windows, `_isatty()` says `NUL` is a terminal](windows/isatty-true-for-nul.md) | `_isatty(_fileno(stdin))` is true whenever input is a character device, and on Windows `NUL` is one, so `loom … < NUL` would pass a "only at a terminal" guard. To tell whether a person can type, ask for the console mode instead: `GetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), &mode)` succeeds only for a real console. `loom`'s `inputIsTerminal()` (`Source/LoomCli/Cli.cpp`) does this. |
 <!-- END GENERATED -->
 

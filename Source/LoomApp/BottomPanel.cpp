@@ -151,6 +151,8 @@ void BottomPanel::rebuild()
     };
     for (const Problem& problem : m_save)
         add(problem, QStringLiteral("Not saved: "));
+    for (const Problem& problem : m_commit)
+        add(problem, QStringLiteral("Not committed: "));
     for (const Problem& problem : m_build)
         add(problem, QString());
     for (const Problem& problem : m_validation)
@@ -163,7 +165,7 @@ void BottomPanel::rebuild()
             break;
         }
     }
-    const std::size_t count = m_save.size() + m_build.size() + m_validation.size();
+    const std::size_t count = m_save.size() + m_commit.size() + m_build.size() + m_validation.size();
     setTabText(indexOf(m_problems), count == 0 ? QStringLiteral("Problems") : QStringLiteral("Problems (%1)").arg(count));
 }
 
@@ -183,10 +185,17 @@ bool BottomPanel::stepProblem(bool forward)
     return true;
 }
 
-void BottomPanel::appendOutput(OutputChannel channel, const QString& text)
+void BottomPanel::setCommitProblems(const std::vector<Problem>& problems)
+{
+    m_commit = problems;
+    rebuild();
+}
+
+void BottomPanel::appendOutput(OutputChannel channel, const QString& text, const QDateTime& at)
 {
     QPlainTextEdit* edit = output(channel);
-    edit->appendPlainText(QStringLiteral("%1  %2").arg(QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss")), text));
+    const QDateTime when = at.isValid() ? at : QDateTime::currentDateTime();
+    edit->appendPlainText(QStringLiteral("%1  %2").arg(when.toString(QStringLiteral("HH:mm:ss")), text));
     // Keep the last channelLimit characters, dropping whole lines from the start.
     QTextDocument* document = edit->document();
     const int excess = document->characterCount() - channelLimit;

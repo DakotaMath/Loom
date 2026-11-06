@@ -10,6 +10,7 @@
 
 #include "LoomCore/Problem.h"
 
+#include <QDateTime>
 #include <QTabWidget>
 
 #include <memory>
@@ -50,8 +51,12 @@ public:
     void setBuildProblems(const std::vector<Problem>& problems);
     /// Shows a refused save's problems above the others; empty clears them.
     void setSaveProblems(const std::vector<Problem>& problems);
+    /// Shows the problems of a commit Loom's commit guard refused above the others (the git
+    /// panel's, Specs/m2-statements-review.md, "A refused commit"); empty clears them.
+    void setCommitProblems(const std::vector<Problem>& problems);
     /// Adds a line to a channel of Output, with the time.
-    void appendOutput(OutputChannel channel, const QString& text);
+    /// @param at When it happened (a git command's start); now if not given.
+    void appendOutput(OutputChannel channel, const QString& text, const QDateTime& at = QDateTime());
     /// Adds a line to Output's Loom channel.
     void appendOutput(const QString& line) { appendOutput(OutputChannel::Loom, line); }
     /// Brings the Problems list to the front.
@@ -82,6 +87,7 @@ private:
     std::vector<Problem> m_validation;
     std::vector<Problem> m_build;
     std::vector<Problem> m_save;
+    std::vector<Problem> m_commit;
     QTreeWidget* m_problems;
     QTabWidget* m_outputTabs;
     QPlainTextEdit* m_channels[3];
