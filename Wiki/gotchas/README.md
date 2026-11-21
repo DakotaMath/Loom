@@ -15,6 +15,12 @@ Traps, dead ends and their fixes, in one folder per area (`qt`, `build`, `git`, 
 | --- | --- |
 | [aqtinstall 3.3.0 can't install Qt 6.11 on Windows](ci/aqtinstall-qt-6-11-windows.md) | `jurplel/install-qt-action@v4` uses aqtinstall 3.3.0 by default, which fails on every Qt 6.11 release for Windows because Qt changed its repository layout. Install aqtinstall from a pinned commit of its main branch with the action's `aqtsource` input until a fixed release is out. |
 
+### claude-code
+
+| Page | Summary |
+| --- | --- |
+| [Claude Code's `stream-json` output needs `--verbose`, and its cost is an API-price estimate](claude-code/stream-json-needs-verbose.md) | `claude -p --output-format stream-json` without `--verbose` exits 1 with *"When using --print, --output-format=stream-json requires --verbose"* before doing anything; always pass both. On a subscription, the `result` event's `total_cost_usd` is still filled in, at API list prices (`costBasis: "list"`): it measures a job's size, not money Dakota pays. Usage limits come in `rate_limit_event` lines instead. |
+
 ### cmake
 
 | Page | Summary |
